@@ -122,7 +122,7 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
     resume_re: re.Pattern[str] = _RESUME_RE
 
     gemini_cmd: str = "gemini"
-    model: str | None = None
+    model: str | None = "gemini-2.5-flash"
     session_title: str = "gemini"
     logger = logger
 
@@ -220,7 +220,7 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
 
 def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
     gemini_cmd = shutil.which("gemini") or "gemini"
-    model = config.get("model")
+    model = config.get("model", "gemini-2.5-flash")
     title = str(model) if model else "gemini"
     return GeminiRunner(gemini_cmd=gemini_cmd, model=model, session_title=title)
 
@@ -229,5 +229,5 @@ BACKEND = EngineBackend(
     id="gemini",
     build_runner=build_runner,
     cli_cmd="gemini",
-    install_cmd="npm install -g @anthropic-ai/gemini-cli",
+    install_cmd="npm install -g @google/gemini-cli",
 )

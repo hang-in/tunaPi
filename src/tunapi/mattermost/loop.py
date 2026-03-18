@@ -261,9 +261,48 @@ async def _dispatch_message(
                 await _handle_file_command(args, msg, cfg)
                 return
 
+    # -- Auto file put: attachment with no text → save to project --
+    if msg.file_ids and not msg.text.strip() and cfg.files_enabled:
+        context = cfg.runtime.default_context_for_chat(msg.channel_id)
+        cwd = cfg.runtime.resolve_run_cwd(context)
+        root = cwd or Path.cwd()
+        target_dir = root / cfg.files_uploads_dir
+        results = await handle_file_put(
+            client=cfg.bot,
+            channel_id=msg.channel_id,
+            file_ids=list(msg.file_ids),
+            target_dir=target_dir,
+            deny_globs=cfg.files_deny_globs,
+            max_bytes=cfg.files_max_upload_bytes,
+        )
+        text = "\n".join(f"- {r}" for r in results) if results else "No files processed."
+        await send(RenderedMessage(text=text))
+        return
+
+    # -- File + text: save files, add paths to prompt --
+    file_context = ""
+    if msg.file_ids and msg.text.strip() and cfg.files_enabled:
+        context = cfg.runtime.default_context_for_chat(msg.channel_id)
+        cwd = cfg.runtime.resolve_run_cwd(context)
+        root = cwd or Path.cwd()
+        target_dir = root / cfg.files_uploads_dir
+        results = await handle_file_put(
+            client=cfg.bot,
+            channel_id=msg.channel_id,
+            file_ids=list(msg.file_ids),
+            target_dir=target_dir,
+            deny_globs=cfg.files_deny_globs,
+            max_bytes=cfg.files_max_upload_bytes,
+        )
+        saved = [r for r in results if r.startswith("saved")]
+        if saved:
+            file_context = "\n[Attached files: " + ", ".join(saved) + "]\n"
+
     # -- Voice transcription --
     voice_text = await _handle_voice(msg, cfg)
     prompt_text = voice_text or msg.text
+    if file_context:
+        prompt_text = f"{prompt_text}\n{file_context}"
     if not prompt_text:
         return
 
