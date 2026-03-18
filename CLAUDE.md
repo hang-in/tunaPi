@@ -2,14 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Response Style (when running via tunapi/Mattermost)
+## Response Style (when running via tunapi/Mattermost or Telegram)
 
 - 핵심만 짧게 답변
 - Mattermost Markdown 형식으로 작성
 
 ## Project Overview
 
-tunapi is a Mattermost bridge for agent CLIs (Claude Code, Codex, Gemini CLI, OpenCode, Pi), forked from [takopi](https://github.com/banteg/takopi). It replaces the Telegram transport with Mattermost while keeping takopi's core intact.
+tunapi is a Mattermost and Telegram bridge for agent CLIs (Claude Code, Codex, Gemini CLI, OpenCode, Pi), forked from [takopi](https://github.com/banteg/takopi). It extends takopi's original Telegram transport with a new Mattermost transport while keeping takopi's core intact. Set `transport = "mattermost"` or `transport = "telegram"` in `tunapi.toml`.
 
 Config: `~/.tunapi/tunapi.toml`
 
@@ -26,10 +26,13 @@ just docs-serve                # local docs
 ## Architecture
 
 ```
-Mattermost WebSocket → Transport (parse) → TransportRuntime (resolve engine/project)
+[Mattermost WebSocket | Telegram Long-Polling] → Transport (parse)
+    → TransportRuntime (resolve engine/project)
     → Runner (spawn agent CLI, stream JSONL) → RunnerBridge (track progress, send updates)
-    → Presenter (render Markdown) → Transport (send/edit messages back)
+    → Presenter (render Markdown/HTML) → Transport (send/edit messages back)
 ```
+
+Two transports share the same runtime, runner, and presenter protocols. The transport layer abstracts the messaging platform.
 
 ### Core Protocols (`src/tunapi/`)
 
@@ -47,6 +50,10 @@ Mattermost WebSocket → Transport (parse) → TransportRuntime (resolve engine/
 - `parsing.py` — WebSocket events → typed messages
 - `backend.py` — `TransportBackend` entry point
 
+### Telegram Transport (`src/tunapi/telegram/`)
+
+The original transport from takopi. Uses long-polling, inline keyboard for cancel, supports topics, voice notes, and file transfer.
+
 ### Engines (`src/tunapi/runners/`)
 
 Each subclasses `JsonlSubprocessRunner`: `claude.py`, `codex.py`, `gemini.py`, `opencode.py`, `pi.py`
@@ -59,7 +66,7 @@ Entry-point groups in `pyproject.toml`:
 
 ### Configuration (`settings.py`, `config.py`)
 
-Pydantic settings from `~/.tunapi/tunapi.toml`. Env prefix: `TUNAPI__`. `MATTERMOST_TOKEN` env var supported for token. Per-project `chat_id` maps channels to engines.
+Pydantic settings from `~/.tunapi/tunapi.toml`. Env prefix: `TUNAPI__`. `MATTERMOST_TOKEN` env var supported for Mattermost token; `TELEGRAM_TOKEN` for Telegram. Per-project `chat_id` maps channels (Mattermost) or chats/topics (Telegram) to engines.
 
 ## Test Patterns
 

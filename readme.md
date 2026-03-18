@@ -1,17 +1,18 @@
 # tunapi
 
-Mattermost bridge for coding agent CLIs — run **Claude Code**, **Codex**, **Gemini CLI**, and more from any Mattermost channel.
+Mattermost and Telegram bridge for coding agent CLIs — run **Claude Code**, **Codex**, **Gemini CLI**, and more from any Mattermost channel or Telegram chat.
 
-Forked from [takopi](https://github.com/banteg/takopi), replacing the Telegram transport with Mattermost.
+Forked from [takopi](https://github.com/banteg/takopi). The Telegram transport comes from takopi upstream; the Mattermost transport is the new addition.
 
 ## Features
 
-- **Multi-engine** — Claude, Codex, Gemini, OpenCode, Pi. Map each channel to a different engine
+- **Two transports** — Mattermost (WebSocket, Bearer auth) and Telegram (long-polling, inline keyboard)
+- **Multi-engine** — Claude, Codex, Gemini, OpenCode, Pi. Map each channel/chat to a different engine
 - **Live progress** — stream tool calls, file changes, and elapsed time as the agent works
 - **Session resume** — conversations persist across messages via resume tokens (`session_mode = "chat"`)
 - **Projects & worktrees** — bind channels to repos; mention a branch to run in a dedicated git worktree
-- **Cancel by reaction** — add 🛑 to a progress message to abort a running task
-- **Native Markdown** — Mattermost renders responses directly, no entity conversion needed
+- **Cancel** — Mattermost: add :stop_sign: reaction; Telegram: inline keyboard button
+- **Native Markdown** — Mattermost renders Markdown directly; Telegram uses HTML via sulguk
 - **Plugin system** — add engines, transports, or commands via Python entry points
 
 ## Requirements
@@ -36,14 +37,19 @@ uv tool install -e .
 
 ## Setup
 
-### 1. Create a Mattermost bot
+### 1. Choose a transport
 
-- **System Console** → **Integrations** → **Bot Accounts** → **Add Bot Account**
-- Copy the **Access Token**
+Set `transport` in `~/.tunapi/tunapi.toml`:
 
-### 2. Configure tunapi
+```toml
+transport = "mattermost"   # or "telegram"
+```
 
-Create `~/.tunapi/tunapi.toml`:
+### 2a. Mattermost setup
+
+Create a bot account in **System Console** → **Integrations** → **Bot Accounts** → **Add Bot Account**, then copy the **Access Token**.
+
+`~/.tunapi/tunapi.toml`:
 
 ```toml
 transport = "mattermost"
@@ -64,7 +70,33 @@ Or use a `.env` file for the token:
 MATTERMOST_TOKEN=your-bot-access-token
 ```
 
+### 2b. Telegram setup
+
+Create a bot via [@BotFather](https://t.me/BotFather) and copy the token.
+
+`~/.tunapi/tunapi.toml`:
+
+```toml
+transport = "telegram"
+default_engine = "claude"
+
+[transports.telegram]
+token = "123456:ABC-DEF..."
+chat_id = 123456789                     # your chat or group ID
+```
+
+Or use a `.env` file:
+
+```sh
+# .env or ~/.tunapi/.env
+TELEGRAM_TOKEN=123456:ABC-DEF...
+```
+
+Telegram-specific features: topics, voice notes, file transfer, inline keyboard cancel.
+
 ### 3. Map channels to engines (optional)
+
+Channel-per-engine mapping works with both transports. Use the Mattermost channel ID or Telegram chat/topic ID as `chat_id`:
 
 ```toml
 [projects.backend]
@@ -105,7 +137,7 @@ Send a message in any mapped channel. The bot will run the configured engine and
 | Target a project | `/my-project fix the bug` |
 | Use a worktree | `/my-project @feat/branch do something` |
 | Start a new session | `/new` |
-| Cancel a running task | React with 🛑 |
+| Cancel a running task | React with :stop_sign: (Mattermost) or tap Cancel (Telegram) |
 | View config | `tunapi config list` |
 
 ## Supported Engines

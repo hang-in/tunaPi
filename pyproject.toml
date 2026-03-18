@@ -2,7 +2,7 @@
 name = "tunapi"
 authors = [{name = "banteg"}]
 version = "0.22.3"
-description = "Mattermost bridge for Codex, Claude Code, and other agent CLIs."
+description = "Mattermost and Telegram bridge for Codex, Claude Code, and other agent CLIs."
 readme = "readme.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.14"
