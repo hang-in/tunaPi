@@ -151,6 +151,7 @@ class MattermostBackend(TransportBackend):
                 voice_model=voice_cfg.get("model", "gpt-4o-mini-transcribe"),
                 voice_base_url=voice_cfg.get("base_url"),
                 voice_api_key=voice_cfg.get("api_key"),
+                projects_root=runtime.projects_root,
             )
 
             from .loop import run_main_loop

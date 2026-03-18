@@ -18,9 +18,10 @@ from .commands import (
     handle_cancel,
     handle_help,
     handle_model,
+    handle_project,
     handle_status,
     handle_trigger,
-    parse_slash_command,
+    parse_command,
 )
 from .files import FilePutResult, handle_file_get, handle_file_put
 from .parsing import parse_ws_event
@@ -220,8 +221,8 @@ async def _dispatch_message(
     async def send(message: RenderedMessage) -> None:
         await _send_to_channel(cfg, msg.channel_id, message)
 
-    # -- Slash commands --
-    cmd, args = parse_slash_command(msg.text)
+    # -- Commands (supports both /command and !command) --
+    cmd, args = parse_command(msg.text)
     if cmd is not None:
         match cmd:
             case "new":
@@ -241,6 +242,14 @@ async def _dispatch_message(
                 await handle_trigger(
                     args, channel_id=msg.channel_id,
                     chat_prefs=chat_prefs, send=send,
+                )
+                return
+            case "project":
+                await handle_project(
+                    args, channel_id=msg.channel_id,
+                    runtime=runtime, chat_prefs=chat_prefs,
+                    projects_root=cfg.projects_root,
+                    send=send,
                 )
                 return
             case "status":
@@ -323,11 +332,15 @@ async def _dispatch_message(
     if cfg.session_mode == "chat":
         resume_token = sessions.get(msg.channel_id)
 
-    # -- Resolve engine/context --
+    # -- Resolve engine/context (use channel-bound project if set) --
+    ambient_context = None
+    if chat_prefs:
+        ambient_context = await chat_prefs.get_context(msg.channel_id)
+
     resolved = runtime.resolve_message(
         text=prompt_text,
         reply_text=None,
-        ambient_context=None,
+        ambient_context=ambient_context,
         chat_id=msg.channel_id,
     )
 

@@ -53,6 +53,7 @@ class TransportRuntime:
         "_config_path",
         "_plugin_configs",
         "_watch_config",
+        "_projects_root",
     )
 
     def __init__(
@@ -64,6 +65,7 @@ class TransportRuntime:
         config_path: Path | None = None,
         plugin_configs: Mapping[str, Any] | None = None,
         watch_config: bool = False,
+        projects_root: str | None = None,
     ) -> None:
         self._apply(
             router=router,
@@ -73,6 +75,7 @@ class TransportRuntime:
             plugin_configs=plugin_configs,
             watch_config=watch_config,
         )
+        self._projects_root = projects_root
 
     def update(
         self,
@@ -284,6 +287,10 @@ class TransportRuntime:
         if project_key is None:
             return None
         return RunContext(project=project_key, branch=None)
+
+    @property
+    def projects_root(self) -> str | None:
+        return self._projects_root
 
     def project_chat_ids(self) -> tuple[int, ...]:
         return self._projects.project_chat_ids()

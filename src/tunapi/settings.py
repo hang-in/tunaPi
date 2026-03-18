@@ -203,6 +203,7 @@ class TunapiSettings(BaseSettings):
     watch_config: bool = False
     default_engine: NonEmptyStr = "codex"
     default_project: NonEmptyStr | None = None
+    projects_root: NonEmptyStr | None = None
     projects: dict[str, ProjectSettings] = Field(default_factory=dict)
 
     transport: NonEmptyStr = "mattermost"

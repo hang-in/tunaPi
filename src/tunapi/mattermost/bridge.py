@@ -223,3 +223,4 @@ class MattermostBridgeConfig:
     voice_model: str = "gpt-4o-mini-transcribe"
     voice_base_url: str | None = None
     voice_api_key: str | None = None
+    projects_root: str | None = None

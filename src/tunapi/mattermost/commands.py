@@ -7,8 +7,10 @@ them before passing to the engine dispatcher.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from ..context import RunContext
 from ..logging import get_logger
 from ..transport import RenderedMessage
 from .chat_prefs import ChatPrefsStore
@@ -16,19 +18,30 @@ from .chat_prefs import ChatPrefsStore
 logger = get_logger(__name__)
 
 
-def parse_slash_command(text: str) -> tuple[str | None, str]:
-    """Parse a /command from message text.
+COMMAND_PREFIXES = ("/", "!")
+
+
+def parse_command(text: str) -> tuple[str | None, str]:
+    """Parse a command from message text.
+
+    Recognises ``/command`` and ``!command`` prefixes so that commands
+    work on Mattermost mobile where unregistered slash commands are
+    blocked.
 
     Returns (command_name, remaining_args).
-    If not a slash command, returns (None, original_text).
+    If not a command, returns (None, original_text).
     """
     stripped = text.strip()
-    if not stripped.startswith("/"):
+    if not stripped or stripped[0] not in COMMAND_PREFIXES:
         return None, text
     parts = stripped.split(None, 1)
-    cmd = parts[0][1:].lower()  # strip leading /
+    cmd = parts[0][1:].lower()  # strip leading prefix char
     args = parts[1] if len(parts) > 1 else ""
     return cmd, args
+
+
+# Keep backward-compatible alias
+parse_slash_command = parse_command
 
 
 async def handle_help(
@@ -43,16 +56,19 @@ async def handle_help(
     lines = [
         "**tunapi commands**",
         "",
+        "Use `/command` or `!command` (mobile-friendly).",
+        "",
         "| Command | Description |",
         "|---------|-------------|",
-        "| `/help` | Show this help |",
-        "| `/new` | Start a new session |",
-        "| `/model <engine>` | Switch default engine |",
-        "| `/trigger <all\\|mentions>` | Set trigger mode |",
-        "| `/file put` | Upload attached files to project |",
-        "| `/file get <path>` | Download a file from project |",
-        "| `/status` | Show current session info |",
-        "| `/cancel` | Cancel running task |",
+        "| `!help` | Show this help |",
+        "| `!new` | Start a new session |",
+        "| `!model <engine>` | Switch default engine |",
+        "| `!trigger <all\\|mentions>` | Set trigger mode |",
+        "| `!project list\\|set\\|info` | Manage project binding |",
+        "| `!file put` | Upload attached files to project |",
+        "| `!file get <path>` | Download a file from project |",
+        "| `!status` | Show current session info |",
+        "| `!cancel` | Cancel running task |",
         "",
         f"**Engines:** {', '.join(f'`{e}`' for e in engines) or 'none'}",
         "",
@@ -139,19 +155,114 @@ async def handle_status(
     """Show current session info."""
     engine = runtime.default_engine
     trigger = "all"
+    project_display = "none"
     if chat_prefs:
         engine = await chat_prefs.get_default_engine(channel_id) or engine
         trigger = await chat_prefs.get_trigger_mode(channel_id) or "all"
+        ctx = await chat_prefs.get_context(channel_id)
+        if ctx and ctx.project:
+            project_display = f"`{ctx.project}`"
+            if ctx.branch:
+                project_display += f" ({ctx.branch})"
 
     lines = [
         "**Session status**",
         "",
         f"- Engine: `{engine}`",
+        f"- Project: {project_display}",
         f"- Trigger: `{trigger}`",
         f"- Session: {'active' if has_session else 'none'}",
         f"- Channel: `{channel_id}`",
     ]
     await send(RenderedMessage(text="\n".join(lines)))
+
+
+async def handle_project(
+    args: str,
+    *,
+    channel_id: str,
+    runtime: Any,
+    chat_prefs: ChatPrefsStore | None,
+    projects_root: str | None,
+    send: Any,
+) -> None:
+    """Manage project binding for this channel."""
+    parts = args.strip().split(None, 1)
+    subcmd = parts[0].lower() if parts else ""
+    subargs = parts[1].strip() if len(parts) > 1 else ""
+
+    if subcmd == "list":
+        # List configured projects + discovered from projects_root
+        configured = sorted(set(runtime.project_aliases()), key=str.lower)
+        discovered: list[str] = []
+        if projects_root:
+            root = Path(projects_root).expanduser()
+            if root.is_dir():
+                discovered = sorted(
+                    d.name
+                    for d in root.iterdir()
+                    if d.is_dir() and (d / ".git").exists() and d.name not in {c.lower() for c in configured}
+                )
+
+        lines = ["**Projects**", ""]
+        if configured:
+            lines.append("Configured: " + ", ".join(f"`{p}`" for p in configured))
+        if discovered:
+            lines.append("Discovered: " + ", ".join(f"`{p}`" for p in discovered))
+        if not configured and not discovered:
+            lines.append("No projects found.")
+        lines.extend(["", "Usage: `!project set <name>`"])
+        await send(RenderedMessage(text="\n".join(lines)))
+        return
+
+    if subcmd == "set":
+        if not subargs:
+            await send(RenderedMessage(text="Usage: `!project set <name>`"))
+            return
+
+        name = subargs.lower()
+        # Check configured projects first
+        project_key = runtime.normalize_project_key(name)
+
+        # Check discovered projects in projects_root
+        if project_key is None and projects_root:
+            root = Path(projects_root).expanduser()
+            candidate = root / name
+            if candidate.is_dir() and (candidate / ".git").exists():
+                project_key = name
+
+        if project_key is None:
+            await send(RenderedMessage(
+                text=f"Unknown project `{name}`. Use `!project list` to see available projects."
+            ))
+            return
+
+        if chat_prefs:
+            await chat_prefs.set_context(channel_id, RunContext(project=project_key))
+        await send(RenderedMessage(text=f"Project set to `{project_key}` for this channel."))
+        logger.info("command.project.set", channel_id=channel_id, project=project_key)
+        return
+
+    if subcmd == "info":
+        ctx = None
+        if chat_prefs:
+            ctx = await chat_prefs.get_context(channel_id)
+
+        if ctx and ctx.project:
+            lines = [
+                f"**Channel project:** `{ctx.project}`",
+            ]
+            if ctx.branch:
+                lines.append(f"**Branch:** `{ctx.branch}`")
+        else:
+            lines = ["No project bound to this channel.", "", "Usage: `!project set <name>`"]
+        await send(RenderedMessage(text="\n".join(lines)))
+        return
+
+    # Default: show usage
+    await send(RenderedMessage(
+        text="Usage: `!project list` | `!project set <name>` | `!project info`"
+    ))
 
 
 async def handle_cancel(
