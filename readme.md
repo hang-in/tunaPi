@@ -2,7 +2,7 @@
 
 Mattermost and Telegram bridge for coding agent CLIs — run **Claude Code**, **Codex**, **Gemini CLI**, and more from any Mattermost channel or Telegram chat.
 
-Forked from [takopi](https://github.com/banteg/takopi). The Telegram transport comes from takopi upstream; the Mattermost transport is the new addition.
+Forked from [takopi](https://github.com/banteg/takopi). The current fork focuses on Mattermost, while the Telegram transport from upstream is fully retained.
 
 ## Features
 
@@ -92,7 +92,7 @@ Or use a `.env` file:
 TELEGRAM_TOKEN=123456:ABC-DEF...
 ```
 
-Telegram-specific features: topics, voice notes, file transfer, inline keyboard cancel.
+Telegram has additional features not yet available in Mattermost: topics, voice notes, file transfer, forward coalescing, media groups, trigger mode, command menu, and persistent chat preferences.
 
 ### 3. Map channels to engines (optional)
 
@@ -149,6 +149,26 @@ Send a message in any mapped channel. The bot will run the configured engine and
 | Gemini CLI | `gemini` | Built-in |
 | OpenCode | `opencode` | Built-in |
 | Pi | `pi` | Built-in |
+
+## Transport Feature Matrix
+
+Both transports share the core engine/runner/presenter pipeline. Feature differences:
+
+| Feature | Mattermost | Telegram |
+|---------|------------|----------|
+| Session resume | Yes | Yes |
+| Live progress | Yes | Yes |
+| Cancel | 🛑 reaction | Inline button |
+| Channel-per-engine | Yes | Yes |
+| Config hot reload | Yes | Yes |
+| Topics / forums | — | Yes |
+| Voice transcription | — | Yes |
+| File transfer | — | Yes |
+| Forward coalescing | — | Yes |
+| Media groups | — | Yes |
+| Trigger mode | — | Yes |
+| Command menu | — | Yes |
+| Chat preferences | — | Yes |
 
 ## Plugins
 

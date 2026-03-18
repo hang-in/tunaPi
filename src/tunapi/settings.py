@@ -180,7 +180,7 @@ class TunapiSettings(BaseSettings):
     default_project: NonEmptyStr | None = None
     projects: dict[str, ProjectSettings] = Field(default_factory=dict)
 
-    transport: NonEmptyStr = "telegram"
+    transport: NonEmptyStr = "mattermost"
     transports: TransportsSettings
 
     plugins: PluginsSettings = Field(default_factory=PluginsSettings)

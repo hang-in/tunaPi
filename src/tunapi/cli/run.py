@@ -135,7 +135,7 @@ def _should_run_interactive() -> bool:
 
 
 def _setup_needs_config(setup: SetupResult) -> bool:
-    config_titles = {"create a config", "configure telegram"}
+    config_titles = {"create a config", "configure telegram", "configure mattermost"}
     return any(issue.title in config_titles for issue in setup.issues)
 
 
