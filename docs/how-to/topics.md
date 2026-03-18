@@ -27,11 +27,11 @@ Topics bind Telegram **forum threads** to a project/branch context. Each topic k
 
 ## Enable topics
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set transports.telegram.topics.enabled true
-    takopi config set transports.telegram.topics.scope "auto"
+    tunapi config set transports.telegram.topics.enabled true
+    tunapi config set transports.telegram.topics.scope "auto"
     ```
 
 === "toml"
@@ -62,7 +62,7 @@ Examples:
 - In the main chat: `/topic backend @feat/api`
 - In a project chat: `/topic @feat/api` (project is implied)
 
-Takopi will bind the topic and rename it to match the context.
+Tunapi will bind the topic and rename it to match the context.
 
 ## Inspect or change the binding
 

@@ -1,26 +1,26 @@
 # Write a plugin
 
-Takopi supports entrypoint-based plugins for engines, transports, and commands.
+Tunapi supports entrypoint-based plugins for engines, transports, and commands.
 
 ## Checklist
 
 1. Pick a plugin id (must match `^[a-z0-9_]{1,32}$`).
 2. Add a Python entrypoint in your package’s `pyproject.toml`.
 3. Implement a backend object (`BACKEND`) with `id == entrypoint name`.
-4. Install your package and validate with `takopi plugins --load`.
+4. Install your package and validate with `tunapi plugins --load`.
 
 ## Entrypoint groups
 
-Takopi uses three entrypoint groups:
+Tunapi uses three entrypoint groups:
 
 ```toml
-[project.entry-points."takopi.engine_backends"]
+[project.entry-points."tunapi.engine_backends"]
 myengine = "myengine.backend:BACKEND"
 
-[project.entry-points."takopi.transport_backends"]
+[project.entry-points."tunapi.transport_backends"]
 mytransport = "mytransport.backend:BACKEND"
 
-[project.entry-points."takopi.command_backends"]
+[project.entry-points."tunapi.command_backends"]
 mycommand = "mycommand.backend:BACKEND"
 ```
 
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from takopi.api import EngineBackend, EngineConfig, Runner
+from tunapi.api import EngineBackend, EngineConfig, Runner
 
 
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
@@ -52,12 +52,12 @@ BACKEND = EngineBackend(
 )
 ```
 
-Engine config is a raw table in `takopi.toml`:
+Engine config is a raw table in `tunapi.toml`:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set myengine.model "..."
+    tunapi config set myengine.model "..."
     ```
 
 === "toml"
@@ -69,8 +69,8 @@ Engine config is a raw table in `takopi.toml`:
 
 ## Transport backend plugin
 
-Transport plugins connect Takopi to other messaging systems (Slack, Discord, …).
-For most transports, delegate message handling to `handle_message()` from `takopi.api`.
+Transport plugins connect Tunapi to other messaging systems (Slack, Discord, …).
+For most transports, delegate message handling to `handle_message()` from `tunapi.api`.
 
 ## Command backend plugin
 
@@ -83,7 +83,7 @@ Minimal example:
 # mycommand/backend.py
 from __future__ import annotations
 
-from takopi.api import CommandContext, CommandResult
+from tunapi.api import CommandContext, CommandResult
 
 
 class MyCommand:
@@ -102,10 +102,10 @@ BACKEND = MyCommand()
 
 Configure under `[plugins.<id>]`:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set plugins.hello.greeting "hello"
+    tunapi config set plugins.hello.greeting "hello"
     ```
 
 === "toml"
@@ -119,17 +119,17 @@ The parsed dict is available as `ctx.plugin_config` in `handle()`.
 
 ## Enable/disable installed plugins
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set plugins.enabled '["takopi-transport-slack", "takopi-engine-acme"]'
+    tunapi config set plugins.enabled '["tunapi-transport-slack", "tunapi-engine-acme"]'
     ```
 
 === "toml"
 
     ```toml
     [plugins]
-    enabled = ["takopi-transport-slack", "takopi-engine-acme"]
+    enabled = ["tunapi-transport-slack", "tunapi-engine-acme"]
     ```
 
 - `enabled = []` (default) means “load all installed plugins”.
@@ -138,8 +138,8 @@ The parsed dict is available as `ctx.plugin_config` in `handle()`.
 ## Validate discovery and loading
 
 ```sh
-takopi plugins
-takopi plugins --load
+tunapi plugins
+tunapi plugins --load
 ```
 
 ## Related

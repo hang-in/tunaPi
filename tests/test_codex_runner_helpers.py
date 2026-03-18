@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from takopi.backends import EngineConfig
-from takopi.config import ConfigError
-from takopi.events import EventFactory
-from takopi.model import ActionEvent, CompletedEvent, StartedEvent
-from takopi.runners.codex import (
+from tunapi.backends import EngineConfig
+from tunapi.config import ConfigError
+from tunapi.events import EventFactory
+from tunapi.model import ActionEvent, CompletedEvent, StartedEvent
+from tunapi.runners.codex import (
     _AgentMessageSummary,
     CodexRunner,
     _format_change_summary,
@@ -23,7 +23,7 @@ from takopi.runners.codex import (
     find_exec_only_flag,
     translate_codex_event,
 )
-from takopi.schemas import codex as codex_schema
+from tunapi.schemas import codex as codex_schema
 
 
 def test_codex_helper_functions() -> None:

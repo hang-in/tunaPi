@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from takopi.settings import TelegramFilesSettings
-from takopi.telegram import files as tg_files
-from takopi.telegram.files import ZipTooLargeError, zip_directory
+from tunapi.settings import TelegramFilesSettings
+from tunapi.telegram import files as tg_files
+from tunapi.telegram.files import ZipTooLargeError, zip_directory
 
 
 def test_zip_directory_skips_symlinks(tmp_path: Path) -> None:

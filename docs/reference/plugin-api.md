@@ -1,23 +1,23 @@
 # Plugin API
 
-Takopi’s **public plugin API** is exported from:
+Tunapi’s **public plugin API** is exported from:
 
 ```
-takopi.api
+tunapi.api
 ```
 
-Anything not imported from `takopi.api` should be considered **internal** and
-subject to change. The API version is tracked by `TAKOPI_PLUGIN_API_VERSION`.
+Anything not imported from `tunapi.api` should be considered **internal** and
+subject to change. The API version is tracked by `TUNAPI_PLUGIN_API_VERSION`.
 
 ---
 
 ## Versioning
 
-- Current API version: `TAKOPI_PLUGIN_API_VERSION = 1`
-- Plugins should pin to a compatible Takopi range, e.g.:
+- Current API version: `TUNAPI_PLUGIN_API_VERSION = 1`
+- Plugins should pin to a compatible Tunapi range, e.g.:
 
 ```toml
-dependencies = ["takopi>=0.14,<0.15"]
+dependencies = ["tunapi>=0.14,<0.15"]
 ```
 
 ---
@@ -33,7 +33,7 @@ dependencies = ["takopi>=0.14,<0.15"]
 | `Runner` | Runner protocol |
 | `BaseRunner` | Helper base class with resume locking |
 | `JsonlSubprocessRunner` | Helper for JSONL-streaming CLIs |
-| `EventFactory` | Helper for building takopi events |
+| `EventFactory` | Helper for building tunapi events |
 
 ### Transport backends
 
@@ -90,7 +90,7 @@ dependencies = ["takopi>=0.14,<0.15"]
 
 | Symbol | Purpose |
 |--------|---------|
-| `HOME_CONFIG_PATH` | Canonical config path (`~/.takopi/takopi.toml`) |
+| `HOME_CONFIG_PATH` | Canonical config path (`~/.tunapi/tunapi.toml`) |
 | `RESERVED_COMMAND_IDS` | Set of reserved command IDs |
 | `read_config` | Read and parse TOML config file |
 | `write_config` | Atomically write config to TOML file |
@@ -105,7 +105,7 @@ dependencies = ["takopi>=0.14,<0.15"]
 | `get_command` | Get command backend by ID |
 | `list_command_ids` | Get available command plugin IDs |
 | `list_backends` | Discover available engine backends |
-| `load_settings` | Load full TakopiSettings from config |
+| `load_settings` | Load full TunapiSettings from config |
 | `install_issue` | Create SetupIssue for missing dependency |
 
 ---
@@ -131,7 +131,7 @@ Runners own the resume format:
 
 - `format_resume(token)` returns a command line users can paste
 - `extract_resume(text)` parses resume tokens from user text
-- `is_resume_line(line)` lets Takopi strip resume lines before running
+- `is_resume_line(line)` lets Tunapi strip resume lines before running
 
 ---
 
@@ -179,7 +179,7 @@ class TransportBackend(Protocol):
 Transport backends are responsible for:
 
 - Validating config and onboarding users (`check_setup`, `interactive_setup`)
-- Providing a lock token so Takopi can prevent parallel runs
+- Providing a lock token so Tunapi can prevent parallel runs
 - Starting the transport loop in `build_and_run`
 
 ---
@@ -198,12 +198,12 @@ Command handlers receive a `CommandContext` with:
 
 - the raw command text and parsed args
 - the original message + reply metadata
-- `config_path` for the active `takopi.toml` (when known)
+- `config_path` for the active `tunapi.toml` (when known)
 - `plugin_config` from `[plugins.<id>]` (dict, defaults to `{}`)
 - `runtime` (engine/project resolution)
 - `executor` (send messages or run engines)
 
-Use `ctx.executor.run_one(...)` or `ctx.executor.run_many(...)` to reuse Takopi's
+Use `ctx.executor.run_one(...)` or `ctx.executor.run_many(...)` to reuse Tunapi's
 engine pipeline. Use `mode="capture"` to collect results and build a custom reply.
 
 `ctx.message` and `ctx.reply_to` are `MessageRef` objects with:
@@ -239,7 +239,7 @@ Most transports can delegate message handling to `handle_message()`. Use
 `TransportRuntime` to resolve messages and select a runner:
 
 ```py
-from takopi.api import (
+from tunapi.api import (
     ExecBridgeConfig,
     IncomingMessage,
     RunningTask,

@@ -1,6 +1,6 @@
 # Context resolution
 
-This page documents how Takopi resolves **run context** (project, worktree/branch, engine) from messages.
+This page documents how Tunapi resolves **run context** (project, worktree/branch, engine) from messages.
 For step-by-step usage, see [Projects](../how-to/projects.md) and [Worktrees](../how-to/worktrees.md).
 
 ## Overview
@@ -8,29 +8,29 @@ For step-by-step usage, see [Projects](../how-to/projects.md) and [Worktrees](..
 Projects let you give a repo an alias (used as `/alias` in messages) and opt into
 worktree-based runs via `@branch`.
 
-- If no projects are configured, Takopi runs in the startup working directory.
+- If no projects are configured, Tunapi runs in the startup working directory.
 - If a project is configured, `@branch` resolves/creates a git worktree and runs
   the task in that worktree.
 - Progress/final messages include a `ctx:` footer when project context is active.
 
 ## Config schema (relevant subset)
 
-All config lives in `~/.takopi/takopi.toml`.
+All config lives in `~/.tunapi/tunapi.toml`.
 See [Config](config.md) for the full reference.
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set default_engine "codex"
-    takopi config set default_project "z80"
-    takopi config set transport "telegram"
-    takopi config set transports.telegram.bot_token "..."
-    takopi config set transports.telegram.chat_id 123
-    takopi config set projects.z80.path "~/dev/z80"
-    takopi config set projects.z80.worktrees_dir ".worktrees"
-    takopi config set projects.z80.default_engine "codex"
-    takopi config set projects.z80.worktree_base "master"
-    takopi config set projects.z80.chat_id -123
+    tunapi config set default_engine "codex"
+    tunapi config set default_project "z80"
+    tunapi config set transport "telegram"
+    tunapi config set transports.telegram.bot_token "..."
+    tunapi config set transports.telegram.chat_id 123
+    tunapi config set projects.z80.path "~/dev/z80"
+    tunapi config set projects.z80.worktrees_dir ".worktrees"
+    tunapi config set projects.z80.default_engine "codex"
+    tunapi config set projects.z80.worktree_base "master"
+    tunapi config set projects.z80.chat_id -123
     ```
 
 === "toml"
@@ -61,7 +61,7 @@ Note on `worktrees_dir`:
   untracked directory (with nested git worktrees) unless you ignore it.
 - Options:
   - add `.worktrees/` to your repo `.gitignore`, or
-  - set `worktrees_dir` to a path outside the repo (e.g. `~/.takopi/worktrees/<alias>`).
+  - set `worktrees_dir` to a path outside the repo (e.g. `~/.tunapi/worktrees/<alias>`).
   - add it to `.git/info/exclude` if you prefer a local-only ignore.
 
 Validation rules:
@@ -74,21 +74,21 @@ Validation rules:
 - `projects.<alias>.chat_id` must be unique and must not match `transports.telegram.chat_id`.
 - `transport` defaults to `"telegram"` when omitted; override per-run with `--transport`.
 
-## `takopi init`
+## `tunapi init`
 
-`takopi init <alias>` registers the current repo as a project alias.
+`tunapi init <alias>` registers the current repo as a project alias.
 
 Important behavior:
 
 - The stored `path` is the **main checkout** of the repo, even if you run
-  `takopi init` inside a worktree. Takopi resolves the repo root via the git
+  `tunapi init` inside a worktree. Tunapi resolves the repo root via the git
   common dir and writes that path to `[projects.<alias>].path`.
 - `worktree_base` is set from the current repo using this resolution order:
   `origin/HEAD` → current branch → `master` → `main`.
 
 ## Directives and context resolution
 
-Takopi parses the first non-empty line of a message for a directive prefix.
+Tunapi parses the first non-empty line of a message for a directive prefix.
 
 Supported directives:
 
@@ -102,12 +102,12 @@ Rules:
   non-directive token.
 - At most one engine directive, one project directive, and one `@branch` are
   allowed (duplicates are errors).
-- If a reply contains a `ctx:` line, Takopi **ignores new directives** and uses
+- If a reply contains a `ctx:` line, Tunapi **ignores new directives** and uses
   the reply context.
 
 ## Context footer (`ctx:`)
 
-When a run has project context, Takopi appends a footer line rendered as inline
+When a run has project context, Tunapi appends a footer line rendered as inline
 code (backticked):
 
 - With branch: `` `ctx: <project> @<branch>` ``
@@ -116,7 +116,7 @@ code (backticked):
 The `ctx:` line is parsed from replies and takes precedence over new directives.
 
 When a message arrives in a chat whose `chat_id` matches `projects.<alias>.chat_id`,
-Takopi defaults the project context to that alias unless a reply `ctx:` or explicit
+Tunapi defaults the project context to that alias unless a reply `ctx:` or explicit
 `/<project-alias>` directive is present.
 
 In non-topic chats, `/ctx` can bind a chat context. That bound context is treated as
@@ -142,7 +142,7 @@ Branch validation:
 Worktree creation rules:
 
 1) If `worktree_path` exists:
-   - It must be a git worktree or Takopi errors.
+   - It must be a git worktree or Tunapi errors.
 2) If it does not exist:
    - If local branch exists: `git worktree add <path> <branch>`
    - Else if remote `origin/<branch>` exists:
@@ -161,7 +161,7 @@ Base branch selection:
 
 When `@branch` is omitted:
 
-- Takopi runs in `<project.path>` (the main checkout).
+- Tunapi runs in `<project.path>` (the main checkout).
 
 ## Examples
 

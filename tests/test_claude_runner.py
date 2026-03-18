@@ -5,15 +5,15 @@ from typing import cast
 import anyio
 import pytest
 
-import takopi.runners.claude as claude_runner
-from takopi.model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent
-from takopi.runners.claude import (
+import tunapi.runners.claude as claude_runner
+from tunapi.model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent
+from tunapi.runners.claude import (
     ClaudeRunner,
     ClaudeStreamState,
     ENGINE,
     translate_claude_event,
 )
-from takopi.schemas import claude as claude_schema
+from tunapi.schemas import claude as claude_schema
 
 
 def _load_fixture(
@@ -73,7 +73,7 @@ def test_build_runner_uses_shutil_which(monkeypatch) -> None:
         return expected
 
     monkeypatch.setattr(claude_runner.shutil, "which", fake_which)
-    runner = cast(ClaudeRunner, claude_runner.build_runner({}, Path("takopi.toml")))
+    runner = cast(ClaudeRunner, claude_runner.build_runner({}, Path("tunapi.toml")))
 
     assert called["name"] == "claude"
     assert runner.claude_cmd == expected

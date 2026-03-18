@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from takopi.runners import tool_actions
-from takopi.utils.paths import reset_run_base_dir, set_run_base_dir
+from tunapi.runners import tool_actions
+from tunapi.utils.paths import reset_run_base_dir, set_run_base_dir
 
 
 def test_tool_input_path_picks_first_match() -> None:
@@ -31,7 +31,7 @@ def test_tool_input_path_picks_first_match() -> None:
         ("grep", {"pattern": "TODO"}, "tool", "grep: TODO"),
         ("find", {"pattern": "*.toml"}, "tool", "find: *.toml"),
         ("ls", {"path": "src"}, "tool", "ls: `src`"),
-        ("websearch", {"query": "takopi"}, "web_search", "takopi"),
+        ("websearch", {"query": "tunapi"}, "web_search", "tunapi"),
         (
             "webfetch",
             {"url": "https://example.com"},

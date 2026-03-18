@@ -1,8 +1,8 @@
 import pytest
 
-from takopi.context import RunContext
-from takopi.model import ResumeToken
-from takopi.telegram.topic_state import TopicStateStore
+from tunapi.context import RunContext
+from tunapi.model import ResumeToken
+from tunapi.telegram.topic_state import TopicStateStore
 
 
 @pytest.mark.anyio

@@ -1,13 +1,13 @@
 # Plugins
 
-Community and third-party plugins that extend takopi.
+Community and third-party plugins that extend tunapi.
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| [takopi-matrix](https://github.com/Zorro909/takopi-matrix) | Transport | Matrix protocol backend with E2EE, voice transcription, and multi-room support |
-| [takopi-scripts](https://github.com/asianviking/takopi-scripts) | Command | Dynamic script runner for executing Python scripts via `/run` command |
-| [takopi-discord](https://github.com/asianviking/takopi-discord) | Transport | Discord bot backend for interacting with takopi via Discord |
-| [takopi-slack](https://github.com/richardliang/takopi-slack-plugin) | Transport | Slack bot backend for interacting with takopi via Slack |
+| [tunapi-matrix](https://github.com/Zorro909/tunapi-matrix) | Transport | Matrix protocol backend with E2EE, voice transcription, and multi-room support |
+| [tunapi-scripts](https://github.com/asianviking/tunapi-scripts) | Command | Dynamic script runner for executing Python scripts via `/run` command |
+| [tunapi-discord](https://github.com/asianviking/tunapi-discord) | Transport | Discord bot backend for interacting with tunapi via Discord |
+| [tunapi-slack](https://github.com/richardliang/tunapi-slack-plugin) | Transport | Slack bot backend for interacting with tunapi via Slack |
 
 ## See also
 

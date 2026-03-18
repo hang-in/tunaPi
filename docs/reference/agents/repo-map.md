@@ -1,37 +1,37 @@
 # Repo map
 
-Quick pointers for navigating the Takopi codebase.
+Quick pointers for navigating the Tunapi codebase.
 
 ## Where things start
 
-- CLI entry point: `src/takopi/cli.py`
-- Telegram backend entry point: `src/takopi/telegram/backend.py`
-- Telegram bridge loop: `src/takopi/telegram/bridge.py`
-- Transport-agnostic handler: `src/takopi/runner_bridge.py`
+- CLI entry point: `src/tunapi/cli.py`
+- Telegram backend entry point: `src/tunapi/telegram/backend.py`
+- Telegram bridge loop: `src/tunapi/telegram/bridge.py`
+- Transport-agnostic handler: `src/tunapi/runner_bridge.py`
 
 ## Core concepts
 
-- Domain types (resume tokens, events, actions): `src/takopi/model.py`
-- Runner protocol: `src/takopi/runner.py`
-- Router selection and resume polling: `src/takopi/router.py`
-- Per-thread scheduling: `src/takopi/scheduler.py`
-- Progress reduction and rendering: `src/takopi/progress.py`, `src/takopi/markdown.py`
+- Domain types (resume tokens, events, actions): `src/tunapi/model.py`
+- Runner protocol: `src/tunapi/runner.py`
+- Router selection and resume polling: `src/tunapi/router.py`
+- Per-thread scheduling: `src/tunapi/scheduler.py`
+- Progress reduction and rendering: `src/tunapi/progress.py`, `src/tunapi/markdown.py`
 
 ## Engines and streaming
 
-- Runner implementations: `src/takopi/runners/*`
-- JSONL decoding schemas: `src/takopi/schemas/*`
+- Runner implementations: `src/tunapi/runners/*`
+- JSONL decoding schemas: `src/tunapi/schemas/*`
 
 ## Plugins
 
-- Public API boundary (`takopi.api`): `src/takopi/api.py`
-- Entrypoint discovery + lazy loading: `src/takopi/plugins.py`
-- Engine/transport/command backend loading: `src/takopi/engines.py`, `src/takopi/transports.py`, `src/takopi/commands.py`
+- Public API boundary (`tunapi.api`): `src/tunapi/api.py`
+- Entrypoint discovery + lazy loading: `src/tunapi/plugins.py`
+- Engine/transport/command backend loading: `src/tunapi/engines.py`, `src/tunapi/transports.py`, `src/tunapi/commands.py`
 
 ## Configuration
 
-- Settings model + TOML/env loading: `src/takopi/settings.py`
-- Config migrations: `src/takopi/config_migrations.py`
+- Settings model + TOML/env loading: `src/tunapi/settings.py`
+- Config migrations: `src/tunapi/config_migrations.py`
 
 ## Docs and contracts
 

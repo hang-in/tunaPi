@@ -7,16 +7,16 @@ Bind a Telegram chat to a project so messages in that chat automatically route t
 Run:
 
 ```sh
-takopi chat-id --project happy-gadgets
+tunapi chat-id --project happy-gadgets
 ```
 
-Then send any message in the target chat. Takopi captures the `chat_id` and updates your config:
+Then send any message in the target chat. Tunapi captures the `chat_id` and updates your config:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
-    takopi config set projects.happy-gadgets.chat_id -1001234567890
+    tunapi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
+    tunapi config set projects.happy-gadgets.chat_id -1001234567890
     ```
 
 === "toml"
@@ -38,7 +38,7 @@ Messages from that chat now default to the project.
 ## Capture a chat id without saving
 
 ```sh
-takopi chat-id
+tunapi chat-id
 ```
 
 ## Related

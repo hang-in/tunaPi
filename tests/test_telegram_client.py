@@ -1,9 +1,9 @@
 import httpx
 import pytest
 
-from takopi.logging import setup_logging
-from takopi.telegram.client import TelegramClient, TelegramRetryAfter
-from takopi.telegram.client_api import HttpBotClient
+from tunapi.logging import setup_logging
+from tunapi.telegram.client import TelegramClient, TelegramRetryAfter
+from tunapi.telegram.client_api import HttpBotClient
 
 
 @pytest.mark.anyio

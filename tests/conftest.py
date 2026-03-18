@@ -2,8 +2,8 @@ from collections.abc import Callable
 
 import pytest
 
-from takopi.telegram.bridge import TelegramBridgeConfig
-from takopi.runners.mock import ScriptRunner
+from tunapi.telegram.bridge import TelegramBridgeConfig
+from tunapi.runners.mock import ScriptRunner
 from tests.telegram_fakes import FakeBot, FakeTransport, make_cfg as build_cfg
 
 

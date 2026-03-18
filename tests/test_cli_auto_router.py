@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from takopi import cli
-from takopi.backends import EngineBackend, SetupIssue
-from takopi.settings import TakopiSettings
-from takopi.transports import SetupResult
+from tunapi import cli
+from tunapi.backends import EngineBackend, SetupIssue
+from tunapi.settings import TunapiSettings
+from tunapi.transports import SetupResult
 
 
 @dataclass
@@ -65,8 +65,8 @@ def _engine_backend() -> EngineBackend:
     return EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
 
 
-def _settings() -> TakopiSettings:
-    return TakopiSettings.model_validate(
+def _settings() -> TunapiSettings:
+    return TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -75,10 +75,10 @@ def _settings() -> TakopiSettings:
 
 
 def test_run_auto_router_success_releases_lock(monkeypatch, tmp_path: Path) -> None:
-    setup = SetupResult(issues=[], config_path=tmp_path / "takopi.toml")
+    setup = SetupResult(issues=[], config_path=tmp_path / "tunapi.toml")
     transport = _FakeTransport(setup)
     engine_backend = _engine_backend()
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
 
     monkeypatch.setattr(
         cli,
@@ -120,7 +120,7 @@ def test_run_auto_router_success_releases_lock(monkeypatch, tmp_path: Path) -> N
 
 
 def test_run_auto_router_requires_tty_for_onboard(monkeypatch, tmp_path: Path) -> None:
-    setup = SetupResult(issues=[], config_path=tmp_path / "takopi.toml")
+    setup = SetupResult(issues=[], config_path=tmp_path / "tunapi.toml")
     transport = _FakeTransport(setup)
 
     monkeypatch.setattr(
@@ -181,10 +181,10 @@ def test_run_auto_router_missing_config_noninteractive(
 def test_run_auto_router_rejects_missing_telegram_config(
     monkeypatch, tmp_path: Path
 ) -> None:
-    setup = SetupResult(issues=[], config_path=tmp_path / "takopi.toml")
+    setup = SetupResult(issues=[], config_path=tmp_path / "tunapi.toml")
     transport = _FakeTransport(setup)
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {"transport": "telegram", "transports": {}}
     )
 

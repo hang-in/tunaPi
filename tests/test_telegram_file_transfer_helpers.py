@@ -3,15 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from takopi.config import ProjectConfig, ProjectsConfig
-from takopi.context import RunContext
-from takopi.router import AutoRouter, RunnerEntry
-from takopi.runners.mock import Return, ScriptRunner
-from takopi.telegram.api_models import ChatMember, File
-from takopi.settings import TelegramFilesSettings
-from takopi.telegram.commands import file_transfer as transfer
-from takopi.telegram.types import TelegramDocument, TelegramIncomingMessage
-from takopi.transport_runtime import ResolvedMessage, TransportRuntime
+from tunapi.config import ProjectConfig, ProjectsConfig
+from tunapi.context import RunContext
+from tunapi.router import AutoRouter, RunnerEntry
+from tunapi.runners.mock import Return, ScriptRunner
+from tunapi.telegram.api_models import ChatMember, File
+from tunapi.settings import TelegramFilesSettings
+from tunapi.telegram.commands import file_transfer as transfer
+from tunapi.telegram.types import TelegramDocument, TelegramIncomingMessage
+from tunapi.transport_runtime import ResolvedMessage, TransportRuntime
 from tests.telegram_fakes import DEFAULT_ENGINE_ID, FakeBot, FakeTransport, make_cfg
 
 

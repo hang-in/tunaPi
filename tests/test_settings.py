@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from takopi.config import ConfigError, read_config
-from takopi.settings import (
-    TakopiSettings,
+from tunapi.config import ConfigError, read_config
+from tunapi.settings import (
+    TunapiSettings,
     load_settings,
     load_settings_if_exists,
     require_telegram,
@@ -15,7 +15,7 @@ from takopi.settings import (
 
 
 def test_load_settings_from_toml(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'transport = "telegram"\n\n'
         "[transports.telegram]\n"
@@ -41,7 +41,7 @@ def test_load_settings_from_toml(tmp_path: Path) -> None:
 
 
 def test_env_overrides_toml(tmp_path: Path, monkeypatch) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'default_engine = "codex"\n'
         'transport = "telegram"\n\n'
@@ -50,7 +50,7 @@ def test_env_overrides_toml(tmp_path: Path, monkeypatch) -> None:
         "chat_id = 123\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("TAKOPI__DEFAULT_ENGINE", "claude")
+    monkeypatch.setenv("TUNAPI__DEFAULT_ENGINE", "claude")
 
     settings, _ = load_settings(config_path)
 
@@ -58,7 +58,7 @@ def test_env_overrides_toml(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_legacy_keys_migrated(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text('bot_token = "token"\nchat_id = 123\n', encoding="utf-8")
 
     settings, loaded_path = load_settings(config_path)
@@ -74,7 +74,7 @@ def test_legacy_keys_migrated(tmp_path: Path) -> None:
 
 
 def test_validate_settings_data_rejects_invalid_bot_token_type(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     data = {
         "transport": "telegram",
         "transports": {"telegram": {"bot_token": 123, "chat_id": 123}},
@@ -85,7 +85,7 @@ def test_validate_settings_data_rejects_invalid_bot_token_type(tmp_path: Path) -
 
 
 def test_validate_settings_data_rejects_empty_default_engine(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     data = {
         "default_engine": "   ",
         "transport": "telegram",
@@ -97,7 +97,7 @@ def test_validate_settings_data_rejects_empty_default_engine(tmp_path: Path) -> 
 
 
 def test_validate_settings_data_rejects_empty_default_project(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     data = {
         "default_project": "   ",
         "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -108,7 +108,7 @@ def test_validate_settings_data_rejects_empty_default_project(tmp_path: Path) ->
 
 
 def test_validate_settings_data_rejects_empty_project_path(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     data = {
         "projects": {"z80": {"path": "   "}},
         "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -119,8 +119,8 @@ def test_validate_settings_data_rejects_empty_project_path(tmp_path: Path) -> No
 
 
 def test_engine_config_none_and_invalid(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -129,7 +129,7 @@ def test_engine_config_none_and_invalid(tmp_path: Path) -> None:
     )
     assert settings.engine_config("codex", config_path=config_path) == {}
 
-    settings = TakopiSettings.model_validate(
+    settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -141,8 +141,8 @@ def test_engine_config_none_and_invalid(tmp_path: Path) -> None:
 
 
 def test_transport_config_telegram_and_extra(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -152,7 +152,7 @@ def test_transport_config_telegram_and_extra(tmp_path: Path) -> None:
     assert telegram["bot_token"] == "token"
     assert telegram["chat_id"] == 123
 
-    settings = TakopiSettings.model_validate(
+    settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {
@@ -163,7 +163,7 @@ def test_transport_config_telegram_and_extra(tmp_path: Path) -> None:
     )
     assert settings.transport_config("discord", config_path=config_path) == {}
 
-    settings = TakopiSettings.model_validate(
+    settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {
@@ -177,8 +177,8 @@ def test_transport_config_telegram_and_extra(tmp_path: Path) -> None:
 
 
 def test_transport_config_telegram_missing(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {"transport": "discord", "transports": {"discord": {"token": "abc"}}}
     )
     with pytest.raises(ConfigError, match=r"Missing \[transports\.telegram\]"):
@@ -186,7 +186,7 @@ def test_transport_config_telegram_missing(tmp_path: Path) -> None:
 
 
 def test_bot_token_none_rejected(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     data = {
         "transport": "telegram",
         "transports": {"telegram": {"bot_token": None, "chat_id": 123}},
@@ -196,8 +196,8 @@ def test_bot_token_none_rejected(tmp_path: Path) -> None:
 
 
 def test_require_telegram_rejects_non_telegram_transport(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {
             "transport": "discord",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -208,8 +208,8 @@ def test_require_telegram_rejects_non_telegram_transport(tmp_path: Path) -> None
 
 
 def test_require_telegram_rejects_missing_telegram_config(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
-    settings = TakopiSettings.model_validate(
+    config_path = tmp_path / "tunapi.toml"
+    settings = TunapiSettings.model_validate(
         {"transport": "telegram", "transports": {}}
     )
     with pytest.raises(ConfigError, match=r"Missing \[transports\.telegram\]"):
@@ -228,7 +228,7 @@ def test_load_settings_missing_file(tmp_path: Path) -> None:
 
 
 def test_load_settings_if_exists_loads(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'transport = "telegram"\n\n[transports.telegram]\n'
         'bot_token = "token"\nchat_id = 123\n',
@@ -256,7 +256,7 @@ def test_load_settings_rejects_non_file(tmp_path: Path) -> None:
 
 
 def test_load_settings_without_telegram(tmp_path: Path) -> None:
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'transport = "my-transport"\n\n[transports.my-transport]\nsome_key = "value"\n',
         encoding="utf-8",

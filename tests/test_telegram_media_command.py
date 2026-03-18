@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from takopi.context import RunContext
-from takopi.settings import TelegramFilesSettings
-from takopi.telegram.commands import media as media_commands
-from takopi.telegram.commands.file_transfer import _FilePutResult, _SavedFilePutGroup
-from takopi.telegram.types import TelegramDocument, TelegramIncomingMessage
-from takopi.transport_runtime import ResolvedMessage
+from tunapi.context import RunContext
+from tunapi.settings import TelegramFilesSettings
+from tunapi.telegram.commands import media as media_commands
+from tunapi.telegram.commands.file_transfer import _FilePutResult, _SavedFilePutGroup
+from tunapi.telegram.types import TelegramDocument, TelegramIncomingMessage
+from tunapi.transport_runtime import ResolvedMessage
 from tests.telegram_fakes import FakeTransport, make_cfg
 
 

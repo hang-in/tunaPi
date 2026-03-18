@@ -1,9 +1,9 @@
 import json
 
-from takopi.events import EventFactory
-from takopi.model import ActionEvent
-from takopi.runners.codex import translate_codex_event
-from takopi.schemas import codex as codex_schema
+from tunapi.events import EventFactory
+from tunapi.model import ActionEvent
+from tunapi.runners.codex import translate_codex_event
+from tunapi.schemas import codex as codex_schema
 
 
 def _decode_event(payload: dict) -> codex_schema.ThreadEvent:

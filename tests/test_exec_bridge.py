@@ -3,14 +3,14 @@ import uuid
 import anyio
 import pytest
 
-from takopi.runner_bridge import ExecBridgeConfig, IncomingMessage, handle_message
-from takopi.markdown import MarkdownParts, MarkdownPresenter
-from takopi.model import ResumeToken, TakopiEvent
-from takopi.telegram.render import prepare_telegram
-from takopi.runners.codex import CodexRunner
-from takopi.runners.mock import Advance, Emit, Raise, Return, ScriptRunner, Wait
-from takopi.settings import load_settings, require_telegram
-from takopi.transport import MessageRef, RenderedMessage, SendOptions
+from tunapi.runner_bridge import ExecBridgeConfig, IncomingMessage, handle_message
+from tunapi.markdown import MarkdownParts, MarkdownPresenter
+from tunapi.model import ResumeToken, TunapiEvent
+from tunapi.telegram.render import prepare_telegram
+from tunapi.runners.codex import CodexRunner
+from tunapi.runners.mock import Advance, Emit, Raise, Return, ScriptRunner, Wait
+from tunapi.settings import load_settings, require_telegram
+from tunapi.transport import MessageRef, RenderedMessage, SendOptions
 from tests.factories import action_completed, action_started
 
 CODEX_ENGINE = "codex"
@@ -78,9 +78,9 @@ def _return_runner(
 
 
 def test_require_telegram_rejects_empty_token(tmp_path) -> None:
-    from takopi.config import ConfigError
+    from tunapi.config import ConfigError
 
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'transport = "telegram"\n\n[transports.telegram]\n'
         'bot_token = "   "\nchat_id = 123\n',
@@ -93,9 +93,9 @@ def test_require_telegram_rejects_empty_token(tmp_path) -> None:
 
 
 def test_load_settings_accepts_string_chat_id(tmp_path) -> None:
-    from takopi.settings import require_telegram
+    from tunapi.settings import require_telegram
 
-    config_path = tmp_path / "takopi.toml"
+    config_path = tmp_path / "tunapi.toml"
     config_path.write_text(
         'transport = "telegram"\n\n[transports.telegram]\n'
         'bot_token = "token"\nchat_id = "123"\n',
@@ -254,7 +254,7 @@ async def test_long_final_message_edits_progress_message() -> None:
 async def test_progress_edits_are_best_effort() -> None:
     transport = FakeTransport()
     clock = _FakeClock()
-    events: list[TakopiEvent] = [
+    events: list[TunapiEvent] = [
         action_started("item_0", "command", "echo 1"),
         action_started("item_1", "command", "echo 2"),
     ]
@@ -291,7 +291,7 @@ async def test_progress_edits_are_best_effort() -> None:
 async def test_bridge_flow_sends_progress_edits_and_final_resume() -> None:
     transport = FakeTransport()
     clock = _FakeClock()
-    events: list[TakopiEvent] = [
+    events: list[TunapiEvent] = [
         action_started("item_0", "command", "echo ok"),
         action_completed(
             "item_0",
@@ -356,13 +356,13 @@ async def test_final_message_includes_ctx_line() -> None:
         runner=runner,
         incoming=IncomingMessage(channel_id=123, message_id=42, text="do it"),
         resume_token=None,
-        context_line="`ctx: takopi @feat/api`",
+        context_line="`ctx: tunapi @feat/api`",
         clock=clock,
     )
 
     assert transport.send_calls
     final_text = transport.send_calls[-1]["message"].text
-    assert "`ctx: takopi @feat/api`" in final_text
+    assert "`ctx: tunapi @feat/api`" in final_text
     assert "codex resume" in final_text.lower()
 
 

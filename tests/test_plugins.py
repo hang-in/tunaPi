@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from takopi import plugins
+from tunapi import plugins
 from tests.plugin_fixtures import FakeEntryPoint, install_entrypoints
 
 
@@ -23,7 +23,7 @@ def test_list_ids_does_not_load_entrypoints(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "codex",
-            "takopi.runners.codex:BACKEND",
+            "tunapi.runners.codex:BACKEND",
             plugins.ENGINE_GROUP,
             loader=loader,
         )
@@ -42,7 +42,7 @@ def test_load_entrypoint_records_errors(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "broken",
-            "takopi.runners.broken:BACKEND",
+            "tunapi.runners.broken:BACKEND",
             plugins.ENGINE_GROUP,
             loader=loader,
         )
@@ -62,13 +62,13 @@ def test_duplicate_entrypoints_are_rejected(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "dup",
-            "takopi.runners.one:BACKEND",
+            "tunapi.runners.one:BACKEND",
             plugins.ENGINE_GROUP,
             dist_name="one",
         ),
         FakeEntryPoint(
             "dup",
-            "takopi.runners.two:BACKEND",
+            "tunapi.runners.two:BACKEND",
             plugins.ENGINE_GROUP,
             dist_name="two",
         ),
@@ -89,20 +89,20 @@ def test_allowlist_filters_by_distribution(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "codex",
-            "takopi.runners.codex:BACKEND",
+            "tunapi.runners.codex:BACKEND",
             plugins.ENGINE_GROUP,
-            dist_name="takopi",
+            dist_name="tunapi",
         ),
         FakeEntryPoint(
             "thirdparty",
-            "takopi_thirdparty.backend:BACKEND",
+            "tunapi_thirdparty.backend:BACKEND",
             plugins.ENGINE_GROUP,
-            dist_name="takopi-thirdparty",
+            dist_name="tunapi-thirdparty",
         ),
     ]
     install_entrypoints(monkeypatch, entrypoints)
 
-    ids = plugins.list_ids(plugins.ENGINE_GROUP, allowlist=["takopi"])
+    ids = plugins.list_ids(plugins.ENGINE_GROUP, allowlist=["tunapi"])
     assert ids == ["codex"]
 
 
@@ -110,15 +110,15 @@ def test_allowlist_canonicalizes_distribution_names(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "slack",
-            "takopi.transport.slack:BACKEND",
+            "tunapi.transport.slack:BACKEND",
             plugins.TRANSPORT_GROUP,
-            dist_name="takopi-transport-slack",
+            dist_name="tunapi-transport-slack",
         )
     ]
     install_entrypoints(monkeypatch, entrypoints)
 
     ids = plugins.list_ids(
-        plugins.TRANSPORT_GROUP, allowlist=["takopi_transport.slack"]
+        plugins.TRANSPORT_GROUP, allowlist=["tunapi_transport.slack"]
     )
     assert ids == ["slack"]
 
@@ -127,7 +127,7 @@ def test_validator_errors_are_captured(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "bad",
-            "takopi.runners.bad:BACKEND",
+            "tunapi.runners.bad:BACKEND",
             plugins.ENGINE_GROUP,
         )
     ]
@@ -153,7 +153,7 @@ def test_reset_plugin_state_clears_cache(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "codex",
-            "takopi.runners.codex:BACKEND",
+            "tunapi.runners.codex:BACKEND",
             plugins.ENGINE_GROUP,
             loader=loader,
         )
@@ -176,14 +176,14 @@ def test_clear_load_errors_filters(monkeypatch) -> None:
     entrypoints = [
         FakeEntryPoint(
             "broken_engine",
-            "takopi.runners.broken:BACKEND",
+            "tunapi.runners.broken:BACKEND",
             plugins.ENGINE_GROUP,
             loader=loader,
             dist_name="engine-dist",
         ),
         FakeEntryPoint(
             "broken_transport",
-            "takopi.transports.broken:BACKEND",
+            "tunapi.transports.broken:BACKEND",
             plugins.TRANSPORT_GROUP,
             loader=loader,
             dist_name="transport-dist",

@@ -1,7 +1,7 @@
 # OpenCode Runner
 
 This runner integrates with the [OpenCode CLI](https://github.com/sst/opencode).
-Shipped in Takopi v0.5.0.
+Shipped in Tunapi v0.5.0.
 
 ## Installation
 
@@ -11,12 +11,12 @@ npm i -g opencode-ai@latest
 
 ## Configuration
 
-Add to your `takopi.toml`:
+Add to your `tunapi.toml`:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set opencode.model "claude-sonnet"
+    tunapi config set opencode.model "claude-sonnet"
     ```
 
 === "toml"
@@ -29,7 +29,7 @@ Add to your `takopi.toml`:
 ## Usage
 
 ```bash
-takopi opencode
+tunapi opencode
 ```
 
 ## Resume Format

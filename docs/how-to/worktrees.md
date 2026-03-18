@@ -6,12 +6,12 @@ Use `@branch` to run tasks in a dedicated git worktree for that branch.
 
 Add a `worktrees_dir` (and optionally a base branch) to the project:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
-    takopi config set projects.happy-gadgets.worktrees_dir ".worktrees"
-    takopi config set projects.happy-gadgets.worktree_base "master"
+    tunapi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
+    tunapi config set projects.happy-gadgets.worktrees_dir ".worktrees"
+    tunapi config set projects.happy-gadgets.worktree_base "master"
     ```
 
 === "toml"
@@ -43,7 +43,7 @@ echo ".worktrees/" >> ~/.config/git/ignore
 
 ## Context persistence
 
-When project/worktree context is active, Takopi includes a `ctx:` footer in messages.
+When project/worktree context is active, Tunapi includes a `ctx:` footer in messages.
 When you reply, this context carries forward (you usually don’t need to repeat `/<project-alias> @branch`).
 
 ## Related

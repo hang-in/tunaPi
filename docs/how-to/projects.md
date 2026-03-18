@@ -6,15 +6,15 @@ Projects let you route messages to repos from anywhere using `/alias`.
 
 ```sh
 cd ~/dev/happy-gadgets
-takopi init happy-gadgets
+tunapi init happy-gadgets
 ```
 
 This adds a project to your config:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
+    tunapi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
     ```
 
 === "toml"
@@ -36,13 +36,13 @@ Send:
 
 Projects can override global defaults:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
-    takopi config set projects.happy-gadgets.default_engine "claude"
-    takopi config set projects.happy-gadgets.worktrees_dir ".worktrees"
-    takopi config set projects.happy-gadgets.worktree_base "master"
+    tunapi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
+    tunapi config set projects.happy-gadgets.default_engine "claude"
+    tunapi config set projects.happy-gadgets.worktrees_dir ".worktrees"
+    tunapi config set projects.happy-gadgets.worktree_base "master"
     ```
 
 === "toml"
@@ -55,12 +55,12 @@ Projects can override global defaults:
     worktree_base = "master"
     ```
 
-If you expect to edit config while Takopi is running, enable hot reload:
+If you expect to edit config while Tunapi is running, enable hot reload:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set watch_config true
+    tunapi config set watch_config true
     ```
 
 === "toml"
@@ -73,10 +73,10 @@ If you expect to edit config while Takopi is running, enable hot reload:
 
 If you mostly work in one repo:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set default_project "happy-gadgets"
+    tunapi config set default_project "happy-gadgets"
     ```
 
 === "toml"

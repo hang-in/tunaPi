@@ -1,10 +1,10 @@
 [project]
-site_name = "takopi"
+site_name = "tunapi"
 site_description = "Run coding agents on your computer, control them via Telegram. Send tasks from anywhere, stream progress live, pick up where you left off at the terminal."
 site_author = "banteg"
-site_url = "https://takopi.dev/"
-repo_url = "https://github.com/banteg/takopi"
-repo_name = "banteg/takopi"
+site_url = "https://tunapi.dev/"
+repo_url = "https://github.com/banteg/tunapi"
+repo_name = "banteg/tunapi"
 edit_uri = "edit/master/docs/"
 docs_dir = "docs"
 site_dir = "_site"
@@ -51,21 +51,21 @@ nav = [
       { "Claude" = [
         { "Runner" = "reference/runners/claude/runner.md" },
         { "Stream JSON cheatsheet" = "reference/runners/claude/stream-json-cheatsheet.md" },
-        { "Takopi events" = "reference/runners/claude/takopi-events.md" },
+        { "Tunapi events" = "reference/runners/claude/tunapi-events.md" },
       ] },
       { "Codex" = [
         { "Exec JSON cheatsheet" = "reference/runners/codex/exec-json-cheatsheet.md" },
-        { "Takopi events" = "reference/runners/codex/takopi-events.md" },
+        { "Tunapi events" = "reference/runners/codex/tunapi-events.md" },
       ] },
       { "OpenCode" = [
         { "Runner" = "reference/runners/opencode/runner.md" },
         { "Stream JSON cheatsheet" = "reference/runners/opencode/stream-json-cheatsheet.md" },
-        { "Takopi events" = "reference/runners/opencode/takopi-events.md" },
+        { "Tunapi events" = "reference/runners/opencode/tunapi-events.md" },
       ] },
       { "Pi" = [
         { "Runner" = "reference/runners/pi/runner.md" },
         { "Stream JSON cheatsheet" = "reference/runners/pi/stream-json-cheatsheet.md" },
-        { "Takopi events" = "reference/runners/pi/takopi-events.md" },
+        { "Tunapi events" = "reference/runners/pi/tunapi-events.md" },
       ] },
     ] },
     { "For agents" = [
@@ -121,9 +121,9 @@ repo = "fontawesome/brands/github"
 
 [project.theme.icon.admonition]
 question = "fontawesome/solid/paper-plane"
-info = "takopi/takopi"
+info = "tunapi/tunapi"
 user = "lucide/user-round"
-takopi = "takopi/takopi"
+tunapi = "tunapi/tunapi"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"

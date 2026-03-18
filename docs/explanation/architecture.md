@@ -1,4 +1,4 @@
-# Takopi Architecture & Lifecycle
+# Tunapi Architecture & Lifecycle
 
 ## Layer Diagram
 
@@ -80,15 +80,15 @@ flowchart TB
 
 ## Plugin Architecture
 
-Takopi discovers plugins via Python entrypoints and keeps loading lazy:
+Tunapi discovers plugins via Python entrypoints and keeps loading lazy:
 
-- **Engine backends** (`takopi.engine_backends`)
-- **Transport backends** (`takopi.transport_backends`)
-- **Command backends** (`takopi.command_backends`)
+- **Engine backends** (`tunapi.engine_backends`)
+- **Transport backends** (`tunapi.transport_backends`)
+- **Command backends** (`tunapi.command_backends`)
 
 Entrypoint names become plugin IDs, are validated up front (reserved names, regex),
 and are only loaded when needed. The public surface for plugin authors lives in
-`takopi.api`, while transports and commands interact with core routing via
+`tunapi.api`, while transports and commands interact with core routing via
 `TransportRuntime`.
 
 ---
@@ -180,7 +180,7 @@ sequenceDiagram
 
     loop JSONL Stream
         AgentCLI-->>Runner: JSONL event
-        Runner-->>RunnerBridge: TakopiEvent
+        Runner-->>RunnerBridge: TunapiEvent
         RunnerBridge->>Telegram: Edit progress message
     end
 
@@ -214,7 +214,7 @@ flowchart TD
     E --> F[Stream JSONL from stdout]
 
     F --> G[Decode with msgspec]
-    G --> H[Translate to TakopiEvent]
+    G --> H[Translate to TunapiEvent]
     H --> I[yield event]
     I --> F
 
@@ -318,12 +318,12 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph Config["~/.takopi/"]
-        toml[takopi.toml]
-        lock[takopi.lock]
+    subgraph Config["~/.tunapi/"]
+        toml[tunapi.toml]
+        lock[tunapi.lock]
     end
 
-    subgraph toml_contents["takopi.toml"]
+    subgraph toml_contents["tunapi.toml"]
         direction TB
         global["transport<br/>default_engine<br/>default_project"]
         telegram_cfg["[transports.telegram]<br/>bot_token = ...<br/>chat_id = ..."]

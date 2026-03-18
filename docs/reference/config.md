@@ -1,13 +1,13 @@
 # Configuration
 
-Takopi reads configuration from `~/.takopi/takopi.toml`.
+Tunapi reads configuration from `~/.tunapi/tunapi.toml`.
 
-If you expect to edit config while Takopi is running, set:
+If you expect to edit config while Tunapi is running, set:
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set watch_config true
+    tunapi config set watch_config true
     ```
 
 === "toml"
@@ -27,11 +27,11 @@ If you expect to edit config while Takopi is running, set:
 
 ## `transports.telegram`
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set transports.telegram.bot_token "..."
-    takopi config set transports.telegram.chat_id 123
+    tunapi config set transports.telegram.bot_token "..."
+    tunapi config set transports.telegram.chat_id 123
     ```
 
 === "toml"
@@ -84,14 +84,14 @@ File size limits (not configurable):
 
 ## `projects.<alias>`
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
-    takopi config set projects.happy-gadgets.worktrees_dir ".worktrees"
-    takopi config set projects.happy-gadgets.default_engine "claude"
-    takopi config set projects.happy-gadgets.worktree_base "master"
-    takopi config set projects.happy-gadgets.chat_id -1001234567890
+    tunapi config set projects.happy-gadgets.path "~/dev/happy-gadgets"
+    tunapi config set projects.happy-gadgets.worktrees_dir ".worktrees"
+    tunapi config set projects.happy-gadgets.default_engine "claude"
+    tunapi config set projects.happy-gadgets.worktree_base "master"
+    tunapi config set projects.happy-gadgets.chat_id -1001234567890
     ```
 
 === "toml"
@@ -119,17 +119,17 @@ Legacy config note: top-level `bot_token` / `chat_id` are auto-migrated into `[t
 
 ### `plugins.enabled`
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set plugins.enabled '["takopi-transport-slack", "takopi-engine-acme"]'
+    tunapi config set plugins.enabled '["tunapi-transport-slack", "tunapi-engine-acme"]'
     ```
 
 === "toml"
 
     ```toml
     [plugins]
-    enabled = ["takopi-transport-slack", "takopi-engine-acme"]
+    enabled = ["tunapi-transport-slack", "tunapi-engine-acme"]
     ```
 
 - `enabled = []` (default) means “load all installed plugins”.
@@ -151,11 +151,11 @@ here; plugin engines should document their own keys.
 | `extra_args` | string[] | `["-c", "notify=[]"]` | Extra CLI args for `codex` (exec-only flags are rejected). |
 | `profile` | string | (unset) | Passed as `--profile <name>` and used as the session title. |
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set codex.extra_args '["-c", "notify=[]"]'
-    takopi config set codex.profile "work"
+    tunapi config set codex.extra_args '["-c", "notify=[]"]'
+    tunapi config set codex.profile "work"
     ```
 
 === "toml"
@@ -175,13 +175,13 @@ here; plugin engines should document their own keys.
 | `dangerously_skip_permissions` | bool | `false` | Skip Claude permissions prompts. |
 | `use_api_billing` | bool | `false` | Keep `ANTHROPIC_API_KEY` for API billing. |
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set claude.model "claude-sonnet-4-5-20250929"
-    takopi config set claude.allowed_tools '["Bash", "Read", "Edit", "Write"]'
-    takopi config set claude.dangerously_skip_permissions false
-    takopi config set claude.use_api_billing false
+    tunapi config set claude.model "claude-sonnet-4-5-20250929"
+    tunapi config set claude.allowed_tools '["Bash", "Read", "Edit", "Write"]'
+    tunapi config set claude.dangerously_skip_permissions false
+    tunapi config set claude.use_api_billing false
     ```
 
 === "toml"
@@ -202,12 +202,12 @@ here; plugin engines should document their own keys.
 | `provider` | string | (unset) | Passed as `--provider`. |
 | `extra_args` | string[] | `[]` | Extra CLI args for `pi`. |
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set pi.model "..."
-    takopi config set pi.provider "..."
-    takopi config set pi.extra_args "[]"
+    tunapi config set pi.model "..."
+    tunapi config set pi.provider "..."
+    tunapi config set pi.extra_args "[]"
     ```
 
 === "toml"
@@ -225,10 +225,10 @@ here; plugin engines should document their own keys.
 |-----|------|---------|-------|
 | `model` | string | (unset) | Optional model override. |
 
-=== "takopi config"
+=== "tunapi config"
 
     ```sh
-    takopi config set opencode.model "claude-sonnet"
+    tunapi config set opencode.model "claude-sonnet"
     ```
 
 === "toml"

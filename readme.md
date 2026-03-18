@@ -1,8 +1,6 @@
-# takopi
+# tunapi
 
-🐙 *he just wants to help-pi*
-
-telegram bridge for codex, claude code, opencode, pi. manage multiple projects and worktrees, stream progress, and resume sessions anywhere.
+Mattermost bridge for Codex, Claude Code, and other agent CLIs. forked from [takopi](https://github.com/banteg/takopi) — replacing Telegram transport with Mattermost.
 
 ## features
 
@@ -10,9 +8,8 @@ telegram bridge for codex, claude code, opencode, pi. manage multiple projects a
 - stateless resume: continue in chat or copy the resume line to pick up in terminal
 - progress streaming: commands, tools, file changes, elapsed time
 - parallel runs across agent sessions, per-agent-session queue
-- works with telegram features like voice notes and scheduled messages
+- Mattermost native: WebSocket events, Markdown rendering, channel-to-project mapping
 - file transfer: send files to the repo or fetch files/dirs back
-- group chats and topics: map group topics to repo/branch contexts
 - works with existing anthropic and openai subscriptions
 
 ## requirements
@@ -26,44 +23,37 @@ at least one engine on PATH: `codex`, `claude`, `opencode`, or `pi`
 ## install
 
 ```sh
-uv tool install -U takopi
+uv tool install -U tunapi
 ```
 
 ## setup
 
-run `takopi` and follow the setup wizard. it will help you:
+run `tunapi` and follow the setup wizard. it will help you:
 
-1. create a bot token via @BotFather
-2. pick a workflow (assistant, workspace, or handoff)
-3. connect your chat
-4. choose a default engine
-
-workflows configure conversation mode, topics, and resume lines automatically:
-
-- **assistant**: ongoing chat with auto-resume (recommended)
-- **workspace**: forum topics bound to repos/branches
-- **handoff**: reply-to-continue with terminal resume lines
+1. configure your Mattermost server URL and API token
+2. pick a default engine
+3. map channels to projects
 
 ## usage
 
 ```sh
 cd ~/dev/happy-gadgets
-takopi
+tunapi
 ```
 
 send a message to your bot. prefix with `/codex`, `/claude`, `/opencode`, or `/pi` to pick an engine. reply to continue a thread.
 
-register a project with `takopi init happy-gadgets`, then target it from anywhere with `/happy-gadgets hard reset the timeline`.
+register a project with `tunapi init happy-gadgets`, then target it from anywhere with `/happy-gadgets hard reset the timeline`.
 
 mention a branch to run an agent in a dedicated worktree `/happy-gadgets @feat/memory-box freeze artifacts forever`.
 
-inspect or update settings with `takopi config list`, `takopi config get`, and `takopi config set`.
+inspect or update settings with `tunapi config list`, `tunapi config get`, and `tunapi config set`.
 
-see [takopi.dev](https://takopi.dev/) for configuration, worktrees, topics, file transfer, and more.
+see [tunapi.dev](https://tunapi.dev/) for configuration, worktrees, topics, file transfer, and more.
 
 ## plugins
 
-takopi supports entrypoint-based plugins for engines, transports, and commands.
+tunapi supports entrypoint-based plugins for engines, transports, and commands.
 
 see [`docs/how-to/write-a-plugin.md`](docs/how-to/write-a-plugin.md) and [`docs/reference/plugin-api.md`](docs/reference/plugin-api.md).
 

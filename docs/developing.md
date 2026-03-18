@@ -20,7 +20,7 @@ This document was split into smaller Diátaxis pages.
 - [Telegram transport](reference/transports/telegram.md)
 - [Runners](reference/runners/index.md)
 
-## Extending Takopi
+## Extending Tunapi
 
 - [Write a plugin](how-to/write-a-plugin.md)
 - [Add a runner](how-to/add-a-runner.md)

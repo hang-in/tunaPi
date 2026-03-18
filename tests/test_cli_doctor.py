@@ -3,15 +3,15 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from takopi import cli
-from takopi.config import ConfigError
-from takopi.settings import TakopiSettings
-from takopi.settings import TelegramTopicsSettings
-from takopi.telegram.api_models import Chat, User
+from tunapi import cli
+from tunapi.config import ConfigError
+from tunapi.settings import TunapiSettings
+from tunapi.settings import TelegramTopicsSettings
+from tunapi.telegram.api_models import Chat, User
 
 
-def _settings() -> TakopiSettings:
-    return TakopiSettings.model_validate(
+def _settings() -> TunapiSettings:
+    return TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
@@ -34,7 +34,7 @@ def test_doctor_ok(monkeypatch) -> None:
     result = runner.invoke(cli.create_app(), ["doctor"])
 
     assert result.exit_code == 0
-    assert "takopi doctor" in result.output
+    assert "tunapi doctor" in result.output
     assert "telegram token: ok" in result.output
 
 
@@ -57,7 +57,7 @@ def test_doctor_errors_exit_nonzero(monkeypatch) -> None:
 
 
 def test_doctor_missing_telegram_config_exits(monkeypatch) -> None:
-    settings = TakopiSettings.model_validate(
+    settings = TunapiSettings.model_validate(
         {"transport": "telegram", "transports": {}}
     )
     monkeypatch.setattr(cli, "load_settings", lambda: (settings, Path("x")))
