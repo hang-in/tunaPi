@@ -178,7 +178,7 @@ class TransportRuntime:
         text: str,
         reply_text: str | None,
         ambient_context: RunContext | None = None,
-        chat_id: int | None = None,
+        chat_id: int | str | None = None,
     ) -> ResolvedMessage:
         directives = parse_directives(
             text,

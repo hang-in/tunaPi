@@ -1,63 +1,139 @@
 # tunapi
 
-Mattermost bridge for Codex, Claude Code, and other agent CLIs. forked from [takopi](https://github.com/banteg/takopi) — replacing Telegram transport with Mattermost.
+Mattermost bridge for coding agent CLIs — run **Claude Code**, **Codex**, **Gemini CLI**, and more from any Mattermost channel.
 
-## features
+Forked from [takopi](https://github.com/banteg/takopi), replacing the Telegram transport with Mattermost.
 
-- projects and worktrees: work on multiple repos/branches simultaneously, branches are git worktrees
-- stateless resume: continue in chat or copy the resume line to pick up in terminal
-- progress streaming: commands, tools, file changes, elapsed time
-- parallel runs across agent sessions, per-agent-session queue
-- Mattermost native: WebSocket events, Markdown rendering, channel-to-project mapping
-- file transfer: send files to the repo or fetch files/dirs back
-- works with existing anthropic and openai subscriptions
+## Features
 
-## requirements
+- **Multi-engine** — Claude, Codex, Gemini, OpenCode, Pi. Map each channel to a different engine
+- **Live progress** — stream tool calls, file changes, and elapsed time as the agent works
+- **Session resume** — conversations persist across messages via resume tokens (`session_mode = "chat"`)
+- **Projects & worktrees** — bind channels to repos; mention a branch to run in a dedicated git worktree
+- **Cancel by reaction** — add 🛑 to a progress message to abort a running task
+- **Native Markdown** — Mattermost renders responses directly, no entity conversion needed
+- **Plugin system** — add engines, transports, or commands via Python entry points
 
-`uv` for installation (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+## Requirements
 
-python 3.14+ (`uv python install 3.14`)
+- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Python 3.14+ (`uv python install 3.14`)
+- At least one agent CLI on PATH: `claude`, `codex`, `gemini`, `opencode`, or `pi`
 
-at least one engine on PATH: `codex`, `claude`, `opencode`, or `pi`
-
-## install
+## Install
 
 ```sh
 uv tool install -U tunapi
 ```
 
-## setup
-
-run `tunapi` and follow the setup wizard. it will help you:
-
-1. configure your Mattermost server URL and API token
-2. pick a default engine
-3. map channels to projects
-
-## usage
+Or run from source:
 
 ```sh
-cd ~/dev/happy-gadgets
-tunapi
+git clone https://github.com/hang-in/tunapi.git
+cd tunapi
+uv tool install -e .
 ```
 
-send a message to your bot. prefix with `/codex`, `/claude`, `/opencode`, or `/pi` to pick an engine. reply to continue a thread.
+## Setup
 
-register a project with `tunapi init happy-gadgets`, then target it from anywhere with `/happy-gadgets hard reset the timeline`.
+### 1. Create a Mattermost bot
 
-mention a branch to run an agent in a dedicated worktree `/happy-gadgets @feat/memory-box freeze artifacts forever`.
+- **System Console** → **Integrations** → **Bot Accounts** → **Add Bot Account**
+- Copy the **Access Token**
 
-inspect or update settings with `tunapi config list`, `tunapi config get`, and `tunapi config set`.
+### 2. Configure tunapi
 
-see [tunapi.dev](https://tunapi.dev/) for configuration, worktrees, topics, file transfer, and more.
+Create `~/.tunapi/tunapi.toml`:
 
-## plugins
+```toml
+transport = "mattermost"
+default_engine = "claude"
 
-tunapi supports entrypoint-based plugins for engines, transports, and commands.
+[transports.mattermost]
+url = "https://mm.example.com"
+token = "your-bot-access-token"
+channel_id = "default-channel-id"       # bot's DM or a channel ID
+show_resume_line = false
+session_mode = "chat"                   # "stateless" or "chat"
+```
 
-see [`docs/how-to/write-a-plugin.md`](docs/how-to/write-a-plugin.md) and [`docs/reference/plugin-api.md`](docs/reference/plugin-api.md).
+Or use a `.env` file for the token:
 
-## development
+```sh
+# .env or ~/.tunapi/.env
+MATTERMOST_TOKEN=your-bot-access-token
+```
 
-see [`docs/reference/specification.md`](docs/reference/specification.md) and [`docs/developing.md`](docs/developing.md).
+### 3. Map channels to engines (optional)
 
+```toml
+[projects.backend]
+path = "/home/user/projects/backend"
+default_engine = "claude"
+chat_id = "claude-channel-id"
+
+[projects.infra]
+path = "/home/user/projects/infra"
+default_engine = "codex"
+chat_id = "codex-channel-id"
+
+[projects.research]
+path = "/home/user/projects/research"
+default_engine = "gemini"
+chat_id = "gemini-channel-id"
+```
+
+## Usage
+
+```sh
+# Run in foreground
+tunapi
+
+# Run in background
+nohup tunapi > /tmp/tunapi.log 2>&1 &
+
+# Debug mode
+tunapi --debug
+```
+
+Send a message in any mapped channel. The bot will run the configured engine and reply.
+
+| Action | How |
+|--------|-----|
+| Pick an engine | `/claude`, `/codex`, `/gemini` prefix |
+| Register a project | `tunapi init my-project` |
+| Target a project | `/my-project fix the bug` |
+| Use a worktree | `/my-project @feat/branch do something` |
+| Start a new session | `/new` |
+| Cancel a running task | React with 🛑 |
+| View config | `tunapi config list` |
+
+## Supported Engines
+
+| Engine | CLI | Status |
+|--------|-----|--------|
+| Claude Code | `claude` | Built-in |
+| Codex | `codex` | Built-in |
+| Gemini CLI | `gemini` | Built-in |
+| OpenCode | `opencode` | Built-in |
+| Pi | `pi` | Built-in |
+
+## Plugins
+
+tunapi supports entry-point plugins for engines, transports, and commands.
+
+See [`docs/how-to/write-a-plugin.md`](docs/how-to/write-a-plugin.md) and [`docs/reference/plugin-api.md`](docs/reference/plugin-api.md).
+
+## Development
+
+```sh
+uv sync --dev
+just check          # format + lint + typecheck + tests
+uv run pytest --no-cov -k "test_name"   # single test
+```
+
+See [`docs/reference/specification.md`](docs/reference/specification.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

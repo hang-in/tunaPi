@@ -65,7 +65,7 @@ class ProjectConfig:
     worktrees_dir: Path
     default_engine: str | None = None
     worktree_base: str | None = None
-    chat_id: int | None = None
+    chat_id: int | str | None = None
 
     @property
     def worktrees_root(self) -> Path:
@@ -78,7 +78,7 @@ class ProjectConfig:
 class ProjectsConfig:
     projects: dict[str, ProjectConfig]
     default_project: str | None = None
-    chat_map: dict[int, str] = field(default_factory=dict)
+    chat_map: dict[int | str, str] = field(default_factory=dict)
 
     def resolve(self, alias: str | None) -> ProjectConfig | None:
         if alias is None:
@@ -87,12 +87,12 @@ class ProjectsConfig:
             return self.projects.get(self.default_project)
         return self.projects.get(alias.lower())
 
-    def project_for_chat(self, chat_id: int | None) -> str | None:
+    def project_for_chat(self, chat_id: int | str | None) -> str | None:
         if chat_id is None:
             return None
         return self.chat_map.get(chat_id)
 
-    def project_chat_ids(self) -> tuple[int, ...]:
+    def project_chat_ids(self) -> tuple[int | str, ...]:
         return tuple(self.chat_map.keys())
 
 

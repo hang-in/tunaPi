@@ -180,7 +180,16 @@ def create_app() -> typer.Typer:
     return app
 
 
+def _load_dotenv() -> None:
+    """Load .env file from cwd or ~/.tunapi/ if present."""
+    from dotenv import load_dotenv
+
+    load_dotenv()  # cwd/.env
+    load_dotenv(HOME_CONFIG_PATH.parent / ".env")  # ~/.tunapi/.env
+
+
 def main() -> None:
+    _load_dotenv()
     app = create_app()
     app()
 

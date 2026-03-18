@@ -12,6 +12,7 @@ dependencies = [
   "markdown-it-py",
   "msgspec>=0.20.0",
   "openai>=2.15.0",
+  "python-dotenv>=1.1.0",
   "pydantic>=2.12.5",
   "pydantic-settings>=2.12.0",
   "questionary>=2.1.1",
@@ -21,6 +22,7 @@ dependencies = [
   "tomli-w>=1.2.0",
   "typer>=0.21.0",
   "watchfiles>=0.21.0",
+  "websockets>=15.0",
 ]
 classifiers = [
   "License :: OSI Approved :: MIT License",
@@ -31,10 +33,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/banteg/tunapi"
-Documentation = "https://tunapi.dev/"
-Repository = "https://github.com/banteg/tunapi"
-Issues = "https://github.com/banteg/tunapi/issues"
+Homepage = "https://github.com/hang-in/tunapi"
+Repository = "https://github.com/hang-in/tunapi"
+Issues = "https://github.com/hang-in/tunapi/issues"
 
 [project.scripts]
 tunapi = "tunapi.cli:main"
@@ -44,9 +45,11 @@ codex = "tunapi.runners.codex:BACKEND"
 claude = "tunapi.runners.claude:BACKEND"
 opencode = "tunapi.runners.opencode:BACKEND"
 pi = "tunapi.runners.pi:BACKEND"
+gemini = "tunapi.runners.gemini:BACKEND"
 
 [project.entry-points."tunapi.transport_backends"]
 telegram = "tunapi.telegram.backend:BACKEND"
+mattermost = "tunapi.mattermost.backend:BACKEND"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]

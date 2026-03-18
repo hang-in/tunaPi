@@ -119,8 +119,34 @@ class TelegramTransportSettings(BaseModel):
     files: TelegramFilesSettings = Field(default_factory=TelegramFilesSettings)
 
 
+class MattermostTransportSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    url: NonEmptyStr
+    token: NonEmptyStr = ""
+    channel_id: NonEmptyStr = ""
+    allowed_channel_ids: list[NonEmptyStr] = Field(default_factory=list)
+    allowed_user_ids: list[NonEmptyStr] = Field(default_factory=list)
+    session_mode: Literal["stateless", "chat"] = "stateless"
+    show_resume_line: bool = True
+    message_overflow: Literal["trim", "split"] = "trim"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_token_from_env(cls, data: Any) -> Any:
+        """Allow token to be set via MATTERMOST_TOKEN env var."""
+        if isinstance(data, dict) and not data.get("token"):
+            import os
+
+            env_token = os.environ.get("MATTERMOST_TOKEN", "")
+            if env_token:
+                data["token"] = env_token
+        return data
+
+
 class TransportsSettings(BaseModel):
     telegram: TelegramTransportSettings | None = None
+    mattermost: MattermostTransportSettings | None = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -138,7 +164,7 @@ class ProjectSettings(BaseModel):
     worktrees_dir: NonEmptyStr = ".worktrees"
     default_engine: NonEmptyStr | None = None
     worktree_base: NonEmptyStr | None = None
-    chat_id: ChatId | None = None
+    chat_id: ChatId | NonEmptyStr | None = None
 
 
 class TunapiSettings(BaseSettings):
@@ -204,6 +230,10 @@ class TunapiSettings(BaseSettings):
             if self.transports.telegram is None:
                 raise ConfigError(f"Missing [transports.telegram] in {config_path}.")
             return self.transports.telegram.model_dump()
+        if transport_id == "mattermost":
+            if self.transports.mattermost is None:
+                raise ConfigError(f"Missing [transports.mattermost] in {config_path}.")
+            return self.transports.mattermost.model_dump()
         extra = self.transports.model_extra or {}
         raw = extra.get(transport_id)
         if raw is None:
@@ -224,12 +254,15 @@ class TunapiSettings(BaseSettings):
     ) -> ProjectsConfig:
         default_project = self.default_project
         tg = self.transports.telegram
-        default_chat_id = tg.chat_id if tg is not None else None
+        default_chat_id: int | str | None = tg.chat_id if tg is not None else None
+        mm = self.transports.mattermost
+        if mm is not None and mm.channel_id:
+            default_chat_id = mm.channel_id
 
         reserved_lower = {value.lower() for value in reserved}
         engine_map = {engine.lower(): engine for engine in engine_ids}
         projects: dict[str, ProjectConfig] = {}
-        chat_map: dict[int, str] = {}
+        chat_map: dict[int | str, str] = {}
 
         for raw_alias, entry in self.projects.items():
             alias = raw_alias
@@ -264,7 +297,7 @@ class TunapiSettings(BaseSettings):
                 if default_chat_id is not None and chat_id == default_chat_id:
                     raise ConfigError(
                         f"Invalid `projects.{alias}.chat_id` in {config_path}; "
-                        "must not match transports.telegram.chat_id."
+                        "must not match the default transport chat_id."
                     )
                 if chat_id in chat_map:
                     existing = chat_map[chat_id]
