@@ -237,4 +237,4 @@ def test_doctor_rejects_non_telegram_transport(monkeypatch) -> None:
     result = runner.invoke(cli.create_app(), ["doctor"])
 
     assert result.exit_code == 1
-    assert "telegram transport only" in result.output
+    assert "transports only" in result.output

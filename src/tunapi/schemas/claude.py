@@ -217,6 +217,16 @@ class StreamControlCancelRequest(
     request_id: str | None = None
 
 
+class StreamRateLimitEvent(
+    msgspec.Struct,
+    tag="rate_limit_event",
+    tag_field="type",
+    forbid_unknown_fields=False,
+):
+    retry_after_ms: int | None = None
+    message: str | None = None
+
+
 type StreamJsonMessage = (
     StreamUserMessage
     | StreamAssistantMessage
@@ -226,6 +236,7 @@ type StreamJsonMessage = (
     | StreamControlRequest
     | StreamControlResponse
     | StreamControlCancelRequest
+    | StreamRateLimitEvent
 )
 
 
