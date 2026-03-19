@@ -47,6 +47,31 @@ logger = get_logger(__name__)
 _CONFIG_DIR = Path.home() / ".tunapi"
 
 
+def _resolve_upload_dir(cfg: MattermostBridgeConfig, channel_id: str) -> Path:
+    """Resolve the upload target directory for a channel."""
+    context = cfg.runtime.default_context_for_chat(channel_id)
+    cwd = cfg.runtime.resolve_run_cwd(context)
+    root = cwd or Path.cwd()
+    return root / cfg.files_uploads_dir
+
+
+async def _put_files(
+    cfg: MattermostBridgeConfig,
+    channel_id: str,
+    file_ids: list[str],
+) -> list:
+    """Upload files to the project directory. Returns list of FileResult."""
+    target_dir = _resolve_upload_dir(cfg, channel_id)
+    return await handle_file_put(
+        client=cfg.bot,
+        channel_id=channel_id,
+        file_ids=file_ids,
+        target_dir=target_dir,
+        deny_globs=cfg.files_deny_globs,
+        max_bytes=cfg.files_max_upload_bytes,
+    )
+
+
 async def _send_startup(cfg: MattermostBridgeConfig) -> None:
     msg = RenderedMessage(text=cfg.startup_msg)
     await cfg.exec_cfg.transport.send(channel_id=cfg.channel_id, message=msg)
@@ -147,11 +172,6 @@ async def _handle_file_command(
     subcmd = parts[0].lower() if parts else ""
     subargs = parts[1] if len(parts) > 1 else ""
 
-    # Resolve working directory
-    context = cfg.runtime.default_context_for_chat(msg.channel_id)
-    cwd = cfg.runtime.resolve_run_cwd(context)
-    root = cwd or Path.cwd()
-
     if subcmd == "put":
         if not msg.file_ids:
             await _send_to_channel(
@@ -161,15 +181,7 @@ async def _handle_file_command(
             )
             return True
 
-        target_dir = root / cfg.files_uploads_dir
-        results = await handle_file_put(
-            client=cfg.bot,
-            channel_id=msg.channel_id,
-            file_ids=list(msg.file_ids),
-            target_dir=target_dir,
-            deny_globs=cfg.files_deny_globs,
-            max_bytes=cfg.files_max_upload_bytes,
-        )
+        results = await _put_files(cfg, msg.channel_id, list(msg.file_ids))
         text = (
             "\n".join(f"- {r.message}" for r in results)
             if results
@@ -187,6 +199,9 @@ async def _handle_file_command(
                 RenderedMessage(text="Usage: `/file get <path>`"),
             )
             return True
+
+        upload_dir = _resolve_upload_dir(cfg, msg.channel_id)
+        root = upload_dir.parent  # project root (upload_dir = root / uploads_dir)
 
         filename, error, content = await handle_file_get(
             client=cfg.bot,
@@ -461,18 +476,7 @@ async def _resolve_prompt(
 
     # -- Auto file put: attachment with no text → save to project --
     if msg.file_ids and not msg.text.strip() and cfg.files_enabled:
-        context = cfg.runtime.default_context_for_chat(msg.channel_id)
-        cwd = cfg.runtime.resolve_run_cwd(context)
-        root = cwd or Path.cwd()
-        target_dir = root / cfg.files_uploads_dir
-        results = await handle_file_put(
-            client=cfg.bot,
-            channel_id=msg.channel_id,
-            file_ids=list(msg.file_ids),
-            target_dir=target_dir,
-            deny_globs=cfg.files_deny_globs,
-            max_bytes=cfg.files_max_upload_bytes,
-        )
+        results = await _put_files(cfg, msg.channel_id, list(msg.file_ids))
         text = (
             "\n".join(f"- {r.message}" for r in results)
             if results
@@ -484,18 +488,7 @@ async def _resolve_prompt(
     # -- File + text: save files, add absolute paths to prompt --
     file_context = ""
     if msg.file_ids and msg.text.strip() and cfg.files_enabled:
-        context = cfg.runtime.default_context_for_chat(msg.channel_id)
-        cwd = cfg.runtime.resolve_run_cwd(context)
-        root = cwd or Path.cwd()
-        target_dir = root / cfg.files_uploads_dir
-        results = await handle_file_put(
-            client=cfg.bot,
-            channel_id=msg.channel_id,
-            file_ids=list(msg.file_ids),
-            target_dir=target_dir,
-            deny_globs=cfg.files_deny_globs,
-            max_bytes=cfg.files_max_upload_bytes,
-        )
+        results = await _put_files(cfg, msg.channel_id, list(msg.file_ids))
         saved_paths = [str(r.path) for r in results if r.ok and r.path]
         if saved_paths:
             paths_str = ", ".join(f"`{p}`" for p in saved_paths)
