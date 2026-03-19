@@ -17,6 +17,8 @@ ExecStart=%h/.local/bin/uv run tunapi
 Environment=PATH=%h/.local/bin:%h/.local/share/fnm/node-versions/v24.14.0/installation/bin:%h/.nvm/versions/node/v24.14.0/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=35
+KillMode=mixed
 StandardOutput=journal
 StandardError=journal
 
