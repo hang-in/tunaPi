@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -79,6 +79,7 @@ from .forward_coalescing import (
     is_forwarded as _is_forwarded,
 )
 from .media_group_buffer import MediaGroupBuffer, MediaGroupState as _MediaGroupState
+from .resume_resolver import ResumeResolver
 from .voice import transcribe_voice
 
 logger = get_logger(__name__)
@@ -423,99 +424,6 @@ class TelegramLoopState:
 
 if TYPE_CHECKING:
     from ..runner_bridge import RunningTasks
-
-
-@dataclass(frozen=True, slots=True)
-class ResumeDecision:
-    resume_token: ResumeToken | None
-    handled_by_running_task: bool
-
-
-class ResumeResolver:
-    def __init__(
-        self,
-        *,
-        cfg: TelegramBridgeConfig,
-        task_group: TaskGroup,
-        running_tasks: Mapping[MessageRef, object],
-        enqueue_resume: Callable[
-            [
-                int,
-                int,
-                str,
-                ResumeToken,
-                RunContext | None,
-                int | None,
-                tuple[int, int | None] | None,
-                MessageRef | None,
-            ],
-            Awaitable[None],
-        ],
-        topic_store: TopicStateStore | None,
-        chat_session_store: ChatSessionStore | None,
-    ) -> None:
-        self._cfg = cfg
-        self._task_group = task_group
-        self._running_tasks = running_tasks
-        self._enqueue_resume = enqueue_resume
-        self._topic_store = topic_store
-        self._chat_session_store = chat_session_store
-
-    async def resolve(
-        self,
-        *,
-        resume_token: ResumeToken | None,
-        reply_id: int | None,
-        chat_id: int,
-        user_msg_id: int,
-        thread_id: int | None,
-        chat_session_key: tuple[int, int | None] | None,
-        topic_key: tuple[int, int] | None,
-        engine_for_session: EngineId,
-        prompt_text: str,
-    ) -> ResumeDecision:
-        if resume_token is not None:
-            return ResumeDecision(
-                resume_token=resume_token, handled_by_running_task=False
-            )
-        if reply_id is not None:
-            running_task = self._running_tasks.get(
-                MessageRef(channel_id=chat_id, message_id=reply_id)
-            )
-            if running_task is not None:
-                self._task_group.start_soon(
-                    send_with_resume,
-                    self._cfg,
-                    self._enqueue_resume,
-                    running_task,
-                    chat_id,
-                    user_msg_id,
-                    thread_id,
-                    chat_session_key,
-                    prompt_text,
-                )
-                return ResumeDecision(resume_token=None, handled_by_running_task=True)
-        if self._topic_store is not None and topic_key is not None:
-            stored = await self._topic_store.get_session_resume(
-                topic_key[0],
-                topic_key[1],
-                engine_for_session,
-            )
-            if stored is not None:
-                resume_token = stored
-        if (
-            resume_token is None
-            and self._chat_session_store is not None
-            and chat_session_key is not None
-        ):
-            stored = await self._chat_session_store.get_session_resume(
-                chat_session_key[0],
-                chat_session_key[1],
-                engine_for_session,
-            )
-            if stored is not None:
-                resume_token = stored
-        return ResumeDecision(resume_token=resume_token, handled_by_running_task=False)
 
 
 def _diff_keys(old: dict[str, object], new: dict[str, object]) -> list[str]:
