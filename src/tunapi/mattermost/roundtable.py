@@ -29,6 +29,9 @@ logger = get_logger(__name__)
 # Completed sessions are kept for follow-up discussions.
 _SESSION_TTL_SECONDS = 3600  # 1 hour
 
+# Maximum length of an agent answer included in context prompts.
+_MAX_ANSWER_LENGTH = 4000
+
 
 @dataclass(slots=True)
 class RoundtableSession:
@@ -184,7 +187,7 @@ def _build_round_prompt(
     if transcript:
         context_lines: list[str] = []
         for engine, answer in transcript:
-            trimmed = answer[:4000] + "..." if len(answer) > 4000 else answer
+            trimmed = answer[:_MAX_ANSWER_LENGTH] + "..." if len(answer) > _MAX_ANSWER_LENGTH else answer
             context_lines.append(f"**[{engine}]**:\n{trimmed}")
         sections.append("이전 라운드 응답:\n\n" + "\n\n".join(context_lines))
 
@@ -192,7 +195,7 @@ def _build_round_prompt(
     if current_round_responses:
         current_lines: list[str] = []
         for engine, answer in current_round_responses:
-            trimmed = answer[:4000] + "..." if len(answer) > 4000 else answer
+            trimmed = answer[:_MAX_ANSWER_LENGTH] + "..." if len(answer) > _MAX_ANSWER_LENGTH else answer
             current_lines.append(f"**[{engine}]**:\n{trimmed}")
         sections.append(
             "이번 라운드 다른 에이전트 답변:\n\n" + "\n\n".join(current_lines)
