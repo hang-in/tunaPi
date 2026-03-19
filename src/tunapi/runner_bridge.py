@@ -183,7 +183,9 @@ class ProgressEdits:
 
     async def _typing_heartbeat(self) -> None:
         """Send typing indicator every 3s if transport supports it."""
-        client = getattr(self.transport, "_client", None)
+        # MattermostTransport._bot._client → HttpMattermostClient
+        bot = getattr(self.transport, "_bot", None)
+        client = getattr(bot, "_client", None) if bot is not None else None
         if client is None or not hasattr(client, "post_typing"):
             return
         while True:
