@@ -38,15 +38,16 @@ Two transports share the same runtime, runner, and presenter protocols. The tran
 
 - **Transport** (`transport.py`) — send/edit/delete messages
 - **Runner** (`runner.py`) — execute agent CLI, yield `TunapiEvent` stream. `JsonlSubprocessRunner` is the base class
+- **RunnerBridge** (`runner_bridge.py`) — track progress with heartbeat typing indicator and 5s tick refresh
 - **Presenter** (`presenter.py`) — render `ProgressState` to `RenderedMessage`
 
 ### Mattermost Transport (`src/tunapi/mattermost/`)
 
 - `api_models.py` — msgspec models for MM API (Post, User, Channel, WebSocketEvent)
-- `client_api.py` — low-level HTTP + WebSocket client (Bearer auth in handshake headers)
-- `client.py` — outbox queue with rate limiting and deduplication
+- `client_api.py` — low-level HTTP + WebSocket client (Bearer auth in handshake headers, typing indicator)
+- `client.py` — outbox queue with rate limiting, deduplication, and graceful drain on shutdown
 - `bridge.py` — `MattermostTransport` + `MattermostPresenter`
-- `loop.py` — WebSocket event loop with `ChatSessionStore` for resume
+- `loop.py` — WebSocket event loop with `ChatSessionStore` for resume, SIGTERM graceful shutdown
 - `parsing.py` — WebSocket events → typed messages
 - `backend.py` — `TransportBackend` entry point
 - `chat_prefs.py` — per-channel preferences storage (engine, trigger mode)
