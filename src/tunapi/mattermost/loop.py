@@ -338,6 +338,64 @@ class _ResolvedPrompt:
     file_context: str  # empty string if no files
 
 
+async def _dispatch_rt_command(
+    args: str,
+    msg: MattermostIncomingMessage,
+    cfg: MattermostBridgeConfig,
+    running_tasks: RunningTasks,
+    chat_prefs: ChatPrefsStore | None,
+    roundtables: RoundtableStore | None,
+    send: _SendFn,
+) -> None:
+    """Handle the !rt / /rt command, including follow-up detection."""
+    continue_rt = None
+    if (
+        msg.root_id
+        and roundtables
+        and roundtables.get_completed(msg.root_id)
+    ):
+        completed_session = roundtables.get_completed(msg.root_id)
+        ambient_ctx = (
+            await chat_prefs.get_context(msg.channel_id)
+            if chat_prefs
+            else None
+        )
+
+        async def continue_rt(
+            topic: str,
+            engines_filter: list[str] | None,
+            *,
+            _s: Any = completed_session,
+            _ctx: Any = ambient_ctx,
+        ) -> None:
+            await run_followup_round(
+                _s,
+                topic,
+                engines_filter,
+                cfg=cfg,
+                running_tasks=running_tasks,
+                ambient_context=_ctx,
+            )
+
+    await handle_rt(
+        args,
+        runtime=cfg.runtime,
+        send=send,
+        start_roundtable=lambda topic, rounds, engines: _start_roundtable(
+            msg.channel_id,
+            topic,
+            rounds,
+            engines,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            chat_prefs=chat_prefs,
+            roundtables=roundtables,
+        ),
+        continue_roundtable=continue_rt,
+        thread_id=msg.root_id,
+    )
+
+
 async def _try_dispatch_command(
     msg: MattermostIncomingMessage,
     cfg: MattermostBridgeConfig,
@@ -391,51 +449,8 @@ async def _try_dispatch_command(
                 send=send,
             )
         case "rt":
-            _continue_rt = None
-            if (
-                msg.root_id
-                and roundtables
-                and roundtables.get_completed(msg.root_id)
-            ):
-                _completed_session = roundtables.get_completed(msg.root_id)
-                _ambient_ctx = (
-                    await chat_prefs.get_context(msg.channel_id)
-                    if chat_prefs
-                    else None
-                )
-
-                async def _continue_rt(
-                    topic: str,
-                    engines_filter: list[str] | None,
-                    *,
-                    _s: Any = _completed_session,
-                    _ctx: Any = _ambient_ctx,
-                ) -> None:
-                    await run_followup_round(
-                        _s,
-                        topic,
-                        engines_filter,
-                        cfg=cfg,
-                        running_tasks=running_tasks,
-                        ambient_context=_ctx,
-                    )
-
-            await handle_rt(
-                args,
-                runtime=runtime,
-                send=send,
-                start_roundtable=lambda topic, rounds, engines: _start_roundtable(
-                    msg.channel_id,
-                    topic,
-                    rounds,
-                    engines,
-                    cfg=cfg,
-                    running_tasks=running_tasks,
-                    chat_prefs=chat_prefs,
-                    roundtables=roundtables,
-                ),
-                continue_roundtable=_continue_rt,
-                thread_id=msg.root_id,
+            await _dispatch_rt_command(
+                args, msg, cfg, running_tasks, chat_prefs, roundtables, send
             )
         case "status":
             has_session = (await sessions.get(msg.channel_id)) is not None
