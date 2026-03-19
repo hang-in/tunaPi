@@ -1,0 +1,24 @@
+# systemd user service for tunapi
+# Install: cp deploy/tunapi.service ~/.config/systemd/user/
+#          systemctl --user daemon-reload
+#          systemctl --user enable --now tunapi
+#          loginctl enable-linger $USER
+#
+# PATH: adjust to match your environment (claude, codex, gemini CLI locations)
+
+[Unit]
+Description=tunapi - Mattermost/Telegram bridge for agent CLIs
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/privateProject/tunapi
+ExecStart=%h/.local/bin/uv run tunapi
+Environment=PATH=%h/.local/bin:%h/.local/share/fnm/node-versions/v24.14.0/installation/bin:%h/.nvm/versions/node/v24.14.0/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
