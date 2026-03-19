@@ -121,11 +121,11 @@ class MattermostOutbox:
 
     async def _run(self) -> None:
         try:
-            while not self._closed:
+            while True:
                 async with self._cond:
                     while not self._pending and not self._closed:
                         await self._cond.wait()
-                    if self._closed:
+                    if self._closed and not self._pending:
                         break
 
                 blocked_until = max(self.next_at, self.retry_at)
@@ -164,6 +164,24 @@ class MattermostOutbox:
                 self._on_outbox_error(exc)
 
     async def close(self) -> None:
+        """Gracefully drain pending operations, then shut down."""
         self._closed = True
         async with self._cond:
             self._cond.notify()
+
+        # Wait for worker to finish processing pending ops (max 10s).
+        if self._tg is not None:
+            with anyio.move_on_after(10):
+                # Worker exits when it sees _closed and pending is empty.
+                # We wait for remaining ops by polling.
+                while True:
+                    async with self._cond:
+                        if not self._pending:
+                            break
+                    await self._sleep(0.05)
+
+            # Force-resolve any remaining ops that didn't get processed.
+            async with self._cond:
+                for op in self._pending.values():
+                    op.set_result(None)
+                self._pending.clear()

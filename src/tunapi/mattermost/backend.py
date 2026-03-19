@@ -156,13 +156,16 @@ class MattermostBackend(TransportBackend):
 
             from .loop import run_main_loop
 
-            await run_main_loop(
-                cfg,
-                watch_config=runtime.watch_config,
-                default_engine_override=default_engine_override,
-                transport_id=self.id,
-                transport_config=transport_config,
-            )
+            try:
+                await run_main_loop(
+                    cfg,
+                    watch_config=runtime.watch_config,
+                    default_engine_override=default_engine_override,
+                    transport_id=self.id,
+                    transport_config=transport_config,
+                )
+            finally:
+                await transport.close()
 
         anyio.run(run_loop)
 
