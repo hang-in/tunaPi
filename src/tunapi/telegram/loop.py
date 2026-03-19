@@ -35,7 +35,6 @@ from .commands.handlers import (
     handle_ctx_command,
     handle_file_command,
     handle_file_put_default,
-    handle_media_group,
     handle_model_command,
     handle_new_command,
     handle_reasoning_command,
@@ -71,13 +70,20 @@ from .types import (
     TelegramIncomingMessage,
     TelegramIncomingUpdate,
 )
+from .forward_coalescing import (
+    ForwardCoalescer,
+    ForwardKey,
+    PendingPrompt as _PendingPrompt,
+    format_forwarded_prompt as _format_forwarded_prompt,
+    forward_key as _forward_key,
+    is_forwarded as _is_forwarded,
+)
+from .media_group_buffer import MediaGroupBuffer, MediaGroupState as _MediaGroupState
 from .voice import transcribe_voice
 
 logger = get_logger(__name__)
 
 __all__ = ["poll_updates", "run_main_loop", "send_with_resume"]
-
-ForwardKey = tuple[int, int, int]
 MessageKey = tuple[int, int]
 _SEEN_MESSAGES_LIMIT = 2048
 _SEEN_UPDATES_LIMIT = 4096
@@ -330,27 +336,6 @@ async def poll_updates(
         yield msg
 
 
-@dataclass(slots=True)
-class _MediaGroupState:
-    messages: list[TelegramIncomingMessage]
-    token: int = 0
-
-
-@dataclass(slots=True)
-class _PendingPrompt:
-    msg: TelegramIncomingMessage
-    text: str
-    ambient_context: RunContext | None
-    chat_project: str | None
-    topic_key: tuple[int, int] | None
-    chat_session_key: tuple[int, int | None] | None
-    reply_ref: MessageRef | None
-    reply_id: int | None
-    is_voice_transcribed: bool
-    forwards: list[tuple[int, str]]
-    cancel_scope: anyio.CancelScope | None = None
-
-
 @dataclass(frozen=True, slots=True)
 class TelegramMsgContext:
     chat_id: int
@@ -438,207 +423,6 @@ class TelegramLoopState:
 
 if TYPE_CHECKING:
     from ..runner_bridge import RunningTasks
-
-
-_FORWARD_FIELDS = (
-    "forward_origin",
-    "forward_from",
-    "forward_from_chat",
-    "forward_from_message_id",
-    "forward_sender_name",
-    "forward_signature",
-    "forward_date",
-    "is_automatic_forward",
-)
-
-
-def _forward_key(msg: TelegramIncomingMessage) -> ForwardKey:
-    return (msg.chat_id, msg.thread_id or 0, msg.sender_id or 0)
-
-
-def _is_forwarded(raw: dict[str, object] | None) -> bool:
-    if not isinstance(raw, dict):
-        return False
-    return any(raw.get(field) is not None for field in _FORWARD_FIELDS)
-
-
-def _forward_fields_present(raw: dict[str, object] | None) -> list[str]:
-    if not isinstance(raw, dict):
-        return []
-    return [field for field in _FORWARD_FIELDS if raw.get(field) is not None]
-
-
-def _format_forwarded_prompt(forwarded: list[str], prompt: str) -> str:
-    if not forwarded:
-        return prompt
-    separator = "\n\n"
-    forward_block = separator.join(forwarded)
-    if prompt.strip():
-        return f"{prompt}{separator}{forward_block}"
-    return forward_block
-
-
-class ForwardCoalescer:
-    def __init__(
-        self,
-        *,
-        task_group: TaskGroup,
-        debounce_s: float,
-        sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
-        dispatch: Callable[[_PendingPrompt], Awaitable[None]],
-        pending: dict[ForwardKey, _PendingPrompt],
-    ) -> None:
-        self._task_group = task_group
-        self._debounce_s = debounce_s
-        self._sleep = sleep
-        self._dispatch = dispatch
-        self._pending = pending
-
-    def cancel(self, key: ForwardKey) -> None:
-        pending = self._pending.pop(key, None)
-        if pending is None:
-            return
-        if pending.cancel_scope is not None:
-            pending.cancel_scope.cancel()
-        logger.debug(
-            "forward.prompt.cancelled",
-            chat_id=pending.msg.chat_id,
-            thread_id=pending.msg.thread_id,
-            sender_id=pending.msg.sender_id,
-            message_id=pending.msg.message_id,
-            forward_count=len(pending.forwards),
-        )
-
-    def schedule(self, pending: _PendingPrompt) -> None:
-        if pending.msg.sender_id is None:
-            logger.debug(
-                "forward.prompt.bypass",
-                chat_id=pending.msg.chat_id,
-                thread_id=pending.msg.thread_id,
-                sender_id=pending.msg.sender_id,
-                message_id=pending.msg.message_id,
-                reason="missing_sender",
-            )
-            self._task_group.start_soon(self._dispatch, pending)
-            return
-        if self._debounce_s <= 0:
-            logger.debug(
-                "forward.prompt.bypass",
-                chat_id=pending.msg.chat_id,
-                thread_id=pending.msg.thread_id,
-                sender_id=pending.msg.sender_id,
-                message_id=pending.msg.message_id,
-                reason="disabled",
-            )
-            self._task_group.start_soon(self._dispatch, pending)
-            return
-        key = _forward_key(pending.msg)
-        existing = self._pending.get(key)
-        if existing is not None:
-            if existing.cancel_scope is not None:
-                existing.cancel_scope.cancel()
-            if existing.forwards:
-                pending.forwards = list(existing.forwards)
-            logger.debug(
-                "forward.prompt.replace",
-                chat_id=pending.msg.chat_id,
-                thread_id=pending.msg.thread_id,
-                sender_id=pending.msg.sender_id,
-                old_message_id=existing.msg.message_id,
-                new_message_id=pending.msg.message_id,
-                forward_count=len(pending.forwards),
-            )
-        self._pending[key] = pending
-        logger.debug(
-            "forward.prompt.schedule",
-            chat_id=pending.msg.chat_id,
-            thread_id=pending.msg.thread_id,
-            sender_id=pending.msg.sender_id,
-            message_id=pending.msg.message_id,
-            debounce_s=self._debounce_s,
-        )
-        self._reschedule(key, pending)
-
-    def attach_forward(self, msg: TelegramIncomingMessage) -> None:
-        if msg.sender_id is None:
-            logger.debug(
-                "forward.message.ignored",
-                chat_id=msg.chat_id,
-                thread_id=msg.thread_id,
-                sender_id=msg.sender_id,
-                message_id=msg.message_id,
-                reason="missing_sender",
-            )
-            return
-        key = _forward_key(msg)
-        pending = self._pending.get(key)
-        if pending is None:
-            logger.debug(
-                "forward.message.ignored",
-                chat_id=msg.chat_id,
-                thread_id=msg.thread_id,
-                sender_id=msg.sender_id,
-                message_id=msg.message_id,
-                reason="no_pending_prompt",
-            )
-            return
-        text = msg.text
-        if not text.strip():
-            logger.debug(
-                "forward.message.ignored",
-                chat_id=msg.chat_id,
-                thread_id=msg.thread_id,
-                sender_id=msg.sender_id,
-                message_id=msg.message_id,
-                reason="empty_text",
-            )
-            return
-        pending.forwards.append((msg.message_id, text))
-        logger.debug(
-            "forward.message.attached",
-            chat_id=msg.chat_id,
-            thread_id=msg.thread_id,
-            sender_id=msg.sender_id,
-            message_id=msg.message_id,
-            prompt_message_id=pending.msg.message_id,
-            forward_count=len(pending.forwards),
-            forward_fields=_forward_fields_present(msg.raw),
-            forward_date=msg.raw.get("forward_date") if msg.raw else None,
-            message_date=msg.raw.get("date") if msg.raw else None,
-            text_len=len(text),
-        )
-        self._reschedule(key, pending)
-
-    def _reschedule(self, key: ForwardKey, pending: _PendingPrompt) -> None:
-        if pending.cancel_scope is not None:
-            pending.cancel_scope.cancel()
-        pending.cancel_scope = None
-        self._task_group.start_soon(self._debounce_prompt_run, key, pending)
-
-    async def _debounce_prompt_run(
-        self,
-        key: ForwardKey,
-        pending: _PendingPrompt,
-    ) -> None:
-        try:
-            with anyio.CancelScope() as scope:
-                pending.cancel_scope = scope
-                await self._sleep(self._debounce_s)
-        except anyio.get_cancelled_exc_class():
-            return
-        if self._pending.get(key) is not pending:
-            return
-        self._pending.pop(key, None)
-        logger.debug(
-            "forward.prompt.run",
-            chat_id=pending.msg.chat_id,
-            thread_id=pending.msg.thread_id,
-            sender_id=pending.msg.sender_id,
-            message_id=pending.msg.message_id,
-            forward_count=len(pending.forwards),
-            debounce_s=self._debounce_s,
-        )
-        await self._dispatch(pending)
 
 
 @dataclass(frozen=True, slots=True)
@@ -732,97 +516,6 @@ class ResumeResolver:
             if stored is not None:
                 resume_token = stored
         return ResumeDecision(resume_token=resume_token, handled_by_running_task=False)
-
-
-class MediaGroupBuffer:
-    def __init__(
-        self,
-        *,
-        task_group: TaskGroup,
-        debounce_s: float,
-        sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
-        cfg: TelegramBridgeConfig,
-        chat_prefs: ChatPrefsStore | None,
-        topic_store: TopicStateStore | None,
-        bot_username: str | None,
-        command_ids: Callable[[], set[str]],
-        reserved_chat_commands: set[str],
-        groups: dict[tuple[int, str], _MediaGroupState],
-        run_prompt_from_upload: Callable[
-            [TelegramIncomingMessage, str, ResolvedMessage], Awaitable[None]
-        ],
-        resolve_prompt_message: Callable[
-            [TelegramIncomingMessage, str, RunContext | None],
-            Awaitable[ResolvedMessage | None],
-        ],
-    ) -> None:
-        self._task_group = task_group
-        self._debounce_s = debounce_s
-        self._sleep = sleep
-        self._cfg = cfg
-        self._chat_prefs = chat_prefs
-        self._topic_store = topic_store
-        self._bot_username = bot_username
-        self._command_ids = command_ids
-        self._reserved_chat_commands = reserved_chat_commands
-        self._groups = groups
-        self._run_prompt_from_upload = run_prompt_from_upload
-        self._resolve_prompt_message = resolve_prompt_message
-
-    def add(self, msg: TelegramIncomingMessage) -> None:
-        if msg.media_group_id is None:
-            return
-        key = (msg.chat_id, msg.media_group_id)
-        state = self._groups.get(key)
-        if state is None:
-            state = _MediaGroupState(messages=[])
-            self._groups[key] = state
-            self._task_group.start_soon(self._flush_media_group, key)
-        state.messages.append(msg)
-        state.token += 1
-
-    async def _flush_media_group(self, key: tuple[int, str]) -> None:
-        while True:
-            state = self._groups.get(key)
-            if state is None:
-                return
-            token = state.token
-            await self._sleep(self._debounce_s)
-            state = self._groups.get(key)
-            if state is None:
-                return
-            if state.token != token:
-                continue
-            messages = list(state.messages)
-            del self._groups[key]
-            if not messages:
-                return
-            trigger_mode = await resolve_trigger_mode(
-                chat_id=messages[0].chat_id,
-                thread_id=messages[0].thread_id,
-                chat_prefs=self._chat_prefs,
-                topic_store=self._topic_store,
-            )
-            command_ids = self._command_ids()
-            if trigger_mode == "mentions" and not any(
-                should_trigger_run(
-                    msg,
-                    bot_username=self._bot_username,
-                    runtime=self._cfg.runtime,
-                    command_ids=command_ids,
-                    reserved_chat_commands=self._reserved_chat_commands,
-                )
-                for msg in messages
-            ):
-                return
-            await handle_media_group(
-                self._cfg,
-                messages,
-                self._topic_store,
-                self._run_prompt_from_upload,
-                self._resolve_prompt_message,
-            )
-            return
 
 
 def _diff_keys(old: dict[str, object], new: dict[str, object]) -> list[str]:
