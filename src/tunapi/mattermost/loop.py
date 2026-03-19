@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import re
-import signal
-import time as _time
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -14,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from ..core import lifecycle
 from ..journal import Journal, PendingRunLedger, build_handoff_preamble, make_run_id
 from ..logging import bind_run_context, get_logger
 from ..model import ResumeToken
@@ -761,79 +759,30 @@ async def run_main_loop(
     ledger = PendingRunLedger(_CONFIG_DIR / "pending_runs.json")
     heartbeat_path = _CONFIG_DIR / "heartbeat"
 
-    # Detect abnormal termination (no shutdown state but stale heartbeat)
-    if heartbeat_path.exists() and not _SHUTDOWN_STATE_FILE.exists():
-        with contextlib.suppress(Exception):
-            from datetime import datetime
+    async def _send_lifecycle_msg(ch_id: str, text: str) -> None:
+        await cfg.exec_cfg.transport.send(
+            channel_id=ch_id, message=RenderedMessage(text=text)
+        )
 
-            last_beat = datetime.fromisoformat(heartbeat_path.read_text().strip())
-            age = (datetime.now() - last_beat).total_seconds()
-            if age > 30:
-                logger.warning(
-                    "mattermost.abnormal_termination_detected",
-                    last_heartbeat_age_s=round(age),
-                )
+    await lifecycle.detect_abnormal_termination(
+        heartbeat_path=heartbeat_path,
+        shutdown_state_path=_SHUTDOWN_STATE_FILE,
+        log_prefix="mattermost",
+    )
+    await lifecycle.send_restart_notification(
+        shutdown_state_path=_SHUTDOWN_STATE_FILE,
+        channel_id=cfg.channel_id,
+        send_fn=_send_lifecycle_msg,
+    )
+    await lifecycle.recover_pending_runs(
+        journal=journal, ledger=ledger, send_fn=_send_lifecycle_msg
+    )
 
-    # Notify if previous session was shut down (restart detection)
-    if _SHUTDOWN_STATE_FILE.exists():
-        with contextlib.suppress(Exception):
-            state = json.loads(_SHUTDOWN_STATE_FILE.read_text())
-            reason = state.get("reason", "unknown")
-            tasks = state.get("running_tasks", 0)
-            ts = state.get("timestamp", "")
-            parts = [f"🔄 **서비스 재시작 완료** (이전 종료: {reason})"]
-            if tasks > 0:
-                parts.append(
-                    f"⚠️ 종료 시 진행 중이던 작업 {tasks}개가 중단되었을 수 있습니다."
-                )
-            if ts:
-                parts.append(f"종료 시각: {ts}")
-            msg_text = "\n".join(parts)
-            await cfg.exec_cfg.transport.send(
-                channel_id=cfg.channel_id,
-                message=RenderedMessage(text=msg_text),
-            )
-        _SHUTDOWN_STATE_FILE.unlink(missing_ok=True)
-
-    # Process pending runs from previous crash/restart
-    with contextlib.suppress(Exception):
-        pending = await ledger.get_all()
-        if pending:
-            # Group by channel and mark interrupted in journal
-            from itertools import groupby
-            from operator import attrgetter
-
-            sorted_pending = sorted(pending, key=attrgetter("channel_id"))
-            for ch_id, runs in groupby(sorted_pending, key=attrgetter("channel_id")):
-                run_list = list(runs)
-                for run in run_list:
-                    await journal.mark_interrupted(run.channel_id, run.run_id, "crash")
-                msg_text = f"⚠️ 이전 세션에서 중단된 작업 {len(run_list)}개가 있습니다."
-                await cfg.exec_cfg.transport.send(
-                    channel_id=ch_id,
-                    message=RenderedMessage(text=msg_text),
-                )
-            await ledger.clear_all()
     shutdown = anyio.Event()
-
-    # SIGTERM handler — set shutdown event for graceful exit
-    def _on_sigterm(*_: object) -> None:
-        logger.info("mattermost.sigterm_received")
-        shutdown.set()
-
-    with contextlib.suppress(OSError, ValueError):
-        signal.signal(signal.SIGTERM, _on_sigterm)
-
-    async def _heartbeat_loop() -> None:
-        from datetime import datetime
-
-        while True:
-            with contextlib.suppress(Exception):
-                heartbeat_path.write_text(datetime.now().isoformat())
-            await anyio.sleep(10)
+    lifecycle.register_sigterm_handler(shutdown, log_prefix="mattermost")
 
     async with anyio.create_task_group() as dispatch_tg:
-        dispatch_tg.start_soon(_heartbeat_loop)
+        dispatch_tg.start_soon(lifecycle.heartbeat_loop, heartbeat_path)
         async with cfg.bot.websocket_events() as events:
             async for ws_event in events:
                 if shutdown.is_set():
@@ -873,27 +822,10 @@ async def run_main_loop(
                         ledger,
                     )
 
-        # WebSocket closed (graceful or not).
-        # Wait for running tasks to complete (max 30s).
-        if running_tasks:
-            logger.info("mattermost.draining_tasks", count=len(running_tasks))
-            with anyio.move_on_after(30):
-                for task in list(running_tasks.values()):
-                    await task.done.wait()
-            logger.info("mattermost.drain_complete")
-
-        # Save shutdown state for restart notification
-        reason = "SIGTERM" if shutdown.is_set() else "disconnect"
-        with contextlib.suppress(Exception):
-            _SHUTDOWN_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _SHUTDOWN_STATE_FILE.write_text(
-                json.dumps(
-                    {
-                        "reason": reason,
-                        "running_tasks": len(running_tasks),
-                        "timestamp": _time.strftime("%Y-%m-%d %H:%M:%S"),
-                    }
-                )
-            )
-        # Remove heartbeat file on graceful exit
-        heartbeat_path.unlink(missing_ok=True)
+        await lifecycle.graceful_drain(running_tasks, log_prefix="mattermost")
+        lifecycle.save_shutdown_state(
+            shutdown_state_path=_SHUTDOWN_STATE_FILE,
+            is_sigterm=shutdown.is_set(),
+            running_task_count=len(running_tasks),
+        )
+        lifecycle.cleanup_heartbeat(heartbeat_path)

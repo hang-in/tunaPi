@@ -32,7 +32,7 @@ just docs-serve                # local docs
     → Presenter (render Markdown/HTML) → Transport (send/edit messages back)
 ```
 
-Two transports share the same runtime, runner, and presenter protocols. The transport layer abstracts the messaging platform.
+Three transports (Mattermost, Slack, Telegram) share the same runtime, runner, presenter protocols, and core modules.
 
 ### Core Protocols (`src/tunapi/`)
 
@@ -40,6 +40,14 @@ Two transports share the same runtime, runner, and presenter protocols. The tran
 - **Runner** (`runner.py`) — execute agent CLI, yield `TunapiEvent` stream. `JsonlSubprocessRunner` is the base class
 - **RunnerBridge** (`runner_bridge.py`) — track progress with 5s tick refresh
 - **Presenter** (`presenter.py`) — render `ProgressState` to `RenderedMessage`
+- **Journal** (`journal.py`) — JSONL journal for conversation handoff, PendingRunLedger
+
+### Shared Core (`src/tunapi/core/`) — Mattermost/Slack 공통; Telegram은 별도 구현 유지
+
+- `lifecycle.py` — heartbeat, shutdown state, restart notification, pending-run recovery, graceful drain, SIGTERM handler
+- `chat_sessions.py` — per-channel/engine resume token store (v2 schema with v1 migration)
+- `chat_prefs.py` — per-channel preferences (engine, trigger mode, project binding, personas)
+- `outbox.py` — priority queue with rate limiting, deduplication, retry-after handling
 
 ### Mattermost Transport (`src/tunapi/mattermost/`)
 
@@ -56,6 +64,18 @@ Two transports share the same runtime, runner, and presenter protocols. The tran
 - `files.py` — file attachment download and auto-recognition
 - `commands.py` — slash command handling (`/help`, `/model`, `/trigger`, `/status`, `/cancel`, `/file`, `/new`, `/project`, `/persona`, `/rt`)
 - `roundtable.py` — multi-agent roundtable: sequential opinion collection with transcript context
+
+### Slack Transport (`src/tunapi/slack/`)
+
+- `api_models.py` — msgspec models for Slack API (SlackMessage, SocketModeEnvelope)
+- `client_api.py` — HTTP + Socket Mode WebSocket client (reconnection with fresh URL per attempt, disconnect envelope handling, exponential backoff)
+- `client.py` — outbox queue with rate limiting (re-exports core Outbox)
+- `bridge.py` — `SlackTransport` + `SlackPresenter`
+- `loop.py` — Socket Mode event loop with access control, lifecycle management (re-uses core lifecycle)
+- `parsing.py` — Socket Mode events → typed messages with bot/channel/user filtering
+- `backend.py` — `TransportBackend` entry point
+- `commands.py` — slash command handling (`/help`, `/model`, `/trigger`, `/status`, `/cancel`, `/new`, `/project`, `/persona`)
+- `trigger_mode.py` — @mention detection (default: mentions only)
 
 ### Telegram Transport (`src/tunapi/telegram/`)
 

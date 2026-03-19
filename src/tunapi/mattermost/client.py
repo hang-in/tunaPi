@@ -6,14 +6,21 @@ import itertools
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, Hashable
+from typing import Any
+from collections.abc import Hashable
 
 import anyio
 
 from ..logging import get_logger
 from .api_models import Channel, FileInfo, Post, User, WebSocketEvent
 from .client_api import HttpMattermostClient, MattermostRetryAfter
-from .outbox import DELETE_PRIORITY, EDIT_PRIORITY, SEND_PRIORITY, MattermostOutbox, OutboxOp
+from .outbox import (
+    DELETE_PRIORITY,
+    EDIT_PRIORITY,
+    SEND_PRIORITY,
+    MattermostOutbox,
+    OutboxOp,
+)
 
 logger = get_logger(__name__)
 
@@ -41,6 +48,7 @@ class MattermostClient:
         interval = 0.0 if rps <= 0 else 1.0 / rps
         self._outbox = MattermostOutbox(
             interval=interval,
+            retry_after_type=MattermostRetryAfter,
             clock=clock,
             sleep=sleep,
             on_error=self._log_request_error,
@@ -113,9 +121,7 @@ class MattermostClient:
     # ------------------------------------------------------------------
 
     async def get_channel(self, channel_id: str) -> Channel | None:
-        return await self._call_with_retry(
-            lambda: self._client.get_channel(channel_id)
-        )
+        return await self._call_with_retry(lambda: self._client.get_channel(channel_id))
 
     # ------------------------------------------------------------------
     # Posts (through outbox)
@@ -192,9 +198,7 @@ class MattermostClient:
     # Reactions (through outbox)
     # ------------------------------------------------------------------
 
-    async def add_reaction(
-        self, user_id: str, post_id: str, emoji_name: str
-    ) -> bool:
+    async def add_reaction(self, user_id: str, post_id: str, emoji_name: str) -> bool:
         result = await self._enqueue_op(
             key=self._unique_key("reaction"),
             label="add_reaction",

@@ -48,6 +48,7 @@ class SlackClient:
         interval = 0.0 if rps <= 0 else 1.0 / rps
         self._outbox = SlackOutbox(
             interval=interval,
+            retry_after_type=SlackRetryAfter,
             clock=clock,
             sleep=sleep,
             on_error=self._log_request_error,
