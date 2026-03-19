@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import signal
+import time as _time
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -51,6 +53,7 @@ logger = get_logger(__name__)
 type _SendFn = Callable[[RenderedMessage], Awaitable[None]]
 
 _CONFIG_DIR = Path.home() / ".tunapi"
+_SHUTDOWN_STATE_FILE = _CONFIG_DIR / "last_shutdown.json"
 
 
 def _resolve_upload_dir(cfg: MattermostBridgeConfig, channel_id: str) -> Path:
@@ -709,6 +712,25 @@ async def run_main_loop(
     """Main event loop: connect WebSocket, dispatch messages."""
     await _send_startup(cfg)
 
+    # Notify if previous session was shut down (restart detection)
+    if _SHUTDOWN_STATE_FILE.exists():
+        with contextlib.suppress(Exception):
+            state = json.loads(_SHUTDOWN_STATE_FILE.read_text())
+            reason = state.get("reason", "unknown")
+            tasks = state.get("running_tasks", 0)
+            ts = state.get("timestamp", "")
+            parts = [f"🔄 **서비스 재시작 완료** (이전 종료: {reason})"]
+            if tasks > 0:
+                parts.append(f"⚠️ 종료 시 진행 중이던 작업 {tasks}개가 중단되었을 수 있습니다.")
+            if ts:
+                parts.append(f"종료 시각: {ts}")
+            msg_text = "\n".join(parts)
+            await cfg.exec_cfg.transport.send(
+                channel_id=cfg.channel_id,
+                message=RenderedMessage(text=msg_text),
+            )
+        _SHUTDOWN_STATE_FILE.unlink(missing_ok=True)
+
     running_tasks: RunningTasks = {}
     sessions = ChatSessionStore(_CONFIG_DIR / "mattermost_sessions.json")
     chat_prefs = ChatPrefsStore(_CONFIG_DIR / "mattermost_prefs.json")
@@ -773,3 +795,15 @@ async def run_main_loop(
                 for task in list(running_tasks.values()):
                     await task.done.wait()
             logger.info("mattermost.drain_complete")
+
+        # Save shutdown state for restart notification
+        reason = "SIGTERM" if shutdown.is_set() else "disconnect"
+        with contextlib.suppress(Exception):
+            _SHUTDOWN_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _SHUTDOWN_STATE_FILE.write_text(
+                json.dumps({
+                    "reason": reason,
+                    "running_tasks": len(running_tasks),
+                    "timestamp": _time.strftime("%Y-%m-%d %H:%M:%S"),
+                })
+            )
