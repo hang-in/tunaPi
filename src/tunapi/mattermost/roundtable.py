@@ -2,13 +2,16 @@
 
 Agents within the same round can reference earlier agents' responses.
 After completion, users can continue the discussion with ``!rt follow``.
+Completed sessions are persisted to JSON so follow-ups survive restarts.
 """
 
 from __future__ import annotations
 
+import contextlib
+import json
 import shlex
-import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import anyio
@@ -18,6 +21,7 @@ from ..logging import bind_run_context, get_logger
 from ..runner_bridge import IncomingMessage, handle_message
 from ..transport import RenderedMessage, SendOptions
 from ..transport_runtime import RoundtableConfig
+from ..utils.json_state import atomic_write_json
 
 if TYPE_CHECKING:
     from ..runner_bridge import RunningTasks
@@ -45,47 +49,91 @@ class RoundtableSession:
     cancel_event: anyio.Event = field(default_factory=anyio.Event)
     completed: bool = False
 
+    def to_dict(self) -> dict:
+        """Serialize to dict (excludes cancel_event)."""
+        return {
+            "thread_id": self.thread_id,
+            "channel_id": self.channel_id,
+            "topic": self.topic,
+            "engines": self.engines,
+            "total_rounds": self.total_rounds,
+            "current_round": self.current_round,
+            "transcript": self.transcript,
+            "completed": self.completed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> RoundtableSession:
+        """Deserialize from dict."""
+        return cls(
+            thread_id=data["thread_id"],
+            channel_id=data["channel_id"],
+            topic=data["topic"],
+            engines=data["engines"],
+            total_rounds=data["total_rounds"],
+            current_round=data.get("current_round", 0),
+            transcript=[tuple(t) for t in data.get("transcript", [])],
+            completed=data.get("completed", False),
+        )
+
 
 class RoundtableStore:
-    """In-memory store mapping thread_id -> active/completed roundtable session."""
+    """Persistent store for roundtable sessions.
 
-    def __init__(self) -> None:
+    Active sessions are in-memory only.  Completed sessions are persisted
+    to a JSON file so that ``!rt follow`` works after restarts.
+    """
+
+    def __init__(self, persist_path: Path | None = None) -> None:
         self._sessions: dict[str, RoundtableSession] = {}
-        self._completed_at: dict[str, float] = {}
+        self._persist_path = persist_path
+        if persist_path:
+            self._load()
+
+    # -- persistence -----------------------------------------------------------
+
+    def _load(self) -> None:
+        if not self._persist_path or not self._persist_path.exists():
+            return
+        with contextlib.suppress(Exception):
+            data = json.loads(self._persist_path.read_text())
+            for entry in data.get("sessions", []):
+                session = RoundtableSession.from_dict(entry)
+                if session.completed:
+                    self._sessions[session.thread_id] = session
+
+    def _save(self) -> None:
+        if not self._persist_path:
+            return
+        with contextlib.suppress(Exception):
+            entries = [s.to_dict() for s in self._sessions.values() if s.completed]
+            atomic_write_json(
+                self._persist_path,
+                {"version": 1, "sessions": entries},
+            )
+
+    # -- public API ------------------------------------------------------------
 
     def get(self, thread_id: str) -> RoundtableSession | None:
-        self._evict_expired()
         return self._sessions.get(thread_id)
 
     def get_completed(self, thread_id: str) -> RoundtableSession | None:
-        self._evict_expired()
         s = self._sessions.get(thread_id)
         return s if s and s.completed else None
 
     def put(self, session: RoundtableSession) -> None:
         self._sessions[session.thread_id] = session
-        self._completed_at.pop(session.thread_id, None)
 
     def remove(self, thread_id: str) -> RoundtableSession | None:
-        self._completed_at.pop(thread_id, None)
-        return self._sessions.pop(thread_id, None)
+        result = self._sessions.pop(thread_id, None)
+        self._save()
+        return result
 
     def complete(self, thread_id: str) -> None:
         session = self._sessions.get(thread_id)
         if session:
             session.completed = True
-            self._completed_at[thread_id] = time.monotonic()
-
-    def _evict_expired(self) -> None:
-        now = time.monotonic()
-        expired = [
-            tid
-            for tid, ts in self._completed_at.items()
-            if now - ts > _SESSION_TTL_SECONDS
-        ]
-        for tid in expired:
-            self._sessions.pop(tid, None)
-            self._completed_at.pop(tid, None)
+            self._save()
 
 
 def parse_rt_args(
@@ -187,7 +235,11 @@ def _build_round_prompt(
     if transcript:
         context_lines: list[str] = []
         for engine, answer in transcript:
-            trimmed = answer[:_MAX_ANSWER_LENGTH] + "..." if len(answer) > _MAX_ANSWER_LENGTH else answer
+            trimmed = (
+                answer[:_MAX_ANSWER_LENGTH] + "..."
+                if len(answer) > _MAX_ANSWER_LENGTH
+                else answer
+            )
             context_lines.append(f"**[{engine}]**:\n{trimmed}")
         sections.append("이전 라운드 응답:\n\n" + "\n\n".join(context_lines))
 
@@ -195,7 +247,11 @@ def _build_round_prompt(
     if current_round_responses:
         current_lines: list[str] = []
         for engine, answer in current_round_responses:
-            trimmed = answer[:_MAX_ANSWER_LENGTH] + "..." if len(answer) > _MAX_ANSWER_LENGTH else answer
+            trimmed = (
+                answer[:_MAX_ANSWER_LENGTH] + "..."
+                if len(answer) > _MAX_ANSWER_LENGTH
+                else answer
+            )
             current_lines.append(f"**[{engine}]**:\n{trimmed}")
         sections.append(
             "이번 라운드 다른 에이전트 답변:\n\n" + "\n\n".join(current_lines)

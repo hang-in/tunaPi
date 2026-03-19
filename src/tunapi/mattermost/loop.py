@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Any
 import anyio
 
 from ..core import lifecycle
-from ..journal import Journal, PendingRunLedger, build_handoff_preamble, make_run_id
+from ..journal import (
+    Journal,
+    JournalEntry,
+    PendingRunLedger,
+    build_handoff_preamble,
+    make_run_id,
+)
 from ..logging import bind_run_context, get_logger
 from ..model import ResumeToken
 from ..runner_bridge import IncomingMessage, handle_message
@@ -342,6 +348,37 @@ class _ResolvedPrompt:
     file_context: str  # empty string if no files
 
 
+async def _archive_roundtable(
+    session: RoundtableSession,
+    journal: Journal | None,
+    send: _SendFn,
+) -> None:
+    """Archive roundtable transcript to journal, then notify."""
+    if journal and session.transcript:
+        import time as _t
+
+        ts = _t.strftime("%Y-%m-%dT%H:%M:%S")
+        run_id = f"rt:{session.thread_id}"
+        transcript_lines = []
+        for engine, answer in session.transcript:
+            transcript_lines.append(f"[{engine}]: {answer[:500]}")
+        entry = JournalEntry(
+            run_id=run_id,
+            channel_id=session.channel_id,
+            timestamp=ts,
+            event="roundtable_closed",
+            data={
+                "topic": session.topic,
+                "engines": session.engines,
+                "rounds": session.current_round,
+                "transcript": "\n\n".join(transcript_lines),
+            },
+        )
+        with contextlib.suppress(Exception):
+            await journal.append(entry)
+    await send(RenderedMessage(text="🔴 라운드테이블이 종료되었습니다."))
+
+
 async def _dispatch_rt_command(
     args: str,
     msg: MattermostIncomingMessage,
@@ -350,30 +387,59 @@ async def _dispatch_rt_command(
     chat_prefs: ChatPrefsStore | None,
     roundtables: RoundtableStore | None,
     send: _SendFn,
+    journal: Journal | None = None,
 ) -> None:
-    """Handle the !rt / /rt command, including follow-up detection."""
+    """Handle the !rt / /rt command, including follow-up and close."""
     continue_rt = None
-    if msg.root_id and roundtables and roundtables.get_completed(msg.root_id):
-        completed_session = roundtables.get_completed(msg.root_id)
-        ambient_ctx = (
-            await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
-        )
+    close_rt = None
 
-        async def continue_rt(
-            topic: str,
-            engines_filter: list[str] | None,
-            *,
-            _s: Any = completed_session,
-            _ctx: Any = ambient_ctx,
-        ) -> None:
-            await run_followup_round(
-                _s,
-                topic,
-                engines_filter,
-                cfg=cfg,
-                running_tasks=running_tasks,
-                ambient_context=_ctx,
+    if msg.root_id and roundtables:
+        # Check for completed session (follow-up / close)
+        completed_session = roundtables.get_completed(msg.root_id)
+        if completed_session:
+            ambient_ctx = (
+                await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
             )
+
+            async def continue_rt(
+                topic: str,
+                engines_filter: list[str] | None,
+                *,
+                _s: Any = completed_session,
+                _ctx: Any = ambient_ctx,
+            ) -> None:
+                await run_followup_round(
+                    _s,
+                    topic,
+                    engines_filter,
+                    cfg=cfg,
+                    running_tasks=running_tasks,
+                    ambient_context=_ctx,
+                )
+
+            async def close_rt(
+                *,
+                _tid: str = msg.root_id,
+                _rt: RoundtableStore = roundtables,
+                _s: RoundtableSession = completed_session,
+            ) -> None:
+                await _archive_roundtable(_s, journal, send)
+                _rt.remove(_tid)
+
+        # Also allow close on active (non-completed) sessions
+        active_session = roundtables.get(msg.root_id)
+        if active_session and not active_session.completed and close_rt is None:
+
+            async def close_rt(
+                *,
+                _tid: str = msg.root_id,
+                _rt: RoundtableStore = roundtables,
+            ) -> None:
+                session = _rt.get(_tid)
+                if session:
+                    session.cancel_event.set()
+                    await _archive_roundtable(session, journal, send)
+                _rt.remove(_tid)
 
     await handle_rt(
         args,
@@ -390,6 +456,7 @@ async def _dispatch_rt_command(
             roundtables=roundtables,
         ),
         continue_roundtable=continue_rt,
+        close_roundtable=close_rt,
         thread_id=msg.root_id,
     )
 
@@ -451,7 +518,14 @@ async def _try_dispatch_command(
             )
         case "rt":
             await _dispatch_rt_command(
-                args, msg, cfg, running_tasks, chat_prefs, roundtables, send
+                args,
+                msg,
+                cfg,
+                running_tasks,
+                chat_prefs,
+                roundtables,
+                send,
+                journal=journal,
             )
         case "status":
             has_session = await sessions.has_any(msg.channel_id)
@@ -754,7 +828,7 @@ async def run_main_loop(
     running_tasks: RunningTasks = {}
     sessions = ChatSessionStore(_CONFIG_DIR / "mattermost_sessions.json")
     chat_prefs = ChatPrefsStore(_CONFIG_DIR / "mattermost_prefs.json")
-    roundtables = RoundtableStore()
+    roundtables = RoundtableStore(_CONFIG_DIR / "mattermost_roundtables.json")
     journal = Journal(_CONFIG_DIR / "journals")
     ledger = PendingRunLedger(_CONFIG_DIR / "pending_runs.json")
     heartbeat_path = _CONFIG_DIR / "heartbeat"

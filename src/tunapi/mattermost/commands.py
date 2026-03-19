@@ -375,12 +375,14 @@ async def handle_rt(
     send: Any,
     start_roundtable: Any,
     continue_roundtable: Any | None = None,
+    close_roundtable: Any | None = None,
     thread_id: str | None = None,
 ) -> None:
     """Handle ``!rt`` commands.
 
     - ``!rt "topic" [--rounds N]`` — start a new roundtable
     - ``!rt follow [engines] "topic"`` — follow-up in completed roundtable thread
+    - ``!rt close`` — close the current roundtable thread
     """
     from .roundtable import parse_followup_args, parse_rt_args
 
@@ -391,8 +393,21 @@ async def handle_rt(
         await send(RenderedMessage(text="⚠️ No engines available for roundtable."))
         return
 
-    # Check for "follow" subcommand
     stripped = args.strip()
+
+    # Check for "close" subcommand
+    if stripped.lower().startswith("close"):
+        if not close_roundtable:
+            await send(
+                RenderedMessage(
+                    text="⚠️ `!rt close`는 라운드테이블 스레드에서만 사용할 수 있습니다."
+                )
+            )
+            return
+        await close_roundtable()
+        return
+
+    # Check for "follow" subcommand
     if stripped.lower().startswith("follow"):
         follow_args = stripped[len("follow") :].strip()
         if not continue_roundtable:
@@ -441,7 +456,8 @@ async def handle_rt(
                     "Usage:\n"
                     '- `!rt "주제"` — 새 라운드테이블\n'
                     '- `!rt "주제" --rounds 2` — 다중 라운드\n'
-                    '- `!rt follow [에이전트] "질문"` — 후속 토론\n\n'
+                    '- `!rt follow [에이전트] "질문"` — 후속 토론\n'
+                    "- `!rt close` — 라운드테이블 종료\n\n"
                     f"Engines: {engines_display}\n"
                     f"Default rounds: {rt_config.rounds} (max {rt_config.max_rounds})"
                 )

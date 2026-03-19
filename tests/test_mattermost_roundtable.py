@@ -5,14 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 
-import anyio
 import pytest
 
 from tunapi.mattermost.roundtable import (
     RoundtableSession,
     RoundtableStore,
     _MAX_ANSWER_LENGTH,
-    _SESSION_TTL_SECONDS,
     _build_round_prompt,
     parse_followup_args,
     parse_rt_args,
@@ -91,25 +89,32 @@ class TestRoundtableStore:
         assert removed is session
         assert store.get("t1") is None
 
-    def test_evict_expired_sessions(self):
+    def test_completed_sessions_persist(self):
+        """Completed sessions are kept indefinitely (no TTL)."""
         store = RoundtableStore()
         session = _make_session()
         store.put(session)
         store.complete("t1")
-        # Simulate time passing beyond TTL
-        with patch("tunapi.mattermost.roundtable.time.monotonic") as mock_mono:
-            # First call: complete timestamp (already set), next calls: eviction check
-            mock_mono.return_value = store._completed_at["t1"] + _SESSION_TTL_SECONDS + 1
-            assert store.get("t1") is None
+        # Should still be accessible
+        assert store.get("t1") is session
+        assert store.get_completed("t1") is session
 
-    def test_evict_keeps_active_sessions(self):
+    def test_remove_deletes_completed_session(self):
+        """!rt close removes completed sessions explicitly."""
         store = RoundtableStore()
         session = _make_session()
         store.put(session)
-        # Active (not completed) sessions should survive regardless of time
-        with patch("tunapi.mattermost.roundtable.time.monotonic") as mock_mono:
-            mock_mono.return_value = 999999999.0
-            assert store.get("t1") is session
+        store.complete("t1")
+        store.remove("t1")
+        assert store.get("t1") is None
+
+    def test_active_sessions_accessible(self):
+        """Active (not completed) sessions are accessible via get()."""
+        store = RoundtableStore()
+        session = _make_session()
+        store.put(session)
+        assert store.get("t1") is session
+        assert store.get_completed("t1") is None  # not completed yet
 
 
 # ---------------------------------------------------------------------------
