@@ -51,6 +51,7 @@ gemini = "tunapi.runners.gemini:BACKEND"
 telegram = "tunapi.telegram.backend:BACKEND"
 mattermost = "tunapi.mattermost.backend:BACKEND"
 slack = "tunapi.slack.backend:BACKEND"
+tunadish = "tunapi.tunadish.backend:BACKEND"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
