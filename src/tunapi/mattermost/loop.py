@@ -72,10 +72,11 @@ _SHUTDOWN_STATE_FILE = _CONFIG_DIR / "last_shutdown.json"
 
 def _resolve_upload_dir(cfg: MattermostBridgeConfig, channel_id: str) -> Path:
     """Resolve the upload target directory for a channel."""
+    from ..core.files import resolve_incoming_dir
+
     context = cfg.runtime.default_context_for_chat(channel_id)
-    cwd = cfg.runtime.resolve_run_cwd(context)
-    root = cwd or Path.cwd()
-    return root / cfg.files_uploads_dir
+    project = context.project if context else None
+    return resolve_incoming_dir(project or "default")
 
 
 async def _put_files(
@@ -93,6 +94,32 @@ async def _put_files(
         deny_globs=cfg.files_deny_globs,
         max_bytes=cfg.files_max_upload_bytes,
     )
+
+
+async def _attach_referenced_files(
+    cfg: MattermostBridgeConfig,
+    channel_id: str,
+    answer: str,
+) -> None:
+    """Detect local file paths in the answer and upload them to MM."""
+    from ..core.files import extract_file_paths
+
+    paths = extract_file_paths(answer)
+    if not paths:
+        return
+    for p in paths:
+        try:
+            data = p.read_bytes()
+            file_info = await cfg.bot.upload_file(channel_id, p.name, data)
+            if file_info:
+                await cfg.bot.send_message(
+                    channel_id,
+                    f"`{p}`",
+                    file_ids=[file_info.id],
+                )
+                logger.info("file.auto_attach", path=str(p), channel_id=channel_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("file.auto_attach_failed", path=str(p), error=str(exc))
 
 
 async def _send_startup(cfg: MattermostBridgeConfig) -> None:
@@ -223,8 +250,8 @@ async def _handle_file_command(
             )
             return True
 
-        upload_dir = _resolve_upload_dir(cfg, msg.channel_id)
-        root = upload_dir.parent  # project root (upload_dir = root / uploads_dir)
+        context = cfg.runtime.default_context_for_chat(msg.channel_id)
+        root = cfg.runtime.resolve_run_cwd(context) or Path.cwd()
 
         filename, error, content = await handle_file_get(
             client=cfg.bot,
@@ -843,7 +870,7 @@ async def _run_engine(
     run_base_token = set_run_base_dir(cwd)
     try:
         with apply_run_options(run_options):
-            await handle_message(
+            answer = await handle_message(
                 cfg.exec_cfg,
                 runner=resolved_runner.runner,
                 incoming=incoming,
@@ -858,6 +885,9 @@ async def _run_engine(
                 ledger=ledger,
                 project_sessions=project_sessions,
             )
+        # Auto-attach referenced files to the channel
+        if answer:
+            await _attach_referenced_files(cfg, msg.channel_id, answer)
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "mattermost.dispatch_error",
@@ -971,7 +1001,10 @@ async def run_main_loop(
     transport_config: object | None = None,
 ) -> None:
     """Main event loop: connect WebSocket, dispatch messages."""
+    from ..core.files import cleanup_incoming
+
     await _send_startup(cfg)
+    cleanup_incoming()
 
     running_tasks: RunningTasks = {}
     sessions = ChatSessionStore(_CONFIG_DIR / "mattermost_sessions.json")

@@ -78,10 +78,11 @@ _PERSONA_PREFIX_RE = re.compile(r"^@(\w+)\s+", re.UNICODE)
 
 def _resolve_upload_dir(cfg: SlackBridgeConfig, channel_id: str) -> Path:
     """Resolve the upload target directory for a channel."""
+    from ..core.files import resolve_incoming_dir
+
     context = cfg.runtime.default_context_for_chat(channel_id)
-    cwd = cfg.runtime.resolve_run_cwd(context)
-    root = cwd or Path.cwd()
-    return root / cfg.files_uploads_dir
+    project = context.project if context else None
+    return resolve_incoming_dir(project or "default")
 
 
 async def _put_files(
@@ -193,8 +194,8 @@ async def _handle_file_command(
             await send(RenderedMessage(text="Usage: `!file get <path>`"))
             return True
 
-        upload_dir = _resolve_upload_dir(cfg, msg.channel_id)
-        root = upload_dir.parent  # project root (upload_dir = root / uploads_dir)
+        context = cfg.runtime.default_context_for_chat(msg.channel_id)
+        root = cfg.runtime.resolve_run_cwd(context) or Path.cwd()
 
         filename, error, content = await handle_file_get(
             rel_path=rel_path,

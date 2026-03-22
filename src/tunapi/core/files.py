@@ -9,13 +9,73 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from ..logging import get_logger
 
 logger = get_logger(__name__)
+
+_CONFIG_DIR = Path.home() / ".tunapi"
+_INCOMING_ROOT = _CONFIG_DIR / "incoming"
+
+
+def resolve_incoming_dir(project: str) -> Path:
+    """Return ~/.tunapi/incoming/{project}/, creating it if needed."""
+    d = _INCOMING_ROOT / project
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def cleanup_incoming(*, max_age_days: int = 7) -> int:
+    """Delete files older than *max_age_days* under ~/.tunapi/incoming/.
+
+    Returns number of deleted files.
+    """
+    if not _INCOMING_ROOT.exists():
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    deleted = 0
+    for f in _INCOMING_ROOT.rglob("*"):
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            f.unlink(missing_ok=True)
+            deleted += 1
+    # Remove empty project dirs
+    for d in _INCOMING_ROOT.iterdir():
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+    if deleted:
+        logger.info("incoming.cleanup", deleted=deleted, max_age_days=max_age_days)
+    return deleted
+
+
+_FILE_PATH_RE = re.compile(
+    r"(?:^|[\s`(])(/[\w./-]+\.(?:md|txt|rst|toml|yaml|yml|json|csv))(?=[\s`),.:;!?\]]|$)",
+    re.MULTILINE,
+)
+
+_MAX_ATTACH_SIZE = 20 * 1024 * 1024  # 20 MB
+
+
+def extract_file_paths(text: str) -> list[Path]:
+    """Extract readable local file paths from response text.
+
+    Returns deduplicated list of existing, readable files.
+    """
+    seen: set[str] = set()
+    result: list[Path] = []
+    for m in _FILE_PATH_RE.finditer(text):
+        raw = m.group(1)
+        if raw in seen:
+            continue
+        seen.add(raw)
+        p = Path(raw)
+        if p.is_file() and p.stat().st_size <= _MAX_ATTACH_SIZE:
+            result.append(p)
+    return result
 
 
 @dataclass(frozen=True, slots=True)
