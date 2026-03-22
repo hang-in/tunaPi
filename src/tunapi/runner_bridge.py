@@ -98,6 +98,7 @@ class ExecBridgeConfig:
     transport: Transport
     presenter: Presenter
     final_notify: bool
+    engine_meta: dict[str, str] | None = None
 
 
 @dataclass(slots=True)
@@ -410,6 +411,7 @@ async def _finalize_run(
     event: str,
     data: dict | None = None,
     ledger: PendingRunLedger | None = None,
+    model: str | None = None,
 ) -> None:
     """Write journal entries and complete ledger (best-effort)."""
     if ledger is not None and run_id is not None:
@@ -426,7 +428,7 @@ async def _finalize_run(
             timestamp=ts,
             event="prompt",
             engine=engine,
-            data={"text": _truncate(incoming.text)},
+            data={"text": _truncate(incoming.text), "model": model},
         ),
     ]
     if tracker.resume is not None:
@@ -663,6 +665,7 @@ async def handle_message(
             event="interrupted",
             data={"reason": "error", "error": err_body},
             ledger=ledger,
+            model=getattr(runner, "model", None),
         )
         return None
 
@@ -703,6 +706,7 @@ async def handle_message(
             event="interrupted",
             data={"reason": "cancel"},
             ledger=ledger,
+            model=getattr(runner, "model", None),
         )
         return None
 
@@ -782,5 +786,6 @@ async def handle_message(
             "usage": completed.usage,
         },
         ledger=ledger,
+        model=getattr(runner, "model", None),
     )
     return final_answer if run_ok is not False else None

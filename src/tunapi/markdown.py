@@ -212,9 +212,8 @@ class MarkdownFormatter:
             label=label,
             engine=state.engine,
         )
-        body = self._assemble_body(self._format_actions(state))
         return MarkdownParts(
-            header=header, body=body, footer=self._format_footer(state)
+            header=header, body=None, footer=self._format_footer(state)
         )
 
     def render_final_parts(
@@ -239,14 +238,15 @@ class MarkdownFormatter:
         )
 
     def _format_footer(self, state: ProgressState) -> str | None:
-        lines: list[str] = []
+        parts: list[str] = []
         if state.context_line:
-            lines.append(state.context_line)
+            # context_line is already backtick-wrapped like `alias`
+            parts.append(state.context_line.strip("`"))
         if state.resume_line:
-            lines.append(state.resume_line)
-        if not lines:
+            parts.append(state.resume_line)
+        if not parts:
             return None
-        return HARD_BREAK.join(lines)
+        return f"`{' '.join(parts)}`"
 
     def _format_actions(self, state: ProgressState) -> list[str]:
         actions = list(state.actions)

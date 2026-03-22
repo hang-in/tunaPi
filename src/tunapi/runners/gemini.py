@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -120,6 +121,7 @@ class GeminiRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
     resume_re: re.Pattern[str] = _RESUME_RE
 
     gemini_cmd: str = "gemini"
+    gemini_script: str | None = None  # .js entry point (Windows node direct)
     model: str | None = "auto"
     yolo: bool = False
     approval_mode: str | None = "auto_edit"
@@ -137,7 +139,10 @@ class GeminiRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
     ) -> list[str]:
         from .run_options import get_run_options
 
-        args: list[str] = ["-p", prompt, "--output-format", "stream-json"]
+        args: list[str] = []
+        if self.gemini_script:
+            args.extend(["--no-warnings=DEP0040", self.gemini_script])
+        args.extend(["-p", prompt, "--output-format", "stream-json"])
         if self.yolo:
             args.append("-y")
         elif self.approval_mode:
@@ -217,13 +222,25 @@ class GeminiRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
 
 
 def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
-    gemini_cmd = shutil.which("gemini") or "gemini"
+    gemini_script: str | None = None
+    if os.name == "nt":
+        # On Windows, bypass .cmd wrapper to avoid stdout buffering / exit-detection issues.
+        npm_root = Path.home() / "AppData" / "Roaming" / "npm"
+        entry = npm_root / "node_modules" / "@google" / "gemini-cli" / "dist" / "index.js"
+        if entry.exists():
+            gemini_cmd = shutil.which("node") or "node"
+            gemini_script = str(entry)
+        else:
+            gemini_cmd = shutil.which("gemini") or "gemini"
+    else:
+        gemini_cmd = shutil.which("gemini") or "gemini"
     model = config.get("model", "auto")
     yolo = config.get("yolo", False) is True
     approval_mode = config.get("approval_mode", "auto_edit")
     title = str(model) if model else "gemini"
     return GeminiRunner(
         gemini_cmd=gemini_cmd,
+        gemini_script=gemini_script,
         model=model,
         yolo=yolo,
         approval_mode=approval_mode,

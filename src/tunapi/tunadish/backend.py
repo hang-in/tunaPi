@@ -316,11 +316,15 @@ class TunadishBackend:
                                     # timestamp 순 정렬
                                     entries = sorted(all_entries, key=lambda e: e.timestamp)
                                     messages = []
+                                    # prompt entries의 engine/model을 run_id별로 추적
+                                    run_meta: dict[str, dict[str, str | None]] = {}
                                     for e in entries:
                                         if e.event == "prompt":
                                             raw_text = e.data.get("text", "")
                                             clean_text = _RAWQ_CONTEXT_RE.sub("", raw_text)
                                             clean_text = _SIBLING_CONTEXT_RE.sub("", clean_text)
+                                            meta = {"engine": e.engine, "model": e.data.get("model")}
+                                            run_meta[e.run_id] = meta
                                             messages.append({
                                                 "role": "user",
                                                 "content": clean_text,
@@ -329,11 +333,17 @@ class TunadishBackend:
                                         elif e.event == "completed" and e.data.get("ok"):
                                             answer = e.data.get("answer")
                                             if answer:
-                                                messages.append({
+                                                meta = run_meta.get(e.run_id, {})
+                                                msg: dict[str, Any] = {
                                                     "role": "assistant",
                                                     "content": answer,
                                                     "timestamp": e.timestamp,
-                                                })
+                                                }
+                                                if meta.get("engine"):
+                                                    msg["engine"] = meta["engine"]
+                                                if meta.get("model"):
+                                                    msg["model"] = meta["model"]
+                                                messages.append(msg)
                                     await transport._send_notification("conversation.history.result", {
                                         "conversation_id": history_channel,
                                         "messages": messages,
@@ -358,6 +368,12 @@ class TunadishBackend:
                             elif method == "model.set":
                                 engine = params.get("engine", "")
                                 model = params.get("model", "")
+                                # Auto-detect engine from model if not specified
+                                if model and not engine:
+                                    from ..engine_models import find_engine_for_model
+                                    detected = find_engine_for_model(model)
+                                    if detected:
+                                        engine = detected
                                 args = f"{engine} {model}".strip() if model else engine
                                 await self._dispatch_rpc_command("model", args, params, runtime, transport)
                             elif method == "model.list":
@@ -565,9 +581,10 @@ class TunadishBackend:
         # 사용 가능한 엔진+모델 목록
         available_engines: dict[str, list[str]] = {}
         try:
+            from ..engine_models import get_models as _get_models
             for eid in runtime.available_engine_ids():
-                from ..engine_models import KNOWN_MODELS
-                available_engines[eid] = KNOWN_MODELS.get(eid, [])
+                models, _src = _get_models(eid)
+                available_engines[eid] = models
         except Exception:
             pass
 
@@ -608,7 +625,7 @@ class TunadishBackend:
             "conv_branches": [
                 {"id": cb.branch_id, "label": cb.label, "status": cb.status,
                  "git_branch": cb.git_branch, "parent_branch_id": cb.parent_branch_id,
-                 "session_id": cb.session_id}
+                 "session_id": cb.session_id, "checkpoint_id": cb.checkpoint_id}
                 for cb in (await self._facade.conv_branches.list(project))
             ],
             "pending_review_count": len(dto.pending_reviews),
@@ -649,7 +666,7 @@ class TunadishBackend:
             "conv_branches": [
                 {"id": cb.branch_id, "label": cb.label, "status": cb.status,
                  "git_branch": cb.git_branch, "parent_branch_id": cb.parent_branch_id,
-                 "session_id": cb.session_id}
+                 "session_id": cb.session_id, "checkpoint_id": cb.checkpoint_id}
                 for cb in conv_branches
             ],
         }
@@ -743,6 +760,7 @@ class TunadishBackend:
             label=label,
             parent_branch_id=parent_id,
             session_id=conv_id,
+            checkpoint_id=checkpoint_id,
         )
 
         # active_branch_id 갱신
@@ -1287,12 +1305,43 @@ class TunadishBackend:
             )
 
             # conv settings 모델 override → ChatPrefs 모델 override
+            # 엔진과 모델 호환성 검증 + 자동 엔진 전환
+            resolved_engine = rr.runner.engine if hasattr(rr.runner, "engine") else None
             model_override = conv_settings.model
+            if model_override and resolved_engine:
+                from ..engine_models import get_models as _get_engine_models, find_engine_for_model
+                valid_models, _ = _get_engine_models(resolved_engine)
+                if valid_models and model_override not in valid_models:
+                    # Auto-switch engine if model belongs to another engine
+                    correct_engine = find_engine_for_model(model_override)
+                    if correct_engine:
+                        logger.info(
+                            "tunadish.auto_engine_switch",
+                            model=model_override,
+                            from_engine=resolved_engine,
+                            to_engine=correct_engine,
+                        )
+                        rr = runtime.resolve_runner(
+                            resume_token=None,  # new engine = new session
+                            engine_override=correct_engine,
+                        )
+                    else:
+                        logger.warning(
+                            "tunadish.model_override_unknown",
+                            model=model_override,
+                            engine=resolved_engine,
+                        )
+                        model_override = None
             if not model_override and self._chat_prefs and final_engine_override:
                 model_override = await self._chat_prefs.get_engine_model(context_conv_id, final_engine_override)
 
             cwd = runtime.resolve_run_cwd(resolved.context)
             run_base_token = set_run_base_dir(cwd)
+
+            # Set engine/model meta on transport for message notifications
+            run_engine = rr.runner.engine if hasattr(rr.runner, "engine") else None
+            run_model = model_override or getattr(rr.runner, "model", None)
+            transport.set_run_meta(run_engine, run_model)
 
             cfg = ExecBridgeConfig(
                 transport=transport,
@@ -1330,6 +1379,7 @@ class TunadishBackend:
             if progress_ref:
                 await transport.edit(ref=progress_ref, message=RenderedMessage(text=f"**❌ 오류 발생:** {e}"))
         finally:
+            transport.set_run_meta(None, None)
             if run_base_token is not None:
                 reset_run_base_dir(run_base_token)
             self.run_map.pop(conv_id, None)
@@ -1734,12 +1784,13 @@ class TunadishBackend:
 
     async def _handle_engine_list(self, runtime: TransportRuntime, transport: TunadishTransport):
         """engine.list → 사용 가능한 엔진 + 모델 목록."""
-        from ..engine_models import KNOWN_MODELS
+        from ..engine_models import get_models as _get_models
 
         engines: dict[str, list[str]] = {}
         try:
             for eid in runtime.available_engine_ids():
-                engines[eid] = KNOWN_MODELS.get(eid, [])
+                models, _src = _get_models(eid)
+                engines[eid] = models
         except Exception:
             pass
 

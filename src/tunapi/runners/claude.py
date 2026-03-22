@@ -256,11 +256,11 @@ def translate_claude_event(
         case claude_schema.StreamResultMessage():
             ok = not event.is_error
             result_text = event.result or ""
-            if ok and not result_text and state.last_assistant_text:
+            if not result_text and state.last_assistant_text:
                 result_text = state.last_assistant_text
 
             resume = ResumeToken(engine=ENGINE, value=event.session_id)
-            error = None if ok else _extract_error(event)
+            error = None if ok else (_extract_error(event) or result_text or None)
             usage = _usage_payload(event)
 
             return [
@@ -438,7 +438,7 @@ class ClaudeRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
 
 
 def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
-    claude_cmd = shutil.which("claude") or "claude"
+    claude_cmd = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude.exe")
 
     model = config.get("model")
     if "allowed_tools" in config:

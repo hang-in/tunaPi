@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-tunapi is a Mattermost and Telegram bridge for agent CLIs (Claude Code, Codex, Gemini CLI, OpenCode, Pi). Set `transport = "mattermost"` or `transport = "telegram"` in `tunapi.toml`.
+tunapi is a Mattermost, Slack, and Telegram bridge for agent CLIs (Claude Code, Codex, Gemini CLI, OpenCode, Pi). Set `transport = "mattermost"`, `transport = "slack"`, or `transport = "telegram"` in `tunapi.toml`.
 
 Config: `~/.tunapi/tunapi.toml`
 
@@ -26,13 +26,13 @@ just docs-serve                # local docs
 ## Architecture
 
 ```
-[Mattermost WebSocket | Telegram Long-Polling] → Transport (parse)
+[Mattermost WebSocket | Slack Socket Mode | Telegram Long-Polling | Tunadish WebSocket] → Transport (parse)
     → TransportRuntime (resolve engine/project)
     → Runner (spawn agent CLI, stream JSONL) → RunnerBridge (track progress, send updates)
     → Presenter (render Markdown/HTML) → Transport (send/edit messages back)
 ```
 
-Three transports (Mattermost, Slack, Telegram) share the same runtime, runner, presenter protocols, and core modules.
+Four transports (Mattermost, Slack, Telegram, Tunadish) share the same runtime, runner, presenter protocols, and core modules.
 
 ### Core Protocols (`src/tunapi/`)
 
@@ -96,11 +96,23 @@ Three transports (Mattermost, Slack, Telegram) share the same runtime, runner, p
 - `parsing.py` — Socket Mode events → typed messages with bot/channel/user filtering
 - `backend.py` — `TransportBackend` entry point
 - `commands.py` — slash command handling (`/help`, `/model`, `/trigger`, `/status`, `/cancel`, `/new`, `/project`, `/persona`)
-- `trigger_mode.py` — @mention detection (default: mentions only)
+- `trigger_mode.py` — @mention detection (default: mentions only); thread replies always trigger without mention
 
 ### Telegram Transport (`src/tunapi/telegram/`)
 
 Uses long-polling, inline keyboard for cancel, and supports topics, voice notes, and file transfer.
+
+### Tunadish Transport (`src/tunapi/tunadish/`)
+
+WebSocket-based transport for the tunadish web client. JSON-RPC 2.0 protocol.
+
+- `backend.py` — `TunadishBackend` entry point, WebSocket handler, RPC dispatch, `_execute_run`
+- `transport.py` — `TunadishTransport` (send/edit/delete via WebSocket, per-run engine/model metadata in `message.new`/`message.update` notifications)
+- `commands.py` — shared command handlers (help, model, project, memory, branch, review, context, roundtable)
+- `session_store.py` — per-conversation resume token store (`~/.tunapi/tunadish_conv_sessions.json`)
+- `context_store.py` — per-conversation project/branch binding
+- `presenter.py` — progress rendering for WebSocket client
+- `rawq_bridge.py` — code search/map integration
 
 ### Engines (`src/tunapi/runners/`)
 
@@ -112,15 +124,22 @@ Gemini CLI engine supports auto model selection — the model is resolved automa
 
 Entry-point groups in `pyproject.toml`:
 - `tunapi.engine_backends` — claude, codex, gemini (auto model), opencode, pi
-- `tunapi.transport_backends` — telegram, mattermost
+- `tunapi.transport_backends` — telegram, mattermost, slack, tunadish
 
 ### Configuration (`settings.py`, `config.py`)
 
-Pydantic settings from `~/.tunapi/tunapi.toml`. Env prefix: `TUNAPI__`. `MATTERMOST_TOKEN` env var supported for Mattermost token; `TELEGRAM_TOKEN` for Telegram. Per-project `chat_id` maps channels (Mattermost) or chats/topics (Telegram) to engines. File transfer and voice transcription settings are configurable per transport. Agents cannot analyze images — image files are transferred but content analysis is not supported. `[roundtable]` section configures multi-agent roundtable (engines, rounds, max_rounds).
+Pydantic settings from `~/.tunapi/tunapi.toml`. Env prefix: `TUNAPI__`. `MATTERMOST_TOKEN` env var supported for Mattermost token; `TELEGRAM_TOKEN` for Telegram; `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` for Slack. Per-project `chat_id` maps channels to engines. `[roundtable]` section configures multi-agent roundtable (engines, rounds, max_rounds).
 
 ### Engine Models (`src/tunapi/engine_models.py`)
 
-Known model registry per engine. `!models` command for listing, `!model <engine> <model>` for setting. Per-channel model override stored in `chat_prefs.engine_models`.
+Dynamic model discovery per engine with fallback registry. `!models` command for listing, `!model <engine> <model>` for setting. Per-channel model override stored in `chat_prefs.engine_models`.
+
+- **Codex**: reads `~/.codex/models_cache.json` (auto-cached by CLI, `visibility != "hide"` filter)
+- **Gemini**: reads constants from installed `@google/gemini-cli-core` npm package (filters `lite`, `customtools`)
+- **Claude**: static fallback list (OAuth-only, no local model cache)
+- `find_engine_for_model(model)` — reverse lookup: given a model ID, returns the engine it belongs to
+- `shorten_model(model)` — display shortener (`claude-opus-4-6[1m]` → `opus4.6`)
+- Results cached in-process with 1-hour TTL; `invalidate_cache()` to refresh
 
 ## Test Patterns
 

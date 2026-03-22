@@ -34,7 +34,8 @@ class ResumeTokenMixin:
     def format_resume(self, token: ResumeToken) -> str:
         if token.engine != self.engine:
             raise RuntimeError(f"resume token is for engine {token.engine!r}")
-        return f"`{self.engine} resume {token.value}`"
+        short = token.value[:5] if token.value else "?"
+        return short
 
     def is_resume_line(self, line: str) -> bool:
         return bool(self.resume_re.match(line))
@@ -276,7 +277,7 @@ class JsonlSubprocessRunner(BaseRunner):
         stream: Any,
     ) -> AsyncIterator[bytes]:
         async for raw_line in iter_bytes_lines(stream):
-            yield raw_line.rstrip(b"\n")
+            yield raw_line.rstrip(b"\r\n")
 
     def decode_error_events(
         self,

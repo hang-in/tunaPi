@@ -33,6 +33,10 @@ def should_trigger(
     if trigger_mode == "all":
         return True
 
+    # Always trigger on thread replies (bot already participating)
+    if event.thread_ts:
+        return True
+
     # Otherwise, only trigger if the bot is mentioned
     return f"<@{bot_user_id}>" in event.text
 

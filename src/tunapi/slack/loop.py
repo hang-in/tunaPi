@@ -31,7 +31,7 @@ from ..logging import bind_run_context, get_logger
 from ..model import ResumeToken
 from ..runner_bridge import IncomingMessage, handle_message
 from ..runners.run_options import EngineRunOptions, apply_run_options
-from ..transport import MessageRef, RenderedMessage
+from ..transport import MessageRef, RenderedMessage, SendOptions
 from ..utils.paths import reset_run_base_dir, set_run_base_dir
 from .bridge import CANCEL_EMOJI, SlackBridgeConfig
 from .chat_prefs import ChatPrefsStore
@@ -637,7 +637,8 @@ async def _try_dispatch_command(
     project_sessions: ProjectSessionStore | None = None,
 ) -> bool:
     """Handle slash/bang commands. Returns True if a command was dispatched."""
-    cmd, args = parse_command(msg.text)
+    text = strip_mention(msg.text, cfg.bot_user_id)
+    cmd, args = parse_command(text)
     if cmd is None:
         return False
 
@@ -937,8 +938,13 @@ async def _dispatch_message(
     # Auto-bind channel to project by name match (lazy, one-time)
     await _auto_bind_channel_project(msg.channel_id, cfg)
 
+    thread_ts = msg.thread_ts or None
+
     async def send(message: RenderedMessage) -> None:
-        await _send_to_channel(cfg, msg.channel_id, message)
+        options = SendOptions(thread_id=thread_ts) if thread_ts else None
+        await cfg.exec_cfg.transport.send(
+            channel_id=msg.channel_id, message=message, options=options,
+        )
 
     # 1. Command handling
     if await _try_dispatch_command(

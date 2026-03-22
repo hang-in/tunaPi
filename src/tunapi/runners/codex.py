@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -112,10 +114,12 @@ class CodexRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRunn
         self,
         *,
         codex_cmd: str,
+        codex_script: str | None = None,
         extra_args: list[str],
         title: str = "Codex",
     ) -> None:
         self.codex_cmd = codex_cmd
+        self.codex_script = codex_script
         self.extra_args = extra_args
         self.session_title = title
 
@@ -130,7 +134,10 @@ class CodexRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRunn
         state: Any,
     ) -> list[str]:
         run_options = get_run_options()
-        args = [*self.extra_args]
+        args: list[str] = []
+        if self.codex_script:
+            args.append(self.codex_script)
+        args.extend(self.extra_args)
         if run_options is not None:
             if run_options.model:
                 args.extend(["--model", str(run_options.model)])
@@ -299,7 +306,17 @@ class CodexRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRunn
 
 
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
-    codex_cmd = "codex"
+    codex_script: str | None = None
+    if os.name == "nt":
+        npm_root = Path.home() / "AppData" / "Roaming" / "npm"
+        entry = npm_root / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+        if entry.exists():
+            codex_cmd = shutil.which("node") or "node"
+            codex_script = str(entry)
+        else:
+            codex_cmd = shutil.which("codex") or "codex"
+    else:
+        codex_cmd = shutil.which("codex") or "codex"
 
     extra_args_value = config.get("extra_args")
     if extra_args_value is None:
@@ -330,7 +347,7 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         extra_args.extend(["--profile", profile_value])
         title = profile_value
 
-    return CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
+    return CodexRunner(codex_cmd=codex_cmd, codex_script=codex_script, extra_args=extra_args, title=title)
 
 
 BACKEND = EngineBackend(
