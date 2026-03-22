@@ -21,6 +21,22 @@ _DEFAULT_CONTEXT_LINES = 3
 _SEARCH_TIMEOUT = 30   # search/map 타임아웃 (첫 실행 시 모델 로드 포함)
 _INDEX_TIMEOUT = 300    # index build 타임아웃 (대형 프로젝트 대응)
 
+# 기본 제외 패턴 — 빌드 산출물, 의존성 디렉토리
+_DEFAULT_EXCLUDE = [
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "target/debug",
+    "target/release",
+    "dist",
+    ".git",
+    "*.egg-info",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".next",
+]
+
 # 캐싱: 바이너리 경로를 한 번만 탐색
 _rawq_path: str | None = None
 _rawq_checked = False
@@ -94,7 +110,10 @@ async def check_index(project_path: str | Path) -> dict[str, Any] | None:
     return None
 
 
-async def build_index(project_path: str | Path) -> bool:
+async def build_index(
+    project_path: str | Path,
+    exclude: list[str] | None = None,
+) -> bool:
     """프로젝트 인덱스를 생성/갱신한다.
 
     증분 인덱싱이므로 변경된 파일만 재처리된다.
@@ -104,12 +123,14 @@ async def build_index(project_path: str | Path) -> bool:
     """
     if not is_available():
         return False
+
+    cmd = [_get_rawq(), "index", "build", str(project_path)]
+    for pattern in (exclude or _DEFAULT_EXCLUDE):
+        cmd.extend(["-x", pattern])
+
     try:
         with anyio.fail_after(_INDEX_TIMEOUT):
-            result = await anyio.run_process(
-                [_get_rawq(), "index", "build", str(project_path)],
-                check=False,
-            )
+            result = await anyio.run_process(cmd, check=False)
         return result.returncode == 0
     except TimeoutError:
         logger.warning("rawq index build timed out after %ds", _INDEX_TIMEOUT)

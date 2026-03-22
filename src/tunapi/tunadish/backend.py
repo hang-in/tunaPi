@@ -1293,7 +1293,11 @@ class TunadishBackend:
             conv_session = await self._conv_sessions.get(conv_id)
             if conv_session:
                 from ..model import ResumeToken
-                effective_token = ResumeToken(engine=conv_session.engine, value=conv_session.token)
+                # conv_settings.engine이 명시적이고 conv_session.engine과 다르면 토큰 폐기
+                if engine_override and conv_session.engine != engine_override:
+                    effective_token = None
+                else:
+                    effective_token = ResumeToken(engine=conv_session.engine, value=conv_session.token)
             else:
                 effective_token = resolved.resume_token
 
@@ -1325,6 +1329,7 @@ class TunadishBackend:
                             resume_token=None,  # new engine = new session
                             engine_override=correct_engine,
                         )
+                        effective_token = None  # discard old engine's resume token
                     else:
                         logger.warning(
                             "tunadish.model_override_unknown",
@@ -1357,6 +1362,13 @@ class TunadishBackend:
 
             run_timeout = timeout or self._RUN_TIMEOUT
             run_options = EngineRunOptions(model=model_override) if model_override else None
+            def _on_started(evt: Any) -> None:
+                """CLI started event에서 실제 모델을 캡처하여 transport meta 업데이트."""
+                meta = evt.meta or {}
+                model = meta.get("model") or run_model
+                engine = evt.engine if hasattr(evt, "engine") else run_engine
+                transport.set_run_meta(engine, model)
+
             with apply_run_options(run_options), anyio.fail_after(run_timeout):
                 await handle_message(
                     cfg=cfg,
@@ -1369,6 +1381,7 @@ class TunadishBackend:
                     progress_ref=progress_ref,
                     project_sessions=self._project_sessions,
                     on_thread_known=self._make_conv_token_saver(conv_id),
+                    on_started=_on_started,
                 )
         except TimeoutError:
             logger.error("Run timed out after %ds for %s", timeout or self._RUN_TIMEOUT, conv_id)

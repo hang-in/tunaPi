@@ -179,6 +179,8 @@ def translate_claude_event(
                 if value is not None:
                     meta[key] = value
             model = event.model
+            if isinstance(model, str) and model:
+                meta["model"] = model
             token = ResumeToken(engine=ENGINE, value=session_id)
             event_title = str(model) if isinstance(model, str) and model else title
             return [factory.started(token, title=event_title, meta=meta or None)]

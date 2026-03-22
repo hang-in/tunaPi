@@ -369,11 +369,14 @@ class JsonlSubprocessRunner(BaseRunner):
                 f"{self.tag()} emitted session token for engine {event.engine!r}"
             )
         if expected_session is not None and event.resume != expected_session:
-            message = (
-                f"{self.tag()} emitted session id {event.resume.value} "
-                f"but expected {expected_session.value}"
+            self.get_logger().warning(
+                "session.id_changed",
+                engine=self.engine,
+                expected=expected_session.value,
+                actual=event.resume.value,
             )
-            raise RuntimeError(message)
+            # CLI가 기존 세션을 찾지 못해 새 세션을 시작한 경우 — 허용
+            return event.resume, True
         if found_session is None:
             return event.resume, True
         if event.resume != found_session:

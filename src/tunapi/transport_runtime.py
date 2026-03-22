@@ -321,11 +321,13 @@ class TransportRuntime:
         resume_token: ResumeToken | None,
         engine_override: EngineId | None,
     ) -> ResolvedRunner:
-        entry = (
-            self._router.entry_for_engine(engine_override)
-            if resume_token is None
-            else self._router.entry_for(resume_token)
-        )
+        if engine_override is not None:
+            # 명시적 엔진 지정 시 resume_token.engine보다 우선
+            entry = self._router.entry_for_engine(engine_override)
+        elif resume_token is not None:
+            entry = self._router.entry_for(resume_token)
+        else:
+            entry = self._router.entry_for_engine(None)
         return ResolvedRunner(
             engine=entry.engine,
             runner=entry.runner,

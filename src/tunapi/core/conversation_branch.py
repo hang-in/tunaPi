@@ -82,6 +82,7 @@ class ConversationBranchStore:
         parent_branch_id: str | None = None,
         session_id: str | None = None,
         git_branch: str | None = None,
+        checkpoint_id: str | None = None,
     ) -> ConversationBranch:
         now = _now_iso()
         branch = ConversationBranch(
@@ -90,6 +91,7 @@ class ConversationBranchStore:
             parent_branch_id=parent_branch_id,
             session_id=session_id,
             git_branch=git_branch,
+            checkpoint_id=checkpoint_id,
             created_at=now,
             updated_at=now,
         )

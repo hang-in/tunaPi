@@ -31,6 +31,7 @@ class GeminiStreamState:
     pending_actions: dict[str, Action] = field(default_factory=dict)
     last_assistant_text: str = ""
     session_id: str = ""
+    note_seq: int = 0
 
 
 def _tool_kind(name: str) -> ActionKind:
@@ -56,7 +57,8 @@ def translate_gemini_event(
             state.session_id = event.session_id
             model = event.model or "gemini"
             token = ResumeToken(engine=ENGINE, value=event.session_id)
-            return [factory.started(token, title=model)]
+            meta = {"model": model} if model else None
+            return [factory.started(token, title=model, meta=meta)]
 
         case gemini_schema.GeminiMessageEvent(role="assistant"):
             if event.content:

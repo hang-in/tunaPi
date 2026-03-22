@@ -118,8 +118,22 @@ def _file_sink(
     if _log_file_handle is None:
         return event_dict
     try:
+        file_dict = dict(event_dict)
+        # file sink는 항상 JSON — exc_info를 문자열로 변환
+        exc = file_dict.get("exc_info")
+        if exc is True:
+            import sys
+            exc = sys.exc_info()
+        if exc and exc is not True:
+            import traceback as tb_mod
+            if isinstance(exc, BaseException):
+                file_dict["exc_info"] = "".join(
+                    tb_mod.format_exception(type(exc), exc, exc.__traceback__)
+                )
+            elif isinstance(exc, tuple):
+                file_dict["exc_info"] = "".join(tb_mod.format_exception(*exc))
         payload = structlog.processors.JSONRenderer(default=str)(
-            logger, method_name, dict(event_dict)
+            logger, method_name, file_dict
         )
         if isinstance(payload, bytes):
             payload = payload.decode("utf-8", errors="replace")

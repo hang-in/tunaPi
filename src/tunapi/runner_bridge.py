@@ -317,6 +317,7 @@ async def run_runner_with_cancel(
     edits: ProgressEdits,
     running_task: RunningTask | None,
     on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]] | None,
+    on_started: Callable[[StartedEvent], None] | None = None,
 ) -> RunOutcome:
     outcome = RunOutcome()
     async with anyio.create_task_group() as tg:
@@ -328,6 +329,8 @@ async def run_runner_with_cancel(
                     if isinstance(evt, StartedEvent):
                         outcome.resume = evt.resume
                         bind_run_context(resume=evt.resume.value)
+                        if on_started is not None:
+                            on_started(evt)
                         if running_task is not None and running_task.resume is None:
                             running_task.resume = evt.resume
                             try:
@@ -484,6 +487,7 @@ async def handle_message(
     running_tasks: RunningTasks | None = None,
     on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]]
     | None = None,
+    on_started: Callable[[StartedEvent], None] | None = None,
     progress_ref: MessageRef | None = None,
     clock: Callable[[], float] = time.monotonic,
     journal: Journal | None = None,
@@ -504,7 +508,10 @@ async def handle_message(
     _project_key: str | None = context.project if context else None
     _project_cwd = runner.cwd if hasattr(runner, "cwd") else None
     if resume_token is None and project_sessions is not None and _project_key:
-        resume_token = await project_sessions.get(_project_key, cwd=_project_cwd)
+        _candidate = await project_sessions.get(_project_key, cwd=_project_cwd)
+        # 엔진이 다른 토큰은 무시 (model.set으로 엔진 전환 시)
+        if _candidate is None or _candidate.engine == runner.engine:
+            resume_token = _candidate
 
     # -- Wrap on_thread_known to auto-save to project session store --
     _original_on_thread_known = on_thread_known
@@ -606,6 +613,7 @@ async def handle_message(
                 edits=edits,
                 running_task=running_task,
                 on_thread_known=on_thread_known,
+                on_started=on_started,
             )
         except Exception as exc:
             error = exc
