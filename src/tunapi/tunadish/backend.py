@@ -823,7 +823,7 @@ class TunadishBackend:
         })
 
     async def _handle_branch_adopt(self, params: dict[str, Any], transport: TunadishTransport):
-        """branch.adopt → 브랜치 채택, 같은 부모의 다른 브랜치는 archived, 요약 카드 삽입."""
+        """branch.adopt → 브랜치 채택, 요약 카드 삽입. sibling 브랜치는 건드리지 않음."""
         conv_id = params.get("conversation_id")
         branch_id = params.get("branch_id")
         if not conv_id or not branch_id:
@@ -834,44 +834,51 @@ class TunadishBackend:
         if not project:
             return
 
-        # 채택 대상 브랜치 조회
-        target = await self._facade.conv_branches.get(project, branch_id)
-        if not target:
-            return
+        # per-conv 락으로 race condition 방지
+        lock = self._conv_locks.setdefault(conv_id, anyio.Lock())
+        async with lock:
+            # 채택 대상 브랜치 조회
+            target = await self._facade.conv_branches.get(project, branch_id)
+            if not target:
+                return
 
-        # 요약 카드용: 브랜치 대화에서 마지막 assistant 응답 발췌
-        summary_text = await self._build_adopt_summary(target, conv_id)
+            # conv_id 검증: 브랜치의 session_id와 불일치 시 보정
+            effective_conv_id = conv_id
+            if hasattr(target, "session_id") and target.session_id and target.session_id != conv_id:
+                logger.warning(
+                    "branch.adopt.conv_id_mismatch",
+                    requested=conv_id,
+                    actual=target.session_id,
+                    branch_id=branch_id,
+                )
+                effective_conv_id = target.session_id
 
-        # 채택
-        await self._facade.conv_branches.adopt(project, branch_id)
+            # 요약 카드용: 브랜치 대화에서 마지막 assistant 응답 발췌
+            summary_text = await self._build_adopt_summary(target, effective_conv_id)
 
-        # 같은 부모의 다른 active 브랜치를 archived 처리
-        siblings = await self._facade.conv_branches.list(project, status="active")
-        for sib in siblings:
-            if sib.branch_id != branch_id and sib.parent_branch_id == target.parent_branch_id:
-                await self._facade.conv_branches.archive(project, sib.branch_id)
+            # 채택
+            await self._facade.conv_branches.adopt(project, branch_id)
 
-        # 메인으로 복귀
-        await self.context_store.set_active_branch(conv_id, None)
+            # 메인으로 복귀
+            await self.context_store.set_active_branch(effective_conv_id, None)
 
-        # 요약 카드를 메인 타임라인에 삽입
-        if summary_text:
-            import uuid
-            summary_msg_id = str(uuid.uuid4())
-            await transport._send_notification("message.new", {
-                "ref": {"channel_id": conv_id, "message_id": summary_msg_id},
-                "message": {"text": summary_text},
+            # 요약 카드를 메인 타임라인에 삽입
+            if summary_text:
+                import uuid
+                summary_msg_id = str(uuid.uuid4())
+                await transport._send_notification("message.new", {
+                    "ref": {"channel_id": effective_conv_id, "message_id": summary_msg_id},
+                    "message": {"text": summary_text},
+                })
+                await transport._send_notification("message.update", {
+                    "ref": {"channel_id": effective_conv_id, "message_id": summary_msg_id},
+                    "message": {"text": summary_text},
+                })
+
+            await self._broadcast("branch.adopted", {
+                "conversation_id": effective_conv_id,
+                "branch_id": branch_id,
             })
-            # 즉시 finalize (streaming이 아님)
-            await transport._send_notification("message.update", {
-                "ref": {"channel_id": conv_id, "message_id": summary_msg_id},
-                "message": {"text": summary_text},
-            })
-
-        await self._broadcast("branch.adopted", {
-            "conversation_id": conv_id,
-            "branch_id": branch_id,
-        })
 
     async def _build_adopt_summary(self, branch, conv_id: str) -> str:
         """브랜치 대화에서 요약 텍스트를 생성 (마지막 assistant 응답 발췌)."""
@@ -1085,7 +1092,7 @@ class TunadishBackend:
         })
 
     async def _handle_message_adopt(self, params: dict[str, Any], transport: TunadishTransport):
-        """message.adopt → 현재 브랜치를 채택하고 메인으로 복귀."""
+        """message.adopt → 현재 브랜치를 채택하고 메인으로 복귀. sibling 브랜치는 건드리지 않음."""
         conv_id = params.get("conversation_id")
         message_id = params.get("message_id")
         if not conv_id or not message_id:
@@ -1097,20 +1104,13 @@ class TunadishBackend:
         branch_id = meta.active_branch_id if meta else None
 
         if project and branch_id:
-            # 현재 브랜치 채택
-            target = await self._facade.conv_branches.get(project, branch_id)
-            await self._facade.conv_branches.adopt(project, branch_id)
-            # 같은 부모의 다른 active 브랜치를 archived
-            if target:
-                siblings = await self._facade.conv_branches.list(project, status="active")
-                for sib in siblings:
-                    if sib.branch_id != branch_id and sib.parent_branch_id == target.parent_branch_id:
-                        await self._facade.conv_branches.archive(project, sib.branch_id)
-            # 메인으로 복귀
-            await self.context_store.set_active_branch(conv_id, None)
-            await self._broadcast("branch.adopted", {
-                "conversation_id": conv_id, "branch_id": branch_id,
-            })
+            lock = self._conv_locks.setdefault(conv_id, anyio.Lock())
+            async with lock:
+                await self._facade.conv_branches.adopt(project, branch_id)
+                await self.context_store.set_active_branch(conv_id, None)
+                await self._broadcast("branch.adopted", {
+                    "conversation_id": conv_id, "branch_id": branch_id,
+                })
 
         await transport._send_notification("message.action.result", {
             "action": "adopt", "ok": True, "message_id": message_id,
