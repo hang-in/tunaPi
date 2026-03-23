@@ -66,7 +66,7 @@ tunaPi:  ✓ done · 23s · 3 files changed
 
 ### 지원하는 채팅 앱
 
-Mattermost · Slack · Telegram
+Mattermost · Slack · Telegram · [tunaDish](https://github.com/hang-in/tunaDish) (웹 클라이언트)
 
 ### 지원하는 AI 도구
 
@@ -88,7 +88,7 @@ uv tool install -e .
 
 ### 준비물
 
-- Python 3.12+
+- Python 3.14+
 - `uv`
 - `claude` / `codex` / `gemini` / `opencode` / `pi` 중 하나 이상
 

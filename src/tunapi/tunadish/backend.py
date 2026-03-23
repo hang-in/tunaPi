@@ -154,11 +154,15 @@ class TunadishBackend:
 
     async def _broadcast(self, method: str, params: dict[str, Any]) -> None:
         """모든 연결된 클라이언트에 알림 전송 (멀티윈도우 동기화)."""
+        dead: list[TunadishTransport] = []
         for t in list(self._active_transports):
             try:
                 await t._send_notification(method, params)
             except Exception:
-                pass
+                dead.append(t)
+        for t in dead:
+            self._active_transports.discard(t)
+            logger.debug("broadcast: removed dead transport (remaining=%d)", len(self._active_transports))
 
     async def _ws_handler(self, runtime: TransportRuntime, final_notify: bool, websocket):
         transport = TunadishTransport(websocket)
@@ -488,8 +492,9 @@ class TunadishBackend:
         except* Exception as eg:
             logger.debug("ws_handler task group exited with exceptions: %s", eg)
         finally:
-            logger.info("tunadish ws disconnected: %s (remaining=%d)", remote, len(self._active_transports) - 1)
+            transport._closed = True
             self._active_transports.discard(transport)
+            logger.info("tunadish ws disconnected: %s (remaining=%d)", remote, len(self._active_transports))
             # WS disconnect 시 해당 transport의 활성 run cancel
             for conv_id, ref in list(self.run_map.items()):
                 task = self.running_tasks.get(ref)

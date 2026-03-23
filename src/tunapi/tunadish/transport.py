@@ -35,6 +35,7 @@ class TunadishTransport(Transport):
         self._pending_rpc_id: str | int | None = None
         self._run_engine: str | None = None
         self._run_model: str | None = None
+        self._closed: bool = False
 
     def set_run_meta(self, engine: str | None, model: str | None) -> None:
         """Set engine/model for the current run (included in message notifications)."""
@@ -46,6 +47,8 @@ class TunadishTransport(Transport):
         self._pending_rpc_id = rpc_id
 
     async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
+        if self._closed:
+            return
         rpc_id = self._pending_rpc_id
         if rpc_id is not None:
             self._pending_rpc_id = None
@@ -62,18 +65,24 @@ class TunadishTransport(Transport):
         try:
             await self._ws.send(raw)
         except Exception as e:
-            logger.error("ws.push_failed", error=str(e))
+            self._closed = True
+            logger.warning("ws.push_failed (marking closed)", error=str(e))
 
     async def _send_response(self, rpc_id: str | int, result: dict[str, Any]) -> None:
         """JSON-RPC 2.0 성공 response 전송."""
+        if self._closed:
+            return
         raw = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result})
         try:
             await self._ws.send(raw)
         except Exception as e:
-            logger.error("ws.push_failed", error=str(e))
+            self._closed = True
+            logger.warning("ws.push_failed (marking closed)", error=str(e))
 
     async def _send_error(self, rpc_id: str | int, code: int, message: str) -> None:
         """JSON-RPC 2.0 에러 response 전송."""
+        if self._closed:
+            return
         raw = json.dumps({
             "jsonrpc": "2.0",
             "id": rpc_id,
@@ -82,7 +91,8 @@ class TunadishTransport(Transport):
         try:
             await self._ws.send(raw)
         except Exception as e:
-            logger.error("ws.push_failed", error=str(e))
+            self._closed = True
+            logger.warning("ws.push_failed (marking closed)", error=str(e))
 
     def _build_meta(self, message: RenderedMessage) -> dict[str, Any]:
         """Build engine/model/persona metadata for client notifications."""

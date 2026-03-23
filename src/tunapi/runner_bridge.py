@@ -673,7 +673,7 @@ async def handle_message(
             event="interrupted",
             data={"reason": "error", "error": err_body},
             ledger=ledger,
-            model=getattr(runner, "model", None),
+            model=_model or getattr(runner, "model", None),
         )
         return None
 
@@ -714,7 +714,7 @@ async def handle_message(
             event="interrupted",
             data={"reason": "cancel"},
             ledger=ledger,
-            model=getattr(runner, "model", None),
+            model=_model or getattr(runner, "model", None),
         )
         return None
 
@@ -794,6 +794,6 @@ async def handle_message(
             "usage": completed.usage,
         },
         ledger=ledger,
-        model=getattr(runner, "model", None),
+        model=_model or getattr(runner, "model", None),
     )
     return final_answer if run_ok is not False else None
