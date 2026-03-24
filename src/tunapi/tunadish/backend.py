@@ -170,6 +170,15 @@ class TunadishBackend:
         remote = getattr(websocket, "remote_address", None)
         logger.info("tunadish ws connected: %s (active=%d)", remote, len(self._active_transports))
 
+        # 재연결 시 진행 중인 run이 있으면 클라이언트에 통지
+        for conv_id, ref in list(self.run_map.items()):
+            task = self.running_tasks.get(ref)
+            if task is not None and not task.done.is_set():
+                await transport._send_notification("run.status", {
+                    "conversation_id": conv_id, "status": "running",
+                })
+                logger.info("Notified reconnected client of running task for %s", conv_id)
+
         try:
             async with anyio.create_task_group() as ws_tg:
                 try:
@@ -495,12 +504,15 @@ class TunadishBackend:
             transport._closed = True
             self._active_transports.discard(transport)
             logger.info("tunadish ws disconnected: %s (remaining=%d)", remote, len(self._active_transports))
-            # WS disconnect 시 해당 transport의 활성 run cancel
-            for conv_id, ref in list(self.run_map.items()):
-                task = self.running_tasks.get(ref)
-                if task is not None and not task.cancel_requested.is_set():
-                    task.cancel_requested.set()
-                    logger.info("Cancelled orphan run for %s on ws disconnect", conv_id)
+            # WS disconnect 시: 마지막 transport가 떠날 때만 run cancel
+            if not self._active_transports:
+                for conv_id, ref in list(self.run_map.items()):
+                    task = self.running_tasks.get(ref)
+                    if task is not None and not task.cancel_requested.is_set():
+                        task.cancel_requested.set()
+                        logger.info("Cancelled orphan run for %s (no active transports)", conv_id)
+            else:
+                logger.info("ws disconnected but %d transports remain, runs continue", len(self._active_transports))
 
     # --- Structured JSON RPC handlers (context panel) ---
 
