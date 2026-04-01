@@ -70,12 +70,28 @@ tunaPi:  ✓ done · 23s · 3 files changed
 
 ### 테스트 현황
 
-- 테스트: 3,483개
+- 테스트: 3,538개
 - 커버리지: 81%
 
 ### 지원하는 채팅 앱
 
 Discord · Mattermost · Slack · Telegram · [tunaDish](https://github.com/hang-in/tunaDish) (웹 클라이언트)
+
+### 트랜스포트별 기능 비교
+
+| 기능 | Discord | Mattermost | Slack | Telegram | tunaDish |
+|------|:-------:|:----------:|:-----:|:--------:|:-------:|
+| 멀티 에이전트 토론 (`!rt`) | O | O | O | O | O |
+| 대화 브랜칭 | O | O | O | — | O |
+| 세션 이어가기 | O | O | O | O | O |
+| 실시간 진행 표시 | O | O | O | O | O |
+| 엔진/모델 전환 | O | O | O | O | O |
+| 파일 전송 | O | O | O | O | — |
+| 음성 전사 | O | O | O | O | — |
+| 페르소나 | — | O | O | O | O |
+| 코드 인덱싱 (rawq) | — | — | — | — | O |
+| 크로스 세션 컨텍스트 | — | — | — | — | O |
+| 슬래시 커맨드 | O | — | — | O | — |
 
 ### 지원하는 AI 도구
 

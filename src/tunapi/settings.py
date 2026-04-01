@@ -344,6 +344,10 @@ class TunapiSettings(BaseSettings):
             if self.transports.slack is None:
                 raise ConfigError(f"Missing [transports.slack] in {config_path}.")
             return self.transports.slack.model_dump()
+        if transport_id == "discord":
+            if self.transports.discord is None:
+                raise ConfigError(f"Missing [transports.discord] in {config_path}.")
+            return self.transports.discord.model_dump()
         extra = self.transports.model_extra or {}
         raw = extra.get(transport_id)
         if raw is None:

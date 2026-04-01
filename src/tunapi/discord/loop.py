@@ -13,6 +13,13 @@ import anyio
 import discord
 
 from tunapi.config_watch import ConfigReload, watch_config as watch_config_changes
+from tunapi.core.commands import parse_command
+from tunapi.core.roundtable import (
+    RoundtableSession,
+    RoundtableStore,
+    run_followup_round,
+    run_roundtable,
+)
 from tunapi.logging import get_logger
 from tunapi.markdown import MarkdownParts
 from tunapi.model import ResumeToken
@@ -132,6 +139,171 @@ async def _send_plain_reply(
         channel_id=channel_id,
         message=RenderedMessage(text=rendered_text, extra={"show_cancel": False}),
         options=SendOptions(reply_to=reply_ref, notify=False, thread_id=thread_id),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Roundtable helpers
+# ---------------------------------------------------------------------------
+
+
+async def _start_roundtable(
+    channel_id: int,
+    topic: str,
+    rounds: int,
+    engines: list[str],
+    *,
+    cfg: DiscordBridgeConfig,
+    running_tasks: RunningTasks,
+    roundtables: RoundtableStore,
+    run_context: RunContext | None,
+) -> None:
+    """Create a roundtable thread and run all rounds."""
+    engines_display = ", ".join(f"`{e}`" for e in engines)
+    rounds_display = f"{rounds} round{'s' if rounds > 1 else ''}"
+    header = (
+        f"**Roundtable**\n\n"
+        f"**Topic:** {topic}\n"
+        f"**Engines:** {engines_display} | **Rounds:** {rounds_display}\n\n"
+        f"---"
+    )
+    ref = await cfg.exec_cfg.transport.send(
+        channel_id=channel_id,
+        message=RenderedMessage(text=header),
+    )
+    if ref is None:
+        logger.error("roundtable.header_send_failed", channel_id=channel_id)
+        return
+
+    thread_id = str(ref.message_id)
+    session = RoundtableSession(
+        thread_id=thread_id,
+        channel_id=channel_id,
+        topic=topic,
+        engines=engines,
+        total_rounds=rounds,
+    )
+    roundtables.put(session)
+
+    logger.info(
+        "roundtable.start",
+        thread_id=thread_id,
+        topic=topic,
+        engines=engines,
+        rounds=rounds,
+    )
+
+    try:
+        await run_roundtable(
+            session,
+            cfg=cfg,
+            chat_prefs=None,
+            running_tasks=running_tasks,
+            ambient_context=run_context,
+        )
+    finally:
+        roundtables.complete(thread_id)
+
+
+async def _archive_roundtable(
+    session: RoundtableSession,
+    cfg: DiscordBridgeConfig,
+) -> None:
+    """Archive roundtable transcript, then notify."""
+    send_opts = SendOptions(thread_id=session.thread_id)
+    await cfg.exec_cfg.transport.send(
+        channel_id=session.channel_id,
+        message=RenderedMessage(text="Roundtable closed."),
+        options=send_opts,
+    )
+
+
+async def _dispatch_rt_command(
+    args: str,
+    *,
+    channel_id: int,
+    thread_id: int | None,
+    cfg: DiscordBridgeConfig,
+    running_tasks: RunningTasks,
+    roundtables: RoundtableStore,
+    run_context: RunContext | None,
+    send_opts: SendOptions,
+) -> None:
+    """Handle the !rt command, including follow-up and close."""
+    from tunapi.slack.commands import handle_rt
+
+    continue_rt = None
+    close_rt = None
+
+    rt_thread_id = str(thread_id) if thread_id else None
+
+    if rt_thread_id and roundtables:
+        completed_session = roundtables.get_completed(rt_thread_id)
+        if completed_session:
+
+            async def continue_rt(
+                topic: str,
+                engines_filter: list[str] | None,
+                *,
+                _s: RoundtableSession = completed_session,
+                _ctx: RunContext | None = run_context,
+            ) -> None:
+                await run_followup_round(
+                    _s,
+                    topic,
+                    engines_filter,
+                    cfg=cfg,
+                    running_tasks=running_tasks,
+                    ambient_context=_ctx,
+                )
+
+            async def close_rt(
+                *,
+                _tid: str = rt_thread_id,
+                _rt: RoundtableStore = roundtables,
+                _s: RoundtableSession = completed_session,
+            ) -> None:
+                await _archive_roundtable(_s, cfg)
+                _rt.remove(_tid)
+
+        active_session = roundtables.get(rt_thread_id)
+        if active_session and not active_session.completed and close_rt is None:
+
+            async def close_rt(
+                *,
+                _tid: str = rt_thread_id,
+                _rt: RoundtableStore = roundtables,
+            ) -> None:
+                session = _rt.get(_tid)
+                if session:
+                    session.cancel_event.set()
+                    await _archive_roundtable(session, cfg)
+                _rt.remove(_tid)
+
+    async def send_fn(msg: RenderedMessage) -> None:
+        await cfg.exec_cfg.transport.send(
+            channel_id=channel_id,
+            message=msg,
+            options=send_opts,
+        )
+
+    await handle_rt(
+        args,
+        runtime=cfg.runtime,
+        send=send_fn,
+        start_roundtable=lambda topic, rounds, engines: _start_roundtable(
+            channel_id,
+            topic,
+            rounds,
+            engines,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            roundtables=roundtables,
+            run_context=run_context,
+        ),
+        continue_roundtable=continue_rt,
+        close_roundtable=close_rt,
+        thread_id=rt_thread_id,
     )
 
 
@@ -296,6 +468,9 @@ async def run_main_loop(
     state_store = DiscordStateStore(cfg.runtime.config_path)
     prefs_store = DiscordPrefsStore(cfg.runtime.config_path)
     await prefs_store.ensure_loaded()
+    roundtable_store = RoundtableStore(
+        cfg.runtime.config_path / "discord_roundtables.json"
+    )
     _ = cast(DiscordTransport, cfg.exec_cfg.transport)  # Used for type checking only
     scheduler: ThreadScheduler | None = None
     resume_resolver: ResumeResolver | None = None
@@ -390,6 +565,19 @@ async def run_main_loop(
             count=len(engine_commands),
             commands=sorted(engine_commands),
         )
+
+    # Register roundtable slash command (/rt)
+    from .handlers import register_roundtable_command
+
+    register_roundtable_command(
+        cfg.bot,
+        cfg=cfg,
+        running_tasks=running_tasks,
+        roundtable_store=roundtable_store,
+        state_store=state_store,
+        allowed_user_ids=cfg.allowed_user_ids,
+    )
+    logger.info("roundtable.command_registered")
 
     # Discover and register plugin commands
     command_ids = discover_command_ids(cfg.runtime.allowlist)
@@ -861,6 +1049,22 @@ async def run_main_loop(
             branch_override, prompt = parse_branch_prefix(prompt)
             if branch_override:
                 logger.info("branch.override", branch=branch_override)
+
+        # Check for !rt command before processing as a normal message
+        cmd, cmd_args = parse_command(prompt)
+        if cmd == "rt":
+            rt_send_opts = SendOptions(thread_id=thread_id)
+            await _dispatch_rt_command(
+                cmd_args,
+                channel_id=channel_id,
+                thread_id=thread_id,
+                cfg=cfg,
+                running_tasks=running_tasks,
+                roundtables=roundtable_store,
+                run_context=run_context,
+                send_opts=rt_send_opts,
+            )
+            return
 
         attachments_for_files = list(message.attachments)
         audio_attachments = [

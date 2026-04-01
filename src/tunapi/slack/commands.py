@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from ..config import HOME_CONFIG_PATH, ConfigError, read_config, write_config
 from ..context import RunContext
 from ..core.commands import parse_command  # noqa: F401 — re-exported
-from ..core.roundtable import parse_followup_args, parse_rt_args
+from ..core.roundtable import handle_rt as _core_handle_rt
 from ..engine_models import get_models
 from ..logging import get_logger
 from ..transport import RenderedMessage
@@ -479,92 +479,16 @@ async def handle_rt(
     close_roundtable: Any | None = None,
     thread_id: str | None = None,
 ) -> None:
-    """Handle ``!rt`` commands.
-
-    - ``!rt "topic" [--rounds N]`` — start a new roundtable
-    - ``!rt follow [engines] "topic"`` — follow-up in completed roundtable thread
-    - ``!rt close`` — close the current roundtable thread
-    """
-    rt_config = runtime.roundtable
-    rt_engines = list(rt_config.engines) or list(runtime.available_engine_ids())
-
-    if not rt_engines:
-        await send(RenderedMessage(text="No engines available for roundtable."))
-        return
-
-    stripped = args.strip()
-
-    # Check for "close" subcommand
-    if stripped.lower().startswith("close"):
-        if not close_roundtable:
-            await send(
-                RenderedMessage(
-                    text="`!rt close` can only be used inside a roundtable thread."
-                )
-            )
-            return
-        await close_roundtable()
-        return
-
-    # Check for "follow" subcommand
-    if stripped.lower().startswith("follow"):
-        follow_args = stripped[len("follow") :].strip()
-        if not continue_roundtable:
-            await send(
-                RenderedMessage(
-                    text="`!rt follow` can only be used inside a completed roundtable thread."
-                )
-            )
-            return
-
-        topic, engines_filter, error = parse_followup_args(follow_args, rt_engines)
-        if error:
-            await send(RenderedMessage(text=f"{error}"))
-            return
-        if not topic:
-            engines_display = ", ".join(f"`{e}`" for e in rt_engines)
-            await send(
-                RenderedMessage(
-                    text=(
-                        "*Roundtable Follow-up*\n\n"
-                        "Usage:\n"
-                        '- `!rt follow "question"` — all engines\n'
-                        '- `!rt follow claude "question"` — specific engine\n'
-                        '- `!rt follow gemini,claude "question"` — multiple engines\n\n'
-                        f"Engines: {engines_display}"
-                    )
-                )
-            )
-            return
-
-        await continue_roundtable(topic, engines_filter)
-        return
-
-    # Default: start a new roundtable
-    topic, rounds, error = parse_rt_args(args, rt_config)
-
-    if error:
-        await send(RenderedMessage(text=f"{error}"))
-        return
-    if not topic:
-        engines_display = ", ".join(f"`{e}`" for e in rt_engines)
-        await send(
-            RenderedMessage(
-                text=(
-                    "*Roundtable* — collect opinions from multiple agents\n\n"
-                    "Usage:\n"
-                    '- `!rt "topic"` — new roundtable\n'
-                    '- `!rt "topic" --rounds 2` — multi-round\n'
-                    '- `!rt follow [engines] "question"` — follow-up\n'
-                    "- `!rt close` — close roundtable\n\n"
-                    f"Engines: {engines_display}\n"
-                    f"Default rounds: {rt_config.rounds} (max {rt_config.max_rounds})"
-                )
-            )
-        )
-        return
-
-    await start_roundtable(topic, rounds, rt_engines)
+    """Handle ``!rt`` commands — delegates to core implementation."""
+    await _core_handle_rt(
+        args,
+        runtime=runtime,
+        send=send,
+        start_roundtable=start_roundtable,
+        continue_roundtable=continue_roundtable,
+        close_roundtable=close_roundtable,
+        thread_id=thread_id,
+    )
 
 
 async def handle_memory(

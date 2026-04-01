@@ -123,6 +123,7 @@ def _make_loop_state() -> TelegramLoopState:
         forward_coalesce_s=0.0,
         media_group_debounce_s=0.0,
         transport_id=None,
+        roundtable_store=None,
         seen_update_ids=set(),
         seen_update_order=deque(),
         seen_message_keys=set(),

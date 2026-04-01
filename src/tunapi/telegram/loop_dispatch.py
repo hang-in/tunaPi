@@ -21,7 +21,10 @@ from ..progress import ProgressTracker
 from ..transport import MessageRef, SendOptions
 from ..transport_runtime import ResolvedMessage
 from .bridge import CANCEL_CALLBACK_DATA, TelegramBridgeConfig
-from .builtin_commands import dispatch_builtin_command as _dispatch_builtin_command
+from .builtin_commands import (
+    dispatch_builtin_command as _dispatch_builtin_command,
+    dispatch_rt_command as _dispatch_rt_command,
+)
 from .commands.cancel import handle_callback_cancel, handle_cancel
 from .commands.file_transfer import FILE_PUT_USAGE
 from .commands.handlers import (
@@ -614,6 +617,13 @@ async def route_message(
                 )
             )
             return
+
+    if command_id == "rt":
+        if state.roundtable_store is None:
+            tg.start_soon(partial(reply, text="Roundtable store not initialised."))
+        else:
+            tg.start_soon(_dispatch_rt_command, ctx, msg, args_text)
+        return
 
     if command_id is not None and _dispatch_builtin_command(
         ctx=TelegramCommandContext(

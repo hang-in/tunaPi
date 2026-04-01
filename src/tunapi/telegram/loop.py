@@ -30,6 +30,7 @@ from .commands.handlers import (
     set_command_menu,
 )
 from .client import poll_incoming
+from ..core.roundtable import RoundtableStore
 from .chat_prefs import ChatPrefsStore, resolve_prefs_path
 from .chat_sessions import ChatSessionStore, resolve_sessions_path
 from .forward_coalescing import (
@@ -256,6 +257,7 @@ async def run_main_loop(
         forward_coalesce_s=max(0.0, float(cfg.forward_coalesce_s)),
         media_group_debounce_s=max(0.0, float(cfg.media_group_debounce_s)),
         transport_id=transport_id,
+        roundtable_store=None,
         seen_update_ids=set(),
         seen_update_order=deque(),
         seen_message_keys=set(),
@@ -287,6 +289,9 @@ async def run_main_loop(
                 "chat_prefs.enabled",
                 state_path=str(resolve_prefs_path(config_path)),
             )
+            rt_path = config_path.parent / "telegram_roundtables.json"
+            state.roundtable_store = RoundtableStore(rt_path)
+            logger.info("roundtable_store.enabled", state_path=str(rt_path))
         if cfg.session_mode == "chat":
             if config_path is None:
                 raise ConfigError(

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..context import RunContext
+from ..core.roundtable import RoundtableStore
 from ..model import EngineId
 from ..runners.run_options import EngineRunOptions
 from ..transport import MessageRef
@@ -101,6 +102,7 @@ class TelegramLoopState:
     forward_coalesce_s: float
     media_group_debounce_s: float
     transport_id: str | None
+    roundtable_store: RoundtableStore | None
     seen_update_ids: set[int]
     seen_update_order: deque[int]
     seen_message_keys: set[MessageKey]

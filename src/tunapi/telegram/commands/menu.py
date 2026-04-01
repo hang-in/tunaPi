@@ -77,6 +77,7 @@ def build_bot_commands(
         ("model", "set model override"),
         ("reasoning", "set reasoning override"),
         ("trigger", "set trigger mode"),
+        ("rt", "start a roundtable discussion"),
     ]:
         if cmd in seen:
             continue
