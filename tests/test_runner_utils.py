@@ -194,7 +194,7 @@ async def test_base_runner_run_impl_not_implemented() -> None:
 def test_resume_token_format_and_extract() -> None:
     runner = _DummyRunner()
     token = ResumeToken(engine=runner.engine, value="abc")
-    assert runner.format_resume(token) == "`dummy resume abc`"
+    assert runner.format_resume(token) == "abc"[:5]
     assert runner.is_resume_line("`dummy resume abc`") is True
     text = "`dummy resume first`\n`dummy resume second`"
     assert runner.extract_resume(text) == ResumeToken(
@@ -204,6 +204,10 @@ def test_resume_token_format_and_extract() -> None:
 
     with pytest.raises(RuntimeError):
         runner.format_resume(ResumeToken(engine="other", value="bad"))
+
+    # format_resume returns short 5-char prefix
+    long_token = ResumeToken(engine=runner.engine, value="abcdefghij")
+    assert runner.format_resume(long_token) == "abcde"
 
 
 def test_session_lock_reuse() -> None:
@@ -298,12 +302,14 @@ def test_jsonl_helpers() -> None:
         runner.handle_started_event(mismatch, expected_session=None, found_session=None)
 
     other_resume = ResumeToken(engine=runner.engine, value="other")
-    with pytest.raises(RuntimeError):
-        runner.handle_started_event(
-            StartedEvent(engine=runner.engine, resume=other_resume, title="t"),
-            expected_session=resume,
-            found_session=None,
-        )
+    # expected_session mismatch now warns instead of raising — returns new session
+    found, emit = runner.handle_started_event(
+        StartedEvent(engine=runner.engine, resume=other_resume, title="t"),
+        expected_session=resume,
+        found_session=None,
+    )
+    assert found == other_resume
+    assert emit is True
 
     with pytest.raises(RuntimeError):
         runner.handle_started_event(

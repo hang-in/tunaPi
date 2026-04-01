@@ -330,8 +330,8 @@ async def test_bridge_flow_sends_progress_edits_and_final_resume() -> None:
     assert "starting" in transport.send_calls[0]["message"].text
     assert "codex" in transport.send_calls[0]["message"].text
     assert len(transport.edit_calls) >= 1
-    assert session_id in transport.send_calls[-1]["message"].text
-    assert "codex resume" in transport.send_calls[-1]["message"].text.lower()
+    # format_resume now returns token.value[:5]
+    assert session_id[:5] in transport.send_calls[-1]["message"].text
     assert transport.send_calls[-1]["options"].replace == transport.send_calls[0]["ref"]
 
 
@@ -356,14 +356,14 @@ async def test_final_message_includes_ctx_line() -> None:
         runner=runner,
         incoming=IncomingMessage(channel_id=123, message_id=42, text="do it"),
         resume_token=None,
-        context_line="`ctx: tunapi @feat/api`",
+        context_line="`tunapi @feat/api`",
         clock=clock,
     )
 
     assert transport.send_calls
     final_text = transport.send_calls[-1]["message"].text
-    assert "`ctx: tunapi @feat/api`" in final_text
-    assert "codex resume" in final_text.lower()
+    assert "tunapi @feat/api" in final_text
+    assert session_id[:5] in final_text
 
 
 @pytest.mark.anyio
@@ -410,7 +410,7 @@ async def test_handle_message_cancelled_renders_cancelled_state() -> None:
     assert len(transport.edit_calls) >= 1
     last_edit = transport.edit_calls[-1]["message"].text
     assert "cancelled" in last_edit.lower()
-    assert session_id in last_edit
+    assert session_id[:5] in last_edit
 
 
 @pytest.mark.anyio
@@ -438,5 +438,4 @@ async def test_handle_message_error_preserves_resume_token() -> None:
     assert transport.edit_calls
     last_edit = transport.edit_calls[-1]["message"].text
     assert "error" in last_edit.lower()
-    assert session_id in last_edit
-    assert "codex resume" in last_edit.lower()
+    assert session_id[:5] in last_edit

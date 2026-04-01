@@ -127,6 +127,7 @@ class ConversationContextStore:
                 "branch": m.branch,
                 "label": m.label,
                 "created_at": m.created_at,
+                "settings": m.settings.to_dict() if m.settings else {},
             }
             for conv_id, m in self._cache.items()
             if (project is None or m.project == project)

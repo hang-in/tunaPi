@@ -25,7 +25,7 @@ from tests.factories import (
 
 
 def _format_resume(token) -> str:
-    return f"`codex resume {token.value}`"
+    return token.value[:5]
 
 
 SAMPLE_EVENTS: list[TunapiEvent] = [
@@ -162,10 +162,10 @@ def test_progress_renderer_renders_progress_and_final() -> None:
     state = tracker.snapshot(resume_formatter=_format_resume)
     formatter = MarkdownFormatter(max_actions=5)
     progress_parts = formatter.render_progress_parts(state, elapsed_s=3.0)
+    assert progress_parts.body is None
     progress = assemble_markdown_parts(progress_parts)
     assert progress.startswith("working · codex · 3s · step 2")
-    assert "✓ `bash -lc ls`" in progress
-    assert "`codex resume 0199a213-81c0-7800-8aa1-bbab2a035a53`" in progress
+    assert "0199a" in progress
 
     final_parts = formatter.render_final_parts(
         state, elapsed_s=3.0, status="done", answer="answer"
@@ -175,9 +175,7 @@ def test_progress_renderer_renders_progress_and_final() -> None:
     assert "✓ `bash -lc ls`" not in final
     assert "Checking repository root for README" not in final
     assert "answer" in final
-    assert final.rstrip().endswith(
-        "`codex resume 0199a213-81c0-7800-8aa1-bbab2a035a53`"
-    )
+    assert final.rstrip().endswith("`0199a`")
 
 
 def test_progress_renderer_footer_includes_ctx_before_resume() -> None:
@@ -187,14 +185,12 @@ def test_progress_renderer_footer_includes_ctx_before_resume() -> None:
 
     state = tracker.snapshot(
         resume_formatter=_format_resume,
-        context_line="`ctx: z80 @feat/name`",
+        context_line="`z80 @feat/name`",
     )
     formatter = MarkdownFormatter(max_actions=5)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    assert parts.footer == (
-        "`ctx: z80 @feat/name`"
-        f"{HARD_BREAK}`codex resume 0199a213-81c0-7800-8aa1-bbab2a035a53`"
-    )
+    assert parts.body is None
+    assert parts.footer == "`z80 @feat/name 0199a`"
 
 
 def test_progress_renderer_clamps_actions_and_ignores_unknown() -> None:
@@ -216,10 +212,7 @@ def test_progress_renderer_clamps_actions_and_ignores_unknown() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=3, command_width=20)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    lines = parts.body.split(HARD_BREAK) if parts.body else []
-    assert len(lines) == 3
-    assert "echo 3" in lines[0]
-    assert "echo 5" in lines[-1]
+    assert parts.body is None
     mystery = SimpleNamespace(type="mystery")
     assert tracker.note_event(cast(TunapiEvent, mystery)) is False
 
@@ -239,11 +232,8 @@ def test_progress_renderer_renders_commands_in_markdown() -> None:
 
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5, command_width=None)
-    md = assemble_markdown_parts(formatter.render_progress_parts(state, elapsed_s=0.0))
-    text, _ = render_markdown(md)
-    assert "✓ echo 30" in text
-    assert "✓ echo 31" in text
-    assert "✓ echo 32" in text
+    parts = formatter.render_progress_parts(state, elapsed_s=0.0)
+    assert parts.body is None
 
 
 def test_progress_renderer_handles_duplicate_action_ids() -> None:
@@ -273,10 +263,7 @@ def test_progress_renderer_handles_duplicate_action_ids() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    lines = parts.body.split(HARD_BREAK) if parts.body else []
-    assert len(lines) == 1
-    assert lines[0].startswith("✓ ")
-    assert "echo second" in lines[0]
+    assert parts.body is None
 
 
 def test_progress_renderer_collapses_action_updates() -> None:
@@ -300,10 +287,7 @@ def test_progress_renderer_collapses_action_updates() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    lines = parts.body.split(HARD_BREAK) if parts.body else []
-    assert len(lines) == 1
-    assert lines[0].startswith("✓ ")
-    assert "echo two" in lines[0]
+    assert parts.body is None
 
 
 def test_progress_renderer_deterministic_output() -> None:
