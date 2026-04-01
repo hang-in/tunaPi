@@ -15,7 +15,7 @@ Discord · Mattermost · Slack · Telegram · Web
 
 에이전트에 붙여넣기:
 
-> tunaPi(https://github.com/hang-in/tunaPi)를 클론하고 설치해 줘. 내가 쓸 채팅앱과 봇 토큰을 물어보고 ~/.tunapi/tunapi.toml을 만들어. tunapi doctor로 검증하고 문제 있으면 고쳐서 실행까지 해 줘.
+> tunaPi(https://github.com/hang-in/tunaPi)를 클론하고 설치해 줘. 내가 쓸 채팅앱을 물어보고 ~/.tunapi/tunapi.toml을 만들어. 봇 토큰 등 시크릿은 직접 입력하지 말고 파일에서 어디를 채우면 되는지 안내해 줘. tunapi doctor로 검증하고 문제 있으면 고쳐서 실행까지 해 줘.
 
 [**한국어**](#한국어) | [English](docs/README_EN.md) | [日本語](docs/README_JP.md)
 
