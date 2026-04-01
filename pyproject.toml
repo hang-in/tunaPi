@@ -2,7 +2,7 @@
 name = "tunapi"
 authors = [{name = "banteg"}]
 version = "0.22.3"
-description = "Mattermost and Telegram bridge for Codex, Claude Code, and other agent CLIs."
+description = "Mattermost, Slack, Telegram, Discord bridge for Codex, Claude Code, and other agent CLIs."
 readme = "readme.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
@@ -24,12 +24,22 @@ dependencies = [
   "watchfiles>=0.21.0",
   "websockets>=15.0",
 ]
+
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3 :: Only",
   "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+discord = [
+  "py-cord>=2.6.0",
+]
+discord-voice = [
+  "py-cord>=2.6.0",
+  "pywhispercpp>=1.4.0",
 ]
 
 [project.urls]
@@ -52,6 +62,7 @@ telegram = "tunapi.telegram.backend:BACKEND"
 mattermost = "tunapi.mattermost.backend:BACKEND"
 slack = "tunapi.slack.backend:BACKEND"
 tunadish = "tunapi.tunadish.backend:BACKEND"
+discord = "tunapi.discord.backend:BACKEND"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]

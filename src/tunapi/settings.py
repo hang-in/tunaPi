@@ -232,10 +232,24 @@ class MattermostTransportSettings(BaseModel):
         return data
 
 
+class DiscordTransportSettings(BaseModel):
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    bot_token: NonEmptyStr
+    guild_id: int | None = None
+    allowed_user_ids: list[StrictInt] = Field(default_factory=list)
+    message_overflow: Literal["trim", "split"] = "split"
+    session_mode: Literal["stateless", "chat"] = "stateless"
+    show_resume_line: bool = True
+    trigger_mode_default: Literal["all", "mentions"] = "all"
+    media_group_debounce_s: float = 0.75
+
+
 class TransportsSettings(BaseModel):
     telegram: TelegramTransportSettings | None = None
     mattermost: MattermostTransportSettings | None = None
     slack: SlackTransportSettings | None = None
+    discord: DiscordTransportSettings | None = None
 
     model_config = ConfigDict(extra="allow")
 

@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/hang-in/tunaPi/release.yml?label=tests)](https://github.com/hang-in/tunaPi/actions)
 [![GitHub release](https://img.shields.io/github/v/release/hang-in/tunaPi?include_prereleases)](https://github.com/hang-in/tunaPi/releases)
 
-채팅앱에서 AI 코딩 도구를 바로 쓰게 해주는 브릿지
+채팅앱에서 AI 코딩 에이전트를 바로 쓰게 해주는 브릿지
 
 [**한국어**](#한국어) | [English](docs/README_EN.md) | [日本語](docs/README_JP.md)
 
@@ -64,12 +64,12 @@ tunaPi:  ✓ done · 23s · 3 files changed
 
 ### 테스트 현황
 
-- 테스트: 1,075개
+- 테스트: 1,237개
 - 커버리지: 61%
 
 ### 지원하는 채팅 앱
 
-Mattermost · Slack · Telegram · [tunaDish](https://github.com/hang-in/tunaDish) (웹 클라이언트)
+Discord · Mattermost · Slack · Telegram · [tunaDish](https://github.com/hang-in/tunaDish) (웹 클라이언트)
 
 ### 지원하는 AI 도구
 
@@ -79,6 +79,13 @@ Claude Code · Codex · Gemini CLI · OpenCode · Pi
 
 ```sh
 uv tool install -U tunapi
+```
+
+Discord를 쓸 경우:
+
+```sh
+uv tool install -U "tunapi[discord]"         # Discord 기본
+uv tool install -U "tunapi[discord-voice]"   # + Whisper 음성 전사
 ```
 
 소스에서:
@@ -99,8 +106,11 @@ uv tool install -e .
 
 `~/.tunapi/tunapi.toml`
 
+<details>
+<summary><b>Slack</b></summary>
+
 ```toml
-transport = "slack"          # mattermost, telegram도 가능
+transport = "slack"
 default_engine = "claude"
 
 [transports.slack]
@@ -108,9 +118,12 @@ bot_token = "xoxb-..."
 app_token = "xapp-..."
 channel_id = "C0123456789"
 ```
+</details>
+
+<details>
+<summary><b>Mattermost</b></summary>
 
 ```toml
-# Mattermost
 transport = "mattermost"
 default_engine = "claude"
 
@@ -119,9 +132,12 @@ url = "https://mm.example.com"
 token = "YOUR_TOKEN"
 channel_id = "YOUR_CHANNEL_ID"
 ```
+</details>
+
+<details>
+<summary><b>Telegram</b></summary>
 
 ```toml
-# Telegram
 transport = "telegram"
 default_engine = "claude"
 
@@ -129,6 +145,22 @@ default_engine = "claude"
 bot_token = "YOUR_BOT_TOKEN"
 chat_id = 123456789
 ```
+</details>
+
+<details>
+<summary><b>Discord</b></summary>
+
+```toml
+transport = "discord"
+default_engine = "claude"
+
+[transports.discord]
+bot_token = "YOUR_BOT_TOKEN"
+guild_id = 123456789            # 선택 — 특정 서버 제한
+session_mode = "chat"           # "stateless" | "chat"
+trigger_mode_default = "all"    # "all" | "mentions"
+```
+</details>
 
 ### 실행
 
@@ -141,6 +173,20 @@ tunapi
 ```sh
 tunapi doctor
 ```
+
+### 에이전트로 설치하기
+
+아래 프롬프트를 Claude Code, Codex, Gemini CLI 등에 붙여넣으면 에이전트가 직접 설치·설정해 줍니다.
+
+> tunaPi를 설치하고 설정해 줘.
+>
+> 1. `uv tool install -U tunapi` 실행 (Discord면 `"tunapi[discord]"`)
+> 2. `~/.tunapi/tunapi.toml` 파일이 없으면 생성
+> 3. 내가 쓸 채팅앱(`slack` / `mattermost` / `telegram` / `discord`)을 물어보고 해당 transport 설정 블록을 작성
+> 4. 봇 토큰, 채널 ID 등 필요한 값을 물어보고 채워 넣기
+> 5. 기본 AI 엔진(`claude` / `codex` / `gemini` / `opencode` / `pi`)을 물어보고 `default_engine` 설정
+> 6. `tunapi doctor`로 설정 검증
+> 7. 문제가 있으면 수정, 없으면 `tunapi`로 실행
 
 ### 자주 쓰는 커맨드
 

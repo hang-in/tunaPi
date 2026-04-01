@@ -157,29 +157,29 @@ def test_transport_config_telegram_and_extra(tmp_path: Path) -> None:
             "transport": "telegram",
             "transports": {
                 "telegram": {"bot_token": "token", "chat_id": 123},
-                "discord": None,
+                "custom_chat": None,
             },
         }
     )
-    assert settings.transport_config("discord", config_path=config_path) == {}
+    assert settings.transport_config("custom_chat", config_path=config_path) == {}
 
     settings = TunapiSettings.model_validate(
         {
             "transport": "telegram",
             "transports": {
                 "telegram": {"bot_token": "token", "chat_id": 123},
-                "discord": "nope",
+                "custom_chat": "nope",
             },
         }
     )
-    with pytest.raises(ConfigError, match=r"transports\.discord"):
-        settings.transport_config("discord", config_path=config_path)
+    with pytest.raises(ConfigError, match=r"transports\.custom_chat"):
+        settings.transport_config("custom_chat", config_path=config_path)
 
 
 def test_transport_config_telegram_missing(tmp_path: Path) -> None:
     config_path = tmp_path / "tunapi.toml"
     settings = TunapiSettings.model_validate(
-        {"transport": "discord", "transports": {"discord": {"token": "abc"}}}
+        {"transport": "custom_chat", "transports": {"custom_chat": {"token": "abc"}}}
     )
     with pytest.raises(ConfigError, match=r"Missing \[transports\.telegram\]"):
         settings.transport_config("telegram", config_path=config_path)
@@ -199,7 +199,7 @@ def test_require_telegram_rejects_non_telegram_transport(tmp_path: Path) -> None
     config_path = tmp_path / "tunapi.toml"
     settings = TunapiSettings.model_validate(
         {
-            "transport": "discord",
+            "transport": "custom_chat",
             "transports": {"telegram": {"bot_token": "token", "chat_id": 123}},
         }
     )
