@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tunapi.discord.loop import _diff_keys
+from tunapi.discord.loop_state import _diff_keys
 
 
 class TestDiffKeys:

@@ -27,6 +27,10 @@ If you need exact options and defaults, use **[Reference](../reference/index.md)
 - [Add a runner](add-a-runner.md) (implement a new engine backend)
 - [Dev setup](dev-setup.md) (run from source, tests, linting, type checks)
 
+## Setup
+
+- [Slack 봇 설정](setup-slack.md) (App 생성부터 실행까지)
+
 ## Debugging and operations
 
 - [Troubleshooting](troubleshooting.md) (`--debug`, common gotchas, “why didn’t it route?”)

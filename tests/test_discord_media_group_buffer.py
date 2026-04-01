@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import anyio
 import pytest
 
-from tunapi.discord.loop import MediaGroupBuffer
+from tunapi.discord.loop_state import MediaGroupBuffer
 
 
 class _ControlledSleep:

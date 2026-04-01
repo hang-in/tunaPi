@@ -70,8 +70,8 @@ tunaPi:  ✓ done · 23s · 3 files changed
 
 ### 테스트 현황
 
-- 테스트: 1,237개
-- 커버리지: 61%
+- 테스트: 3,483개
+- 커버리지: 81%
 
 ### 지원하는 채팅 앱
 
@@ -113,7 +113,7 @@ uv tool install -e .
 `~/.tunapi/tunapi.toml`
 
 <details>
-<summary><b>Slack</b></summary>
+<summary><b>Slack</b> — <a href="docs/how-to/setup-slack.md">봇 설정 가이드</a></summary>
 
 ```toml
 transport = "slack"
@@ -127,7 +127,7 @@ channel_id = "C0123456789"
 </details>
 
 <details>
-<summary><b>Mattermost</b></summary>
+<summary><b>Mattermost</b> — <a href="docs/how-to/setup-mattermost.md">봇 설정 가이드</a></summary>
 
 ```toml
 transport = "mattermost"
@@ -141,7 +141,7 @@ channel_id = "YOUR_CHANNEL_ID"
 </details>
 
 <details>
-<summary><b>Telegram</b></summary>
+<summary><b>Telegram</b> — <a href="docs/how-to/setup-telegram.md">봇 설정 가이드</a></summary>
 
 ```toml
 transport = "telegram"
@@ -154,7 +154,7 @@ chat_id = 123456789
 </details>
 
 <details>
-<summary><b>Discord</b></summary>
+<summary><b>Discord</b> — <a href="docs/how-to/setup-discord.md">봇 설정 가이드</a></summary>
 
 ```toml
 transport = "discord"

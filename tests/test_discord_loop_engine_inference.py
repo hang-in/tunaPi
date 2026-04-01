@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tunapi.discord.loop import _extract_engine_id_from_header
+from tunapi.discord.loop_state import _extract_engine_id_from_header
 
 
 class TestExtractEngineIdFromHeader:

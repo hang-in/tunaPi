@@ -83,7 +83,7 @@ docs = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["--cov=tunapi", "--cov-branch", "--cov-report=term-missing", "--cov-fail-under=71"]
+addopts = ["--cov=tunapi", "--cov-branch", "--cov-report=term-missing", "--cov-fail-under=81"]
 testpaths = ["tests"]
 
 [tool.mutmut]

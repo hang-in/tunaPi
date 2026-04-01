@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tunapi.discord.loop import _strip_ctx_lines
+from tunapi.discord.loop_state import _strip_ctx_lines
 
 
 class TestStripCtxLines:
