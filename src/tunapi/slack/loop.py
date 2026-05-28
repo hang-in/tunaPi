@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -12,12 +11,18 @@ from typing import TYPE_CHECKING, Any
 import anyio
 
 from ..core import lifecycle
+from ..core.chat_loop_helpers import (
+    _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
+    resolve_persona_prefix,
+    resolve_upload_dir,
+    send_to_channel,
+    start_roundtable_thread,
+)
 from ..core.memory_facade import ProjectMemoryFacade
 from ..core.roundtable import (
     RoundtableSession,
     RoundtableStore,
     run_followup_round,
-    run_roundtable,
 )
 from ..core.voice import is_audio_file, transcribe_audio
 from ..journal import (
@@ -68,8 +73,6 @@ type _SendFn = Callable[[RenderedMessage], Awaitable[None]]
 _CONFIG_DIR = Path.home() / ".tunapi"
 _SHUTDOWN_STATE_FILE = _CONFIG_DIR / "slack_last_shutdown.json"
 
-_PERSONA_PREFIX_RE = re.compile(r"^@(\w+)\s+", re.UNICODE)
-
 
 # ---------------------------------------------------------------------------
 # File helpers
@@ -77,12 +80,7 @@ _PERSONA_PREFIX_RE = re.compile(r"^@(\w+)\s+", re.UNICODE)
 
 
 def _resolve_upload_dir(cfg: SlackBridgeConfig, channel_id: str) -> Path:
-    """Resolve the upload target directory for a channel."""
-    from ..core.files import resolve_incoming_dir
-
-    context = cfg.runtime.default_context_for_chat(channel_id)
-    project = context.project if context else None
-    return resolve_incoming_dir(project or "default")
+    return resolve_upload_dir(cfg.runtime, channel_id)
 
 
 async def _put_files(
@@ -232,6 +230,17 @@ async def _handle_file_command(
 # ---------------------------------------------------------------------------
 
 
+def _render_roundtable_header(topic: str, rounds: int, engines: list[str]) -> str:
+    engines_display = ", ".join(f"`{e}`" for e in engines)
+    rounds_display = f"{rounds} round{'s' if rounds > 1 else ''}"
+    return (
+        f"*Roundtable*\n\n"
+        f"*Topic:* {topic}\n"
+        f"*Engines:* {engines_display} | *Rounds:* {rounds_display}\n\n"
+        f"---"
+    )
+
+
 async def _start_roundtable(
     channel_id: str,
     topic: str,
@@ -243,57 +252,17 @@ async def _start_roundtable(
     chat_prefs: ChatPrefsStore | None,
     roundtables: RoundtableStore,
 ) -> None:
-    """Create a roundtable thread and run all rounds."""
-    engines_display = ", ".join(f"`{e}`" for e in engines)
-    rounds_display = f"{rounds} round{'s' if rounds > 1 else ''}"
-    header = (
-        f"*Roundtable*\n\n"
-        f"*Topic:* {topic}\n"
-        f"*Engines:* {engines_display} | *Rounds:* {rounds_display}\n\n"
-        f"---"
+    await start_roundtable_thread(
+        channel_id,
+        topic,
+        rounds,
+        engines,
+        cfg=cfg,
+        running_tasks=running_tasks,
+        chat_prefs=chat_prefs,
+        roundtables=roundtables,
+        render_header=_render_roundtable_header,
     )
-    ref = await cfg.exec_cfg.transport.send(
-        channel_id=channel_id,
-        message=RenderedMessage(text=header),
-    )
-    if ref is None:
-        logger.error("roundtable.header_send_failed", channel_id=channel_id)
-        return
-
-    thread_id = str(ref.message_id)
-    session = RoundtableSession(
-        thread_id=thread_id,
-        channel_id=channel_id,
-        topic=topic,
-        engines=engines,
-        total_rounds=rounds,
-    )
-    roundtables.put(session)
-
-    # Resolve ambient context (channel-bound project)
-    ambient_context = None
-    if chat_prefs:
-        ambient_context = await chat_prefs.get_context(channel_id)
-
-    logger.info(
-        "roundtable.start",
-        thread_id=thread_id,
-        topic=topic,
-        engines=engines,
-        rounds=rounds,
-    )
-
-    try:
-        await run_roundtable(
-            session,
-            cfg=cfg,
-            chat_prefs=chat_prefs,
-            running_tasks=running_tasks,
-            ambient_context=ambient_context,
-            parallel_first_round=cfg.runtime.roundtable.parallel_first_round,
-        )
-    finally:
-        roundtables.complete(thread_id)
 
 
 async def _archive_roundtable(
@@ -333,7 +302,11 @@ async def _archive_roundtable(
     if facade and project and session.transcript:
         with contextlib.suppress(Exception):
             await facade.save_roundtable(
-                session, project, branch_name=branch, auto_synthesis=True, auto_structured=True
+                session,
+                project,
+                branch_name=branch,
+                auto_synthesis=True,
+                auto_structured=True,
             )
 
     await send(RenderedMessage(text="Roundtable closed."))
@@ -355,9 +328,7 @@ async def _dispatch_rt_command(
     close_rt = None
 
     # Resolve project/branch for project-memory archive
-    _ambient_ctx = (
-        await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
-    )
+    _ambient_ctx = await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
     _pm_project = _ambient_ctx.project if _ambient_ctx else None
     _pm_branch = _ambient_ctx.branch if _ambient_ctx else None
 
@@ -367,6 +338,7 @@ async def _dispatch_rt_command(
         # Check for completed session (follow-up / close)
         completed_session = roundtables.get_completed(thread_id)
         if completed_session:
+
             async def continue_rt(
                 topic: str,
                 engines_filter: list[str] | None,
@@ -390,8 +362,12 @@ async def _dispatch_rt_command(
                 _s: RoundtableSession = completed_session,
             ) -> None:
                 await _archive_roundtable(
-                    _s, journal, send,
-                    facade=facade, project=_pm_project, branch=_pm_branch,
+                    _s,
+                    journal,
+                    send,
+                    facade=facade,
+                    project=_pm_project,
+                    branch=_pm_branch,
                 )
                 _rt.remove(_tid)
 
@@ -408,8 +384,12 @@ async def _dispatch_rt_command(
                 if session:
                     session.cancel_event.set()
                     await _archive_roundtable(
-                        session, journal, send,
-                        facade=facade, project=_pm_project, branch=_pm_branch,
+                        session,
+                        journal,
+                        send,
+                        facade=facade,
+                        project=_pm_project,
+                        branch=_pm_branch,
                     )
                 _rt.remove(_tid)
 
@@ -441,16 +421,7 @@ async def _dispatch_rt_command(
 async def _resolve_persona_prefix(
     prompt: str, chat_prefs: ChatPrefsStore
 ) -> str | None:
-    """If prompt starts with @persona_name, prepend the persona prompt."""
-    m = _PERSONA_PREFIX_RE.match(prompt)
-    if not m:
-        return None
-    name = m.group(1).lower()
-    persona = await chat_prefs.get_persona(name)
-    if persona is None:
-        return None
-    user_text = prompt[m.end() :]
-    return f"[역할: {persona.name}]\n{persona.prompt}\n\n---\n\n{user_text}"
+    return await resolve_persona_prefix(prompt, chat_prefs)
 
 
 # ---------------------------------------------------------------------------
@@ -514,7 +485,7 @@ async def _send_to_channel(
     channel_id: str,
     message: RenderedMessage,
 ) -> None:
-    await cfg.exec_cfg.transport.send(channel_id=channel_id, message=message)
+    await send_to_channel(cfg, channel_id, message)
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +671,11 @@ async def _try_dispatch_command(
             )
         case "memory":
             _ctx = await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
-            _engine = (await chat_prefs.get_default_engine(msg.channel_id)) if chat_prefs else None
+            _engine = (
+                (await chat_prefs.get_default_engine(msg.channel_id))
+                if chat_prefs
+                else None
+            )
             await handle_memory(
                 args,
                 project=_ctx.project if _ctx else None,
@@ -946,7 +921,9 @@ async def _dispatch_message(
     async def send(message: RenderedMessage) -> None:
         options = SendOptions(thread_id=thread_ts) if thread_ts else None
         await cfg.exec_cfg.transport.send(
-            channel_id=msg.channel_id, message=message, options=options,
+            channel_id=msg.channel_id,
+            message=message,
+            options=options,
         )
 
     # 1. Command handling
