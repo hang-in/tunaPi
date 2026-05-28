@@ -8,7 +8,7 @@ _(none)_
 
 ## Completed / Reference
 
-- [transport-core-consolidation-and-fatfile-decomposition](transport-core-consolidation-and-fatfile-decomposition.md) — MM/Slack 쌍둥이 헬퍼·명령 핸들러 통합, Telegram/Discord state를 core로 마이그레이션, 비대 파일 분해, 테스트 페이크 모듈화 (완료, 2026-05-29). 잔여: `discord/handlers.py` `register_slash_commands` 분해, tests 타입 진단 268개
+- [transport-core-consolidation-and-fatfile-decomposition](transport-core-consolidation-and-fatfile-decomposition.md) — MM/Slack 쌍둥이 헬퍼·명령 핸들러 통합, Telegram/Discord state를 core로 마이그레이션, 비대 파일 분해, 테스트 페이크 모듈화 (완료, 2026-05-29). 후속 함수 분해 완료(register_slash_commands, route_message, handle_message). 잔여: tests 타입 진단 268개, 커버리지 83→85
 - [operational-resilience-observability-hardening](operational-resilience-observability-hardening.md) — fsync, lockfile O_EXCL, doctor 진단, 컨텍스트 투명성 (완료, 2026-04 result.md 참조)
 - [core-extraction-refactor](core-extraction-refactor.md) — MM/Slack/Telegram의 lifecycle·outbox·trigger·startup·presenter·commands를 `core/`로 추출 (선행 작업)
 - [transport-test-coverage-plan](transport-test-coverage-plan.md) — transport별 테스트 보강 (선행)
