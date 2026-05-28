@@ -5,17 +5,15 @@ These are nested functions that cannot be imported directly, so we exercise
 them indirectly by calling ``run_main_loop`` with mocks and capturing the
 ``handle_message`` closure that gets registered via ``cfg.bot.set_message_handler``.
 """
+# ruff: noqa: E402
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import anyio
 import pytest
 
 from tunapi.discord.bridge import (
@@ -23,9 +21,7 @@ from tunapi.discord.bridge import (
     DiscordFilesSettings,
     DiscordVoiceMessageSettings,
 )
-from tunapi.discord.loop_state import _MediaGroupState, _MediaItem
-from tunapi.model import ResumeToken
-from tunapi.transport import MessageRef, RenderedMessage, SendOptions
+from tunapi.transport import MessageRef, RenderedMessage
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +223,7 @@ async def _capture_handle_message(
         prefs_store.get_default_engine = AsyncMock(return_value=None)
         MockPrefs.return_value = prefs_store
 
-        try:
+        try:  # noqa: SIM105
             await run_main_loop(
                 cfg,
                 default_engine_override=default_engine_override,
@@ -335,22 +331,28 @@ class TestHandleMessageAllowedUsers:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello world",
-        ), patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello world"),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello world",
+            ),
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello world"),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="hello world", author_id=42)
             await handler(msg)
 
@@ -372,19 +374,24 @@ class TestHandleMessageTriggerMode:
         # Make trigger mode return "mentions"
         prefs_store.get_trigger_mode = AsyncMock(return_value="mentions")
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.is_bot_mentioned",
-            return_value=False,
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="mentions",
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_bot_mentioned",
+                return_value=False,
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="mentions",
+            ),
         ):
             msg = _make_discord_message(content="hello")
             msg.reference = None
@@ -406,22 +413,28 @@ class TestHandleMessageEmptyPrompt:
         cfg = _make_cfg()
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, ""),
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, ""),
+            ),
         ):
             msg = _make_discord_message(content="")
             msg.attachments = []
@@ -446,29 +459,37 @@ class TestHandleMessageBranchOverride:
         # No channel context (no project bound)
         state_store.get_context = AsyncMock(return_value=None)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="@feature/xyz do stuff",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=("feature/xyz", "do stuff"),
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="@feature/xyz do stuff",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=("feature/xyz", "do stuff"),
+            ),
         ):
             msg = _make_discord_message(content="@feature/xyz do stuff")
             await handler(msg)
 
             msg.reply.assert_awaited_once()
             reply_text = msg.reply.call_args.args[0]
-            assert "no project bound" in reply_text.lower() or "Cannot use" in reply_text
+            assert (
+                "no project bound" in reply_text.lower() or "Cannot use" in reply_text
+            )
 
 
 # ===========================================================================
@@ -502,34 +523,43 @@ class TestHandleMessageThreadContext:
             side_effect=lambda gid, cid: thread_ctx if cid == 555 else None,
         )
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello thread",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello thread"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello thread",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello thread"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(
                 content="hello thread",
                 channel_type="thread",
@@ -569,26 +599,33 @@ class TestHandleMessageSessionRestore:
 
         state_store.get_session = AsyncMock(return_value="tok-restored-123")
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="continue please",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "continue please"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="continue please",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "continue please"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
         ):
             msg = _make_discord_message(content="continue please")
 
@@ -618,34 +655,43 @@ class TestHandleMessageSessionRestore:
 
         handler, state_store, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="do something",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "do something"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="do something",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "do something"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="do something")
 
             await handler(msg)
@@ -690,40 +736,51 @@ class TestHandleMessageEngineInference:
         ref.message_id = 500
         ref.resolved = ref_msg
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="continue",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "continue"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.discord.loop._extract_engine_id_from_header",
-            return_value="codex",
-        ), patch(
-            "tunapi.discord.loop._strip_ctx_lines",
-            return_value="Here is my answer...",
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="continue",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "continue"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.discord.loop._extract_engine_id_from_header",
+                return_value="codex",
+            ),
+            patch(
+                "tunapi.discord.loop._strip_ctx_lines",
+                return_value="Here is my answer...",
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="continue", reference=ref)
 
             await handler(msg)
@@ -755,34 +812,43 @@ class TestRunJobRunnerUnavailable:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="hello")
             await handler(msg)
 
@@ -815,34 +881,43 @@ class TestRunJobCwdError:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="hello")
             await handler(msg)
 
@@ -875,34 +950,43 @@ class TestHandleMessageModelOverrides:
         override_result.source_model = "channel"
         override_result.source_reasoning = None
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=override_result,
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=override_result,
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="hello")
             await handler(msg)
 
@@ -938,38 +1022,48 @@ class TestHandleMessageAutoPut:
         save_result.rel_path = Path("incoming/test.txt")
         save_result.size = 100
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, ""),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.is_audio_attachment",
-            return_value=False,
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.discord.file_transfer.save_attachment",
-            new_callable=AsyncMock,
-            return_value=save_result,
-        ) as mock_save:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, ""),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.is_audio_attachment",
+                return_value=False,
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.discord.file_transfer.save_attachment",
+                new_callable=AsyncMock,
+                return_value=save_result,
+            ),
+        ):
             msg = _make_discord_message(content="")
             msg.attachments = [attachment]
             await handler(msg)
@@ -1001,34 +1095,43 @@ class TestHandleMessageAutoThread:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="create a thread",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "create a thread"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="create a thread",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "create a thread"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="create a thread")
             await handler(msg)
 
@@ -1049,34 +1152,43 @@ class TestHandleMessageAutoThread:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="hello in channel",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "hello in channel"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="hello in channel",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "hello in channel"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="hello in channel")
             await handler(msg)
 
@@ -1106,34 +1218,43 @@ class TestHandleMessageReplyRef:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="start thread",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "start thread"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-        ) as mock_handle:
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="start thread",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "start thread"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
             msg = _make_discord_message(content="start thread")
             await handler(msg)
 
@@ -1164,34 +1285,43 @@ class TestHandleMessageRunJobException:
 
         handler, _, _ = await _capture_handle_message(cfg)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="crash me",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "crash me"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("something broke"),
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="crash me",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "crash me"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("something broke"),
+            ),
         ):
             msg = _make_discord_message(content="crash me")
 
@@ -1221,35 +1351,235 @@ class TestHandleMessageStartupChannel:
 
         state_store.get_startup_channel = AsyncMock(return_value=None)
 
-        with patch(
-            "tunapi.discord.loop.should_process_message",
-            return_value=True,
-        ), patch(
-            "tunapi.discord.loop.is_user_allowed",
-            side_effect=lambda ids, uid: True,
-        ), patch(
-            "tunapi.discord.loop.extract_prompt_from_message",
-            return_value="first message",
-        ), patch(
-            "tunapi.discord.loop.resolve_trigger_mode",
-            new_callable=AsyncMock,
-            return_value="all",
-        ), patch(
-            "tunapi.discord.loop.parse_branch_prefix",
-            return_value=(None, "first message"),
-        ), patch(
-            "tunapi.discord.loop.resolve_effective_default_engine",
-            new_callable=AsyncMock,
-            return_value=("claude", "config"),
-        ), patch(
-            "tunapi.discord.loop.resolve_overrides",
-            new_callable=AsyncMock,
-            return_value=MagicMock(model=None, reasoning=None),
-        ), patch(
-            "tunapi.runner_bridge.handle_message",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "tunapi.discord.loop.should_process_message",
+                return_value=True,
+            ),
+            patch(
+                "tunapi.discord.loop.is_user_allowed",
+                side_effect=lambda ids, uid: True,
+            ),
+            patch(
+                "tunapi.discord.loop.extract_prompt_from_message",
+                return_value="first message",
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_trigger_mode",
+                new_callable=AsyncMock,
+                return_value="all",
+            ),
+            patch(
+                "tunapi.discord.loop.parse_branch_prefix",
+                return_value=(None, "first message"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_effective_default_engine",
+                new_callable=AsyncMock,
+                return_value=("claude", "config"),
+            ),
+            patch(
+                "tunapi.discord.loop.resolve_overrides",
+                new_callable=AsyncMock,
+                return_value=MagicMock(model=None, reasoning=None),
+            ),
+            patch(
+                "tunapi.runner_bridge.handle_message",
+                new_callable=AsyncMock,
+            ),
         ):
             msg = _make_discord_message(content="first message")
             await handler(msg)
 
             state_store.set_startup_channel.assert_awaited_once_with(1, 100)
+
+
+# ===========================================================================
+# Command splitting and dispatching
+# ===========================================================================
+
+from tunapi.config import ConfigError
+from tunapi.discord.commands.dispatch import split_command_args, dispatch_command
+
+
+class TestSplitCommandArgs:
+    def test_empty(self):
+        assert split_command_args("") == ()
+        assert split_command_args("   ") == ()
+
+    def test_simple(self):
+        assert split_command_args("hello world") == ("hello", "world")
+
+    def test_quoted(self):
+        assert split_command_args('hello "big world"') == ("hello", "big world")
+
+    def test_bad_quotes(self):
+        # shlex.split fails -> fallback to str.split
+        result = split_command_args('hello "unclosed')
+        assert len(result) >= 2
+
+
+class TestDispatchCommand:
+    @pytest.mark.anyio
+    async def test_no_plugin(self):
+        cfg = MagicMock()
+        cfg.runtime.allowlist = None
+        cfg.exec_cfg = MagicMock()
+        cfg.show_resume_line = False
+        with patch(
+            "tunapi.discord.commands.dispatch.get_command",
+            return_value=None,
+        ):
+            result = await dispatch_command(
+                cfg,
+                command_id="nonexistent",
+                args_text="",
+                full_text="/nonexistent",
+                channel_id=1,
+                message_id=2,
+                guild_id=None,
+                thread_id=None,
+                reply_ref=None,
+                reply_text=None,
+                running_tasks={},
+                on_thread_known=None,
+                default_engine_override=None,
+                engine_overrides_resolver=None,
+            )
+        assert result is False
+
+    @pytest.mark.anyio
+    async def test_config_error_on_get_command(self):
+        cfg = MagicMock()
+        cfg.runtime.allowlist = None
+        cfg.exec_cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+        cfg.show_resume_line = False
+        with patch(
+            "tunapi.discord.commands.dispatch.get_command",
+            side_effect=ConfigError("bad"),
+        ):
+            result = await dispatch_command(
+                cfg,
+                command_id="bad_cmd",
+                args_text="",
+                full_text="/bad_cmd",
+                channel_id=1,
+                message_id=2,
+                guild_id=None,
+                thread_id=None,
+                reply_ref=None,
+                reply_text=None,
+                running_tasks={},
+                on_thread_known=None,
+                default_engine_override=None,
+                engine_overrides_resolver=None,
+            )
+        assert result is True
+
+    @pytest.mark.anyio
+    async def test_successful_dispatch(self):
+        cfg = MagicMock()
+        cfg.runtime.allowlist = None
+        cfg.runtime.config_path = None
+        cfg.runtime.plugin_config = MagicMock(return_value={})
+        cfg.exec_cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+        cfg.show_resume_line = False
+        backend = MagicMock()
+        backend.handle = AsyncMock(return_value=None)
+        with patch(
+            "tunapi.discord.commands.dispatch.get_command",
+            return_value=backend,
+        ):
+            result = await dispatch_command(
+                cfg,
+                command_id="test",
+                args_text="",
+                full_text="/test",
+                channel_id=1,
+                message_id=2,
+                guild_id=None,
+                thread_id=None,
+                reply_ref=None,
+                reply_text=None,
+                running_tasks={},
+                on_thread_known=None,
+                default_engine_override=None,
+                engine_overrides_resolver=None,
+            )
+        assert result is True
+        backend.handle.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_handler_returns_result(self):
+        from tunapi.commands import CommandResult
+
+        cfg = MagicMock()
+        cfg.runtime.allowlist = None
+        cfg.runtime.config_path = None
+        cfg.runtime.plugin_config = MagicMock(return_value={})
+        cfg.exec_cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+        cfg.show_resume_line = False
+        cmd_result = CommandResult(text="done!", notify=False)
+        backend = MagicMock()
+        backend.handle = AsyncMock(return_value=cmd_result)
+        with patch(
+            "tunapi.discord.commands.dispatch.get_command",
+            return_value=backend,
+        ):
+            result = await dispatch_command(
+                cfg,
+                command_id="test",
+                args_text="",
+                full_text="/test",
+                channel_id=1,
+                message_id=2,
+                guild_id=None,
+                thread_id=None,
+                reply_ref=None,
+                reply_text=None,
+                running_tasks={},
+                on_thread_known=None,
+                default_engine_override=None,
+                engine_overrides_resolver=None,
+            )
+        assert result is True
+
+    @pytest.mark.anyio
+    async def test_handler_exception(self):
+        cfg = MagicMock()
+        cfg.runtime.allowlist = None
+        cfg.runtime.config_path = None
+        cfg.runtime.plugin_config = MagicMock(return_value={})
+        cfg.exec_cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+        cfg.show_resume_line = False
+        backend = MagicMock()
+        backend.handle = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch(
+            "tunapi.discord.commands.dispatch.get_command",
+            return_value=backend,
+        ):
+            result = await dispatch_command(
+                cfg,
+                command_id="test",
+                args_text="",
+                full_text="/test",
+                channel_id=1,
+                message_id=2,
+                guild_id=None,
+                thread_id=None,
+                reply_ref=None,
+                reply_text=None,
+                running_tasks={},
+                on_thread_known=None,
+                default_engine_override=None,
+                engine_overrides_resolver=None,
+            )
+        assert result is True

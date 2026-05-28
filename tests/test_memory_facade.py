@@ -205,9 +205,8 @@ class TestSaveRoundtable:
     async def test_auto_synthesis_failure_suppressed(self, tmp_path):
         """Synthesis failure must not prevent discussion record creation."""
         facade = ProjectMemoryFacade(tmp_path)
-        # Sabotage synthesis store to raise on create
-        original_create = facade.synthesis.create
 
+        # Sabotage synthesis store to raise on create
         async def broken_create(*a, **kw):
             raise RuntimeError("disk full")
 
@@ -242,7 +241,6 @@ class TestSaveRoundtable:
 
     async def test_auto_structured_failure_suppressed(self, tmp_path):
         facade = ProjectMemoryFacade(tmp_path)
-        original = facade.rt_structured.create
 
         async def broken(*a, **kw):
             raise RuntimeError("boom")
@@ -334,7 +332,7 @@ class TestConvBranchInContext:
 
     async def test_conv_branch_with_git_link_in_context(self, tmp_path):
         facade = ProjectMemoryFacade(tmp_path)
-        cb = await facade.conv_branches.create(
+        await facade.conv_branches.create(
             "proj", "auth refactor", git_branch="feat/auth"
         )
         ctx = await facade.get_project_context("proj")
@@ -483,8 +481,6 @@ class TestProjectContextDTO:
         assert dto.markdown == ""
 
     async def test_dto_project_metadata(self, tmp_path):
-        from tunapi.core.memory_facade import ProjectContextDTO
-
         facade = ProjectMemoryFacade(tmp_path)
         dto = await facade.get_project_context_dto(
             "proj",
@@ -510,7 +506,7 @@ class TestProjectContextDTO:
             "proj", "feat/api", description="REST endpoints"
         )
         await facade.conv_branches.create("proj", "experiment: caching")
-        disc = await facade.discussions.create_record(
+        await facade.discussions.create_record(
             "proj",
             topic="API review",
             participants=["claude"],

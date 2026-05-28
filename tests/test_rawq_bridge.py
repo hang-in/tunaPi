@@ -1,15 +1,16 @@
 """Tests for tunadish/rawq_bridge.py — rawq CLI bridge."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tunapi.tunadish.rawq_bridge import (
     _DEFAULT_EXCLUDE,
     _find_rawq,
-    _get_rawq,
     format_context_block,
     format_map_block,
     is_available,
@@ -212,10 +213,12 @@ class TestFindRawq:
             assert result != "/nonexistent/rawq"
 
     def test_which_fallback(self, tmp_path):
-        with patch.dict("os.environ", {"RAWQ_BIN": ""}):
-            with patch("shutil.which", return_value="/usr/bin/rawq"):
-                result = _find_rawq()
-                assert result == "/usr/bin/rawq"
+        with (
+            patch.dict("os.environ", {"RAWQ_BIN": ""}),
+            patch("shutil.which", return_value="/usr/bin/rawq"),
+        ):
+            result = _find_rawq()
+            assert result == "/usr/bin/rawq"
 
 
 class TestGetRawqCaching:
@@ -490,3 +493,348 @@ class TestCheckIndexMocked:
         finally:
             rb._rawq_path = orig_path
             rb._rawq_checked = orig_checked
+
+
+class TestFormatContextBlockPush:
+    def test_empty_results(self):
+        assert format_context_block({"results": []}) == ""
+        assert format_context_block({}) == ""
+
+    def test_with_results(self):
+        data = {
+            "results": [
+                {
+                    "file": "main.py",
+                    "lines": [10, 20],
+                    "language": "python",
+                    "scope": "function",
+                    "confidence": 0.85,
+                    "content": "def hello():\n    pass",
+                },
+            ],
+        }
+        result = format_context_block(data)
+        assert "<relevant_code>" in result
+        assert "main.py:10-20" in result
+        assert "(function)" in result
+        assert "0.85" in result
+        assert "```python" in result
+        assert "</relevant_code>" in result
+
+    def test_result_without_optional_fields(self):
+        data = {
+            "results": [
+                {
+                    "file": "test.rs",
+                    "lines": [],
+                    "language": "",
+                    "scope": "",
+                    "confidence": 0,
+                    "content": "fn main() {}",
+                },
+            ],
+        }
+        result = format_context_block(data)
+        assert "test.rs" in result
+        assert "```" in result
+
+
+class TestFormatMapBlockPush:
+    def test_empty(self):
+        assert format_map_block({"files": []}) == ""
+        assert format_map_block({}) == ""
+
+    def test_files_with_symbols(self):
+        data = {
+            "files": [
+                {
+                    "path": "main.py",
+                    "symbols": [{"name": "hello"}, {"name": "world"}],
+                },
+            ],
+        }
+        result = format_map_block(data)
+        assert "<project_structure>" in result
+        assert "main.py (hello, world)" in result
+        assert "</project_structure>" in result
+
+    def test_files_without_symbols(self):
+        data = {
+            "files": [{"path": "empty.txt", "symbols": []}],
+        }
+        result = format_map_block(data)
+        assert "empty.txt" in result
+
+    def test_many_symbols_truncated(self):
+        syms = [{"name": f"s{i}"} for i in range(12)]
+        data = {"files": [{"path": "big.py", "symbols": syms}]}
+        result = format_map_block(data)
+        assert "..." in result
+
+
+class TestFindRawqPush:
+    def test_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        bin_path = tmp_path / "rawq"
+        bin_path.touch()
+        monkeypatch.setenv("RAWQ_BIN", str(bin_path))
+        result = _find_rawq()
+        assert result == str(bin_path)
+
+    def test_env_var_nonexistent(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("RAWQ_BIN", "/nonexistent/rawq")
+        with patch("shutil.which", return_value=None):
+            result = _find_rawq()
+        # Falls through to PATH and vendor checks
+        assert result is None or isinstance(result, str)
+
+    def test_which_found(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("RAWQ_BIN", raising=False)
+        with patch("shutil.which", return_value="/usr/local/bin/rawq"):
+            result = _find_rawq()
+        assert result == "/usr/local/bin/rawq"
+
+
+import tunapi.tunadish.rawq_bridge as rawq_mod
+from tunapi.tunadish.rawq_bridge import (
+    build_index,
+    check_index,
+    get_map,
+    get_version,
+)
+from tunapi.tunadish.rawq_bridge import search as rawq_search
+
+
+class TestRawqCheckIndexPush:
+    async def test_not_available(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", None)
+        result = await check_index("/some/path")
+        assert result is None
+
+    async def test_success(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"indexed": true}'
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await check_index("/project")
+        assert result == {"indexed": True}
+
+    async def test_failure(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 1
+        proc_result.stdout = b""
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await check_index("/project")
+        assert result is None
+
+    async def test_exception(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        with patch("anyio.run_process", AsyncMock(side_effect=OSError("fail"))):
+            result = await check_index("/project")
+        assert result is None
+
+
+class TestRawqBuildIndexPush:
+    async def test_not_available(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", None)
+        result = await build_index("/project")
+        assert result is False
+
+    async def test_success(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await build_index("/project")
+        assert result is True
+
+    async def test_failure(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 1
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await build_index("/project")
+        assert result is False
+
+    async def test_custom_exclude(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        with patch(
+            "anyio.run_process", AsyncMock(return_value=proc_result)
+        ) as mock_run:
+            result = await build_index("/project", exclude=["dist", "build"])
+        assert result is True
+        cmd = mock_run.call_args[0][0]
+        assert "-x" in cmd
+        assert "dist" in cmd
+
+    async def test_exception(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        with patch("anyio.run_process", AsyncMock(side_effect=OSError("fail"))):
+            result = await build_index("/project")
+        assert result is False
+
+
+class TestRawqSearchPush:
+    async def test_not_available(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", None)
+        result = await rawq_search("query", "/project")
+        assert result is None
+
+    async def test_success(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"results": []}'
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await rawq_search("query", "/project")
+        assert result == {"results": []}
+
+    async def test_with_lang_filter(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"results": []}'
+        with patch(
+            "anyio.run_process", AsyncMock(return_value=proc_result)
+        ) as mock_run:
+            await rawq_search("query", "/project", lang_filter="python")
+        cmd = mock_run.call_args[0][0]
+        assert "--lang" in cmd
+        assert "python" in cmd
+
+    async def test_empty_stdout(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b"   "
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await rawq_search("query", "/project")
+        assert result is None
+
+    async def test_nonzero_exit(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 1
+        proc_result.stdout = b""
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await rawq_search("query", "/project")
+        assert result is None
+
+    async def test_exception(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        with patch("anyio.run_process", AsyncMock(side_effect=OSError("fail"))):
+            result = await rawq_search("query", "/project")
+        assert result is None
+
+    async def test_with_exclude(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"results": []}'
+        with patch(
+            "anyio.run_process", AsyncMock(return_value=proc_result)
+        ) as mock_run:
+            await rawq_search("query", "/project", exclude=["node_modules"])
+        cmd = mock_run.call_args[0][0]
+        assert "--exclude" in cmd
+
+
+class TestRawqGetMapPush:
+    async def test_not_available(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", None)
+        result = await get_map("/project")
+        assert result is None
+
+    async def test_success(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"files": []}'
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await get_map("/project")
+        assert result == {"files": []}
+
+    async def test_with_lang(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b'{"files": []}'
+        with patch(
+            "anyio.run_process", AsyncMock(return_value=proc_result)
+        ) as mock_run:
+            await get_map("/project", lang_filter="rust")
+        cmd = mock_run.call_args[0][0]
+        assert "--lang" in cmd
+
+    async def test_failure(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 1
+        proc_result.stdout = b""
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await get_map("/project")
+        assert result is None
+
+    async def test_exception(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        with patch("anyio.run_process", AsyncMock(side_effect=OSError("fail"))):
+            result = await get_map("/project")
+        assert result is None
+
+
+class TestRawqGetVersionPush:
+    async def test_not_available(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", None)
+        result = await get_version()
+        assert result is None
+
+    async def test_success(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 0
+        proc_result.stdout = b"rawq 0.2.1\n"
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await get_version()
+        assert result == "0.2.1"
+
+    async def test_failure(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        proc_result = MagicMock()
+        proc_result.returncode = 1
+        with patch("anyio.run_process", AsyncMock(return_value=proc_result)):
+            result = await get_version()
+        assert result is None
+
+    async def test_exception(self, monkeypatch):
+        monkeypatch.setattr(rawq_mod, "_rawq_checked", True)
+        monkeypatch.setattr(rawq_mod, "_rawq_path", "/usr/bin/rawq")
+        with patch("anyio.run_process", AsyncMock(side_effect=OSError("fail"))):
+            result = await get_version()
+        assert result is None

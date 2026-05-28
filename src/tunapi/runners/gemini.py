@@ -13,7 +13,12 @@ from ..backends import EngineBackend, EngineConfig
 from ..events import EventFactory
 from ..logging import get_logger
 from ..model import Action, ActionKind, ResumeToken, TunapiEvent
-from ..runner import JsonlSubprocessRunner, MsgspecJsonlRunnerMixin, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    MsgspecJsonlRunnerMixin,
+    ResumeTokenMixin,
+    Runner,
+)
 from ..schemas import gemini as gemini_schema
 
 logger = get_logger(__name__)
@@ -72,28 +77,40 @@ def translate_gemini_event(
             params = event.parameters
             detail: dict[str, Any] = {"name": event.tool_name, "input": params}
             if kind == "file_change":
-                path = params.get("file_path") or params.get("path") or params.get("dir_path")
+                path = (
+                    params.get("file_path")
+                    or params.get("path")
+                    or params.get("dir_path")
+                )
                 if isinstance(path, str):
                     title = path
                     detail["changes"] = [{"path": path, "kind": "update"}]
 
             action = Action(id=event.tool_id, kind=kind, title=title, detail=detail)
             state.pending_actions[event.tool_id] = action
-            return [factory.action_started(
-                action_id=action.id, kind=action.kind,
-                title=action.title, detail=action.detail,
-            )]
+            return [
+                factory.action_started(
+                    action_id=action.id,
+                    kind=action.kind,
+                    title=action.title,
+                    detail=action.detail,
+                )
+            ]
 
         case gemini_schema.GeminiToolResultEvent():
             action = state.pending_actions.pop(event.tool_id, None)
             if action is None:
                 action = Action(id=event.tool_id, kind="tool", title="tool", detail={})
             ok = event.status == "success"
-            return [factory.action_completed(
-                action_id=action.id, kind=action.kind,
-                title=action.title, ok=ok,
-                detail=action.detail | {"result_preview": event.output[:200]},
-            )]
+            return [
+                factory.action_completed(
+                    action_id=action.id,
+                    kind=action.kind,
+                    title=action.title,
+                    ok=ok,
+                    detail=action.detail | {"result_preview": event.output[:200]},
+                )
+            ]
 
         case gemini_schema.GeminiResultEvent():
             ok = event.status == "success"
@@ -107,11 +124,15 @@ def translate_gemini_event(
                 usage["total_tokens"] = stats.total_tokens
                 usage["input_tokens"] = stats.input_tokens
                 usage["output_tokens"] = stats.output_tokens
-            return [factory.completed(
-                ok=ok, answer=answer, resume=resume,
-                error=None if ok else "gemini run failed",
-                usage=usage or None,
-            )]
+            return [
+                factory.completed(
+                    ok=ok,
+                    answer=answer,
+                    resume=resume,
+                    error=None if ok else "gemini run failed",
+                    usage=usage or None,
+                )
+            ]
 
         case _:
             return []
@@ -167,9 +188,7 @@ class GeminiRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
     def env(self, *, state: Any) -> dict[str, str] | None:
         return None
 
-    def new_state(
-        self, prompt: str, resume: ResumeToken | None
-    ) -> GeminiStreamState:
+    def new_state(self, prompt: str, resume: ResumeToken | None) -> GeminiStreamState:
         return GeminiStreamState()
 
     def start_run(
@@ -196,31 +215,43 @@ class GeminiRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
         return translate_gemini_event(data, state=state)
 
     def process_error_events(
-        self, rc: int, *, resume: ResumeToken | None,
-        found_session: ResumeToken | None, state: GeminiStreamState,
+        self,
+        rc: int,
+        *,
+        resume: ResumeToken | None,
+        found_session: ResumeToken | None,
+        state: GeminiStreamState,
     ) -> list[TunapiEvent]:
         message = f"gemini failed (rc={rc})."
         return [
             self.note_event(message, state=state, ok=False),
             state.factory.completed_error(
-                error=message, resume=found_session or resume,
+                error=message,
+                resume=found_session or resume,
             ),
         ]
 
     def stream_end_events(
-        self, *, resume: ResumeToken | None,
-        found_session: ResumeToken | None, state: GeminiStreamState,
+        self,
+        *,
+        resume: ResumeToken | None,
+        found_session: ResumeToken | None,
+        state: GeminiStreamState,
     ) -> list[TunapiEvent]:
         if not found_session:
-            return [state.factory.completed_error(
-                error="gemini finished but no session_id was captured",
-                resume=resume,
-            )]
-        return [state.factory.completed_error(
-            error="gemini finished without a result event",
-            answer=state.last_assistant_text or "",
-            resume=found_session,
-        )]
+            return [
+                state.factory.completed_error(
+                    error="gemini finished but no session_id was captured",
+                    resume=resume,
+                )
+            ]
+        return [
+            state.factory.completed_error(
+                error="gemini finished without a result event",
+                answer=state.last_assistant_text or "",
+                resume=found_session,
+            )
+        ]
 
 
 def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
@@ -228,7 +259,9 @@ def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
     if os.name == "nt":
         # On Windows, bypass .cmd wrapper to avoid stdout buffering / exit-detection issues.
         npm_root = Path.home() / "AppData" / "Roaming" / "npm"
-        entry = npm_root / "node_modules" / "@google" / "gemini-cli" / "dist" / "index.js"
+        entry = (
+            npm_root / "node_modules" / "@google" / "gemini-cli" / "dist" / "index.js"
+        )
         if entry.exists():
             gemini_cmd = shutil.which("node") or "node"
             gemini_script = str(entry)

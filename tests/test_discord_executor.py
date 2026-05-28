@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import anyio
 import pytest
 
-from tunapi.commands import RunMode, RunRequest, RunResult
+from tunapi.commands import RunRequest
 from tunapi.config import ConfigError
 from tunapi.context import RunContext
 from tunapi.model import EngineId, ResumeToken
@@ -87,7 +86,9 @@ class TestCaptureTransport:
     async def test_send_with_thread_id(self):
         cap = _CaptureTransport()
         opts = SendOptions(thread_id=42)
-        ref = await cap.send(channel_id=1, message=RenderedMessage(text="t"), options=opts)
+        ref = await cap.send(
+            channel_id=1, message=RenderedMessage(text="t"), options=opts
+        )
         assert ref.thread_id == 42
 
     @pytest.mark.anyio
@@ -346,7 +347,7 @@ class TestDiscordCommandExecutor:
     @pytest.mark.anyio
     async def test_send_string(self):
         executor = _make_executor()
-        ref = await executor.send("hello")
+        await executor.send("hello")
         executor._exec_cfg.transport.send.assert_awaited_once()
         call_kwargs = executor._exec_cfg.transport.send.call_args.kwargs
         assert call_kwargs["message"].text == "hello"

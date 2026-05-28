@@ -21,6 +21,7 @@ pytestmark = pytest.mark.anyio
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 class FakeWs:
     """In-memory WebSocket that records sent payloads."""
 
@@ -68,6 +69,7 @@ def _make_progress(
 # _dc_to_dict
 # ===================================================================
 
+
 class TestDcToDict:
     def test_excludes_none_fields(self):
         ref = MessageRef(channel_id="ch1", message_id="m1")
@@ -86,6 +88,7 @@ class TestDcToDict:
 # ===================================================================
 # TunadishTransport.send
 # ===================================================================
+
 
 class TestSend:
     async def test_send_returns_message_ref(self):
@@ -124,7 +127,9 @@ class TestSend:
         ws = FakeWs()
         t = TunadishTransport(ws)
         t.set_run_meta(engine="claude", model="opus-4")
-        msg = RenderedMessage(text="hi", extra={"engine": "gemini", "persona": "reviewer"})
+        msg = RenderedMessage(
+            text="hi", extra={"engine": "gemini", "persona": "reviewer"}
+        )
         await t.send(channel_id="ch1", message=msg)
 
         params = ws.last()["params"]
@@ -158,6 +163,7 @@ class TestSend:
 # TunadishTransport.edit
 # ===================================================================
 
+
 class TestEdit:
     async def test_edit_emits_message_update(self):
         ws = FakeWs()
@@ -188,6 +194,7 @@ class TestEdit:
 # TunadishTransport.delete
 # ===================================================================
 
+
 class TestDelete:
     async def test_delete_emits_message_delete(self):
         ws = FakeWs()
@@ -216,6 +223,7 @@ class TestDelete:
 # ===================================================================
 # TunadishTransport — closed state
 # ===================================================================
+
 
 class TestClosedBehavior:
     async def test_send_noop_when_closed(self):
@@ -287,6 +295,7 @@ class TestClosedBehavior:
 # TunadishTransport._build_meta
 # ===================================================================
 
+
 class TestBuildMeta:
     def test_empty_when_no_meta_set(self):
         ws = FakeWs()
@@ -331,6 +340,7 @@ class TestBuildMeta:
 # TunadishTransport.close
 # ===================================================================
 
+
 class TestClose:
     async def test_close_is_noop(self):
         ws = FakeWs()
@@ -342,6 +352,7 @@ class TestClose:
 # ===================================================================
 # TunadishPresenter.render_progress
 # ===================================================================
+
 
 class TestRenderProgress:
     def test_basic_label(self):
@@ -390,6 +401,7 @@ class TestRenderProgress:
 # ===================================================================
 # TunadishPresenter.render_final
 # ===================================================================
+
 
 class TestRenderFinal:
     def test_error_status(self):

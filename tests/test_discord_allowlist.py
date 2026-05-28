@@ -38,3 +38,18 @@ class TestIsUserAllowed:
         assert is_user_allowed(allowed, 1)
         assert not is_user_allowed(allowed, 2)
         assert not is_user_allowed(allowed, None)
+
+    def test_no_allowlist(self):
+        assert is_user_allowed(None, 42) is True
+
+    def test_empty_allowlist(self):
+        assert is_user_allowed(set(), 42) is True
+
+    def test_allowed(self):
+        assert is_user_allowed({42, 99}, 42) is True
+
+    def test_not_allowed(self):
+        assert is_user_allowed({42, 99}, 100) is False
+
+    def test_none_user_id(self):
+        assert is_user_allowed({42}, None) is False

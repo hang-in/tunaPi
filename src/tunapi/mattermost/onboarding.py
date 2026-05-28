@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from ..backends import EngineBackend, SetupIssue
 from ..config import HOME_CONFIG_PATH, load_or_init_config, write_config

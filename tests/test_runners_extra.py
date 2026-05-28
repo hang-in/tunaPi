@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -37,7 +36,11 @@ from tunapi.runners.pi import (
     _default_session_dir,
 )
 from tunapi.config import ConfigError
-from tunapi.runners.run_options import EngineRunOptions, set_run_options, reset_run_options
+from tunapi.runners.run_options import (
+    EngineRunOptions,
+    set_run_options,
+    reset_run_options,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -96,16 +99,12 @@ class TestTranslateGeminiEvent:
 
     def test_message_event_assistant(self) -> None:
         state = GeminiStreamState()
-        event = gemini_schema.GeminiMessageEvent(
-            role="assistant", content="hello "
-        )
+        event = gemini_schema.GeminiMessageEvent(role="assistant", content="hello ")
         results = translate_gemini_event(event, state=state)
         assert results == []
         assert state.last_assistant_text == "hello "
 
-        event2 = gemini_schema.GeminiMessageEvent(
-            role="assistant", content="world"
-        )
+        event2 = gemini_schema.GeminiMessageEvent(role="assistant", content="world")
         translate_gemini_event(event2, state=state)
         assert state.last_assistant_text == "hello world"
 
@@ -177,8 +176,10 @@ class TestTranslateGeminiEvent:
         event = gemini_schema.GeminiResultEvent(
             status="success",
             stats=gemini_schema.GeminiResultStats(
-                duration_ms=100, total_tokens=500,
-                input_tokens=200, output_tokens=300,
+                duration_ms=100,
+                total_tokens=500,
+                input_tokens=200,
+                output_tokens=300,
             ),
         )
         results = translate_gemini_event(event, state=state)
@@ -235,14 +236,14 @@ class TestTranslateGeminiEvent:
 
 class TestGeminiRunner:
     def _runner(self, **kwargs: Any) -> GeminiRunner:
-        defaults = dict(
-            gemini_cmd="gemini",
-            gemini_script=None,
-            model="auto",
-            yolo=False,
-            approval_mode="auto_edit",
-            session_title="gemini",
-        )
+        defaults = {
+            "gemini_cmd": "gemini",
+            "gemini_script": None,
+            "model": "auto",
+            "yolo": False,
+            "approval_mode": "auto_edit",
+            "session_title": "gemini",
+        }
         defaults.update(kwargs)
         return GeminiRunner(**defaults)
 
@@ -326,9 +327,7 @@ class TestGeminiRunner:
     def test_process_error_events(self) -> None:
         r = self._runner()
         state = r.new_state("hello", None)
-        events = r.process_error_events(
-            1, resume=None, found_session=None, state=state
-        )
+        events = r.process_error_events(1, resume=None, found_session=None, state=state)
         assert len(events) == 2
         assert isinstance(events[1], CompletedEvent)
         assert events[1].ok is False
@@ -337,9 +336,7 @@ class TestGeminiRunner:
     def test_stream_end_events_no_session(self) -> None:
         r = self._runner()
         state = r.new_state("hello", None)
-        events = r.stream_end_events(
-            resume=None, found_session=None, state=state
-        )
+        events = r.stream_end_events(resume=None, found_session=None, state=state)
         assert len(events) == 1
         completed = events[0]
         assert isinstance(completed, CompletedEvent)
@@ -350,9 +347,7 @@ class TestGeminiRunner:
         state = r.new_state("hello", None)
         state.last_assistant_text = "partial"
         found = ResumeToken(engine="gemini", value="s1")
-        events = r.stream_end_events(
-            resume=None, found_session=found, state=state
-        )
+        events = r.stream_end_events(resume=None, found_session=found, state=state)
         completed = events[0]
         assert isinstance(completed, CompletedEvent)
         assert completed.answer == "partial"
@@ -451,7 +446,9 @@ class TestPiHelpers:
         assert _extract_text_blocks([{"type": "text", "text": ""}]) is None
 
     def test_assistant_error(self) -> None:
-        assert _assistant_error({"stopReason": "error", "errorMessage": "oops"}) == "oops"
+        assert (
+            _assistant_error({"stopReason": "error", "errorMessage": "oops"}) == "oops"
+        )
         assert _assistant_error({"stopReason": "error"}) == "pi run error"
         assert _assistant_error({"stopReason": "aborted"}) == "pi run aborted"
         assert _assistant_error({"stopReason": "end_turn"}) is None
@@ -486,9 +483,7 @@ class TestTranslatePiEvent:
     def test_session_header_starts(self) -> None:
         state = PiStreamState(resume=self._resume())
         event = pi_schema.SessionHeader(id="sess-1")
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         assert len(results) == 1
         assert isinstance(results[0], StartedEvent)
         assert state.started is True
@@ -496,9 +491,7 @@ class TestTranslatePiEvent:
     def test_session_header_duplicate(self) -> None:
         state = PiStreamState(resume=self._resume(), started=True)
         event = pi_schema.SessionHeader(id="sess-1")
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         assert results == []
 
     def test_tool_execution_start(self) -> None:
@@ -506,9 +499,7 @@ class TestTranslatePiEvent:
         event = pi_schema.ToolExecutionStart(
             toolCallId="tc1", toolName="bash", args={"command": "ls"}
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 1
         assert action_events[0].action.kind == "command"
@@ -520,20 +511,14 @@ class TestTranslatePiEvent:
         event = pi_schema.ToolExecutionStart(
             toolCallId="tc1", toolName="bash", args={"command": "ls"}
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         assert state.started is True
         assert any(isinstance(e, StartedEvent) for e in results)
 
     def test_tool_execution_start_empty_id(self) -> None:
         state = PiStreamState(resume=self._resume(), started=True)
-        event = pi_schema.ToolExecutionStart(
-            toolCallId="", toolName="bash", args={}
-        )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        event = pi_schema.ToolExecutionStart(toolCallId="", toolName="bash", args={})
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 0
 
@@ -547,9 +532,7 @@ class TestTranslatePiEvent:
         event = pi_schema.ToolExecutionEnd(
             toolCallId="tc1", toolName="bash", result="ok", isError=False
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 1
         assert action_events[0].phase == "completed"
@@ -560,21 +543,15 @@ class TestTranslatePiEvent:
         event = pi_schema.ToolExecutionEnd(
             toolCallId="tc99", toolName="unknown", result="err", isError=True
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 1
         assert action_events[0].ok is False
 
     def test_tool_execution_end_empty_id(self) -> None:
         state = PiStreamState(resume=self._resume(), started=True)
-        event = pi_schema.ToolExecutionEnd(
-            toolCallId="", toolName="bash", result="ok"
-        )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        event = pi_schema.ToolExecutionEnd(toolCallId="", toolName="bash", result="ok")
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 0
 
@@ -587,9 +564,7 @@ class TestTranslatePiEvent:
                 "usage": {"input_tokens": 10, "output_tokens": 20},
             }
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         # MessageEnd doesn't produce events directly
         assert all(not isinstance(e, CompletedEvent) for e in results)
         assert state.last_assistant_text == "answer text"
@@ -620,9 +595,7 @@ class TestTranslatePiEvent:
                 },
             ]
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         completed = [e for e in results if isinstance(e, CompletedEvent)]
         assert len(completed) == 1
         assert completed[0].ok is True
@@ -632,9 +605,7 @@ class TestTranslatePiEvent:
         state = PiStreamState(resume=self._resume(), started=True)
         state.last_assistant_error = "quota exceeded"
         event = pi_schema.AgentEnd(messages=[])
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         completed = [e for e in results if isinstance(e, CompletedEvent)]
         assert len(completed) == 1
         assert completed[0].ok is False
@@ -643,9 +614,7 @@ class TestTranslatePiEvent:
     def test_unknown_event(self) -> None:
         state = PiStreamState(resume=self._resume(), started=True)
         event = pi_schema.AgentStart()
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         # Should not produce action/completed events
         assert all(not isinstance(e, (ActionEvent, CompletedEvent)) for e in results)
 
@@ -654,9 +623,7 @@ class TestTranslatePiEvent:
         event = pi_schema.ToolExecutionStart(
             toolCallId="tc2", toolName="edit", args={"path": "/tmp/foo.py"}
         )
-        results = translate_pi_event(
-            event, title="pi", meta=self._meta(), state=state
-        )
+        results = translate_pi_event(event, title="pi", meta=self._meta(), state=state)
         action_events = [e for e in results if isinstance(e, ActionEvent)]
         assert len(action_events) == 1
         assert action_events[0].action.kind == "file_change"
@@ -671,11 +638,11 @@ class TestTranslatePiEvent:
 
 class TestPiRunner:
     def _runner(self, **kwargs: Any) -> PiRunner:
-        defaults: dict[str, Any] = dict(
-            extra_args=[],
-            model=None,
-            provider=None,
-        )
+        defaults: dict[str, Any] = {
+            "extra_args": [],
+            "model": None,
+            "provider": None,
+        }
         defaults.update(kwargs)
         return PiRunner(**defaults)
 
@@ -828,9 +795,7 @@ class TestPiRunner:
         r = self._runner()
         resume = ResumeToken(engine="pi", value="s")
         state = PiStreamState(resume=resume)
-        events = r.stream_end_events(
-            resume=resume, found_session=None, state=state
-        )
+        events = r.stream_end_events(resume=resume, found_session=None, state=state)
         assert len(events) == 1
         completed = events[0]
         assert isinstance(completed, CompletedEvent)
@@ -896,7 +861,9 @@ class TestDefaultSessionDir:
         assert "sessions" in str(result)
         assert "--home-user-project--" in str(result)
 
-    def test_default_session_dir_with_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_session_dir_with_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from pathlib import PurePosixPath
 
         monkeypatch.setenv("PI_CODING_AGENT_DIR", "/custom/agent")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from tunapi.telegram.api_models import (
     Chat,
@@ -14,6 +15,7 @@ from tunapi.telegram.api_models import (
 from tunapi.telegram.client import BotClient
 from tunapi.telegram.types import TelegramIncomingMessage, TelegramVoice
 from tunapi.telegram.voice import VOICE_TRANSCRIPTION_DISABLED_HINT, transcribe_voice
+from tunapi.core.voice import is_audio_file, transcribe_audio
 
 
 class _Bot(BotClient):
@@ -350,3 +352,94 @@ async def test_transcribe_voice_success() -> None:
     assert result == "transcribed"
     assert replies == []
     assert transcriber.calls
+
+
+class TestIsAudioFile:
+    def test_known_types(self):
+        assert is_audio_file("audio/ogg") is True
+        assert is_audio_file("audio/mpeg") is True
+        assert is_audio_file("audio/wav") is True
+        assert is_audio_file("AUDIO/OGG") is True  # case insensitive
+
+    def test_unknown_type(self):
+        assert is_audio_file("text/plain") is False
+        assert is_audio_file("video/mp4") is False
+
+
+@pytest.mark.anyio
+class TestTranscribeAudio:
+    def _patch_openai(self, mock_client):
+        """Patch the openai module so the lazy import succeeds."""
+        mock_module = MagicMock()
+        mock_module.AsyncOpenAI = MagicMock(return_value=mock_client)
+        return patch.dict("sys.modules", {"openai": mock_module})
+
+    async def test_success(self):
+        mock_result = MagicMock()
+        mock_result.text = "hello world"
+        mock_client = AsyncMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        with self._patch_openai(mock_client):
+            result = await transcribe_audio(b"audio data", "test.ogg")
+        assert result == "hello world"
+
+    async def test_empty_result(self):
+        mock_result = MagicMock()
+        mock_result.text = ""
+        mock_client = AsyncMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        with self._patch_openai(mock_client):
+            result = await transcribe_audio(b"audio", "test.ogg")
+        assert result is None
+
+    async def test_import_error(self):
+        original_import = (
+            __builtins__.__import__
+            if hasattr(__builtins__, "__import__")
+            else __import__
+        )
+
+        def fail_openai(name, *args, **kwargs):
+            if name == "openai":
+                raise ImportError("no openai")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=fail_openai):
+            result = await transcribe_audio(b"audio", "test.ogg")
+        assert result is None
+
+    async def test_api_error(self):
+        mock_client = AsyncMock()
+        mock_client.audio.transcriptions.create = AsyncMock(
+            side_effect=RuntimeError("API fail")
+        )
+        with self._patch_openai(mock_client):
+            result = await transcribe_audio(b"audio", "test.ogg")
+        assert result is None
+
+    async def test_with_base_url_and_api_key(self):
+        mock_result = MagicMock()
+        mock_result.text = "transcribed"
+        mock_client = AsyncMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        mock_module = MagicMock()
+        mock_cls = MagicMock(return_value=mock_client)
+        mock_module.AsyncOpenAI = mock_cls
+        with patch.dict("sys.modules", {"openai": mock_module}):
+            result = await transcribe_audio(
+                b"audio",
+                "test.ogg",
+                base_url="https://api.example.com",
+                api_key="sk-test",
+            )
+        assert result == "transcribed"
+        call_kwargs = mock_cls.call_args.kwargs
+        assert call_kwargs["base_url"] == "https://api.example.com"
+        assert call_kwargs["api_key"] == "sk-test"
+
+    async def test_result_without_text_attr(self):
+        mock_client = AsyncMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value="raw string")
+        with self._patch_openai(mock_client):
+            result = await transcribe_audio(b"audio", "test.ogg")
+        assert result == "raw string"

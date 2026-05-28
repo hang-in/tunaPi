@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-import anyio
 import pytest
 
 from tunapi.core.chat_prefs import Persona
@@ -119,9 +118,7 @@ class TestResolvePersonaPrefix:
         chat_prefs.get_persona.return_value = Persona(
             name="architect", prompt="You are a software architect."
         )
-        result = await _resolve_persona_prefix(
-            "@architect design a system", chat_prefs
-        )
+        result = await _resolve_persona_prefix("@architect design a system", chat_prefs)
         assert result is not None
         assert "[역할: architect]" in result
         assert "You are a software architect." in result
@@ -135,9 +132,7 @@ class TestResolvePersonaPrefix:
 
     @pytest.mark.anyio()
     async def test_user_text_preserved_after_prefix(self, chat_prefs):
-        chat_prefs.get_persona.return_value = Persona(
-            name="dev", prompt="Be brief."
-        )
+        chat_prefs.get_persona.return_value = Persona(name="dev", prompt="Be brief.")
         result = await _resolve_persona_prefix("@dev fix the bug now", chat_prefs)
         assert result is not None
         assert result.endswith("fix the bug now")

@@ -54,7 +54,7 @@ def _discover_codex() -> list[str] | None:
             if slug and vis != "hide":
                 models.append(slug)
         return models if models else None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("codex.model_discovery_failed", error=str(exc))
         return None
 
@@ -88,7 +88,7 @@ try {
         if result.returncode == 0:
             models = json.loads(result.stdout.strip())
             return models if models else None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("gemini.model_discovery_failed", error=str(exc))
     return None
 
@@ -133,7 +133,7 @@ def get_models(engine: str) -> tuple[list[str], str]:
             if discovered:
                 _cache[engine] = (discovered, "discovered", now)
                 return list(discovered), "discovered"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("model_discovery_error", engine=engine, error=str(exc))
 
     fallback = _FALLBACK_MODELS.get(engine)
@@ -188,7 +188,7 @@ def shorten_model(model: str) -> str:
     m = re.sub(r"-\d{8}$", "", m)  # strip date suffix
     if not m.startswith("claude-"):
         return m
-    m = m[len("claude-"):]  # strip "claude-" prefix
+    m = m[len("claude-") :]  # strip "claude-" prefix
     parts = m.split("-")
     name_parts: list[str] = []
     ver_parts: list[str] = []

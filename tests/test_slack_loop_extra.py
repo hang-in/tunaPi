@@ -3,23 +3,20 @@ file command handling, roundtable archiving, and startup helpers."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tunapi.core.commands import parse_command
-from tunapi.core.roundtable import RoundtableSession, RoundtableStore
+from tunapi.core.roundtable import RoundtableSession
 from tunapi.slack.loop import (
-    _ResolvedPrompt,
     _archive_roundtable,
-    _handle_cancel_reaction,
     _handle_file_command,
     _resolve_prompt,
     _send_startup,
     _try_dispatch_command,
 )
-from tunapi.slack.parsing import SlackMessageEvent, SlackReactionEvent
+from tunapi.slack.parsing import SlackMessageEvent
 from tunapi.transport import MessageRef, RenderedMessage
 
 
@@ -269,7 +266,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_help", new_callable=AsyncMock) as mock_help:
+        with patch(
+            "tunapi.slack.loop.handle_help", new_callable=AsyncMock
+        ) as mock_help:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -295,7 +294,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_cancel", new_callable=AsyncMock) as mock_cancel:
+        with patch(
+            "tunapi.slack.loop.handle_cancel", new_callable=AsyncMock
+        ) as mock_cancel:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -309,7 +310,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_status", new_callable=AsyncMock) as mock_status:
+        with patch(
+            "tunapi.slack.loop.handle_status", new_callable=AsyncMock
+        ) as mock_status:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -341,7 +344,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_model", new_callable=AsyncMock) as mock_model:
+        with patch(
+            "tunapi.slack.loop.handle_model", new_callable=AsyncMock
+        ) as mock_model:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -355,7 +360,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_trigger", new_callable=AsyncMock) as mock_trigger:
+        with patch(
+            "tunapi.slack.loop.handle_trigger", new_callable=AsyncMock
+        ) as mock_trigger:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -370,7 +377,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg(bot_user_id="BOTU")
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop.handle_help", new_callable=AsyncMock) as mock_help:
+        with patch(
+            "tunapi.slack.loop.handle_help", new_callable=AsyncMock
+        ) as mock_help:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -391,7 +400,13 @@ class TestTryDispatchCommand:
         project_sessions = AsyncMock()
 
         result = await _try_dispatch_command(
-            msg, cfg, {}, sessions, chat_prefs, None, send,
+            msg,
+            cfg,
+            {},
+            sessions,
+            chat_prefs,
+            None,
+            send,
             project_sessions=project_sessions,
         )
 
@@ -592,8 +607,12 @@ class TestArchiveRoundtable:
         send = AsyncMock()
 
         await _archive_roundtable(
-            session, journal, send,
-            facade=facade, project="myproj", branch="main",
+            session,
+            journal,
+            send,
+            facade=facade,
+            project="myproj",
+            branch="main",
         )
 
         facade.save_roundtable.assert_called_once()

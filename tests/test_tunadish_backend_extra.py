@@ -1,13 +1,12 @@
 """Additional tests for tunadish backend — targeting uncovered functions/paths."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
-import json
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import anyio
 import pytest
@@ -16,81 +15,14 @@ from tunapi.context import RunContext
 from tunapi.core.memory_facade import ProjectMemoryFacade
 from tunapi.journal import Journal, JournalEntry
 from tunapi.runner_bridge import RunningTask
-from tunapi.transport import MessageRef, RenderedMessage, SendOptions
+from tunapi.transport import MessageRef, RenderedMessage
 from tunapi.tunadish.backend import TunadishBackend
-from tunapi.tunadish.context_store import (
-    ConversationContextStore,
-    ConversationSettings,
-)
+from tunapi.tunadish.context_store import ConversationContextStore
 from tunapi.tunadish.transport import TunadishTransport
 
+from .fakes.tunadish import FakeWs, FakeRuntime
+
 pytestmark = pytest.mark.anyio
-
-
-# ── Fakes ──
-
-
-class FakeWs:
-    def __init__(self):
-        self.sent: list[dict[str, Any]] = []
-
-    async def send(self, data: str) -> None:
-        self.sent.append(json.loads(data))
-
-    def last(self) -> dict[str, Any]:
-        return self.sent[-1]
-
-    def last_params(self) -> dict[str, Any]:
-        return self.last().get("params", self.last().get("result", {}))
-
-    def find_method(self, method: str) -> dict[str, Any] | None:
-        for msg in self.sent:
-            if msg.get("method") == method:
-                return msg
-        return None
-
-
-class FakeRuntime:
-    def __init__(self, *, project_aliases=None, engine_ids=None, projects_map=None):
-        self._aliases = project_aliases or []
-        self._engine_ids = engine_ids or ["claude"]
-        self.default_engine = "claude"
-        self._projects = MagicMock()
-        self._projects.projects = projects_map or {}
-
-    def project_aliases(self) -> list[str]:
-        return self._aliases
-
-    def available_engine_ids(self) -> list[str]:
-        return self._engine_ids
-
-    def chat_ids_for_project(self, project: str) -> list[str]:
-        return []
-
-    def resolve_run_cwd(self, ctx: Any) -> Path | None:
-        return None
-
-    def resolve_message(self, *, text, reply_text, ambient_context=None, chat_id=None):
-        @dataclass(frozen=True)
-        class _Resolved:
-            prompt: str = text
-            resume_token: Any = None
-            engine_override: str | None = None
-            context: RunContext | None = ambient_context
-
-        return _Resolved()
-
-    def resolve_runner(self, *, resume_token, engine_override):
-        runner = MagicMock()
-        runner.engine = engine_override or "claude"
-        runner.model = "claude-sonnet-4-20250514"
-
-        resolved = MagicMock()
-        resolved.engine = runner.engine
-        resolved.runner = runner
-        resolved.available = True
-        resolved.issue = None
-        return resolved
 
 
 @pytest.fixture
@@ -180,22 +112,21 @@ class TestExecuteRun:
         ):
             # Use very short timeout
             backend._RUN_TIMEOUT = 1
-            await backend._execute_run(
-                "conv1", "hello", runtime, transport, timeout=1
-            )
+            await backend._execute_run("conv1", "hello", runtime, transport, timeout=1)
 
         # Should have sent idle at end
         methods = [m.get("method") for m in ws.sent]
         assert "run.status" in methods
         last_status = [
-            m["params"]["status"]
-            for m in ws.sent
-            if m.get("method") == "run.status"
+            m["params"]["status"] for m in ws.sent if m.get("method") == "run.status"
         ]
         assert last_status[-1] == "idle"
         # Should have edited progress ref with timeout message
         update_msgs = [m for m in ws.sent if m.get("method") == "message.update"]
-        assert any("타임아웃" in m.get("params", {}).get("message", {}).get("text", "") for m in update_msgs)
+        assert any(
+            "타임아웃" in m.get("params", {}).get("message", {}).get("text", "")
+            for m in update_msgs
+        )
 
     async def test_execute_run_exception(self, backend, ws, transport, runtime):
         """Exception during run produces error message and sends idle."""
@@ -214,14 +145,15 @@ class TestExecuteRun:
 
         # idle status at the end
         statuses = [
-            m["params"]["status"]
-            for m in ws.sent
-            if m.get("method") == "run.status"
+            m["params"]["status"] for m in ws.sent if m.get("method") == "run.status"
         ]
         assert statuses[-1] == "idle"
         # Error message in update
         update_msgs = [m for m in ws.sent if m.get("method") == "message.update"]
-        assert any("오류" in m.get("params", {}).get("message", {}).get("text", "") for m in update_msgs)
+        assert any(
+            "오류" in m.get("params", {}).get("message", {}).get("text", "")
+            for m in update_msgs
+        )
 
     async def test_execute_run_cleans_up_run_map(self, backend, ws, transport, runtime):
         """After execution, conv is removed from run_map."""
@@ -318,9 +250,7 @@ class TestHandleChatSendExtra:
                 new_callable=AsyncMock,
                 return_value=False,
             ),
-            patch.object(
-                backend, "_execute_run", new_callable=AsyncMock
-            ) as mock_exec,
+            patch.object(backend, "_execute_run", new_callable=AsyncMock) as mock_exec,
         ):
             await backend.handle_chat_send(
                 {"conversation_id": "conv-x", "text": "!unknown_cmd"},
@@ -333,9 +263,7 @@ class TestHandleChatSendExtra:
         """Regular message (no !) calls _execute_run directly."""
         await backend.context_store.set_context("conv-y", RunContext(project="proj"))
 
-        with patch.object(
-            backend, "_execute_run", new_callable=AsyncMock
-        ) as mock_exec:
+        with patch.object(backend, "_execute_run", new_callable=AsyncMock) as mock_exec:
             await backend.handle_chat_send(
                 {"conversation_id": "conv-y", "text": "Tell me about the code"},
                 runtime,
@@ -358,15 +286,11 @@ class TestHandleChatSendExtra:
                 transport,
             )
 
-    async def test_chat_send_with_timeout_param(
-        self, backend, runtime, transport, ws
-    ):
+    async def test_chat_send_with_timeout_param(self, backend, runtime, transport, ws):
         """Timeout parameter is forwarded to _execute_run."""
         await backend.context_store.set_context("conv-t", RunContext(project="proj"))
 
-        with patch.object(
-            backend, "_execute_run", new_callable=AsyncMock
-        ) as mock_exec:
+        with patch.object(backend, "_execute_run", new_callable=AsyncMock) as mock_exec:
             await backend.handle_chat_send(
                 {"conversation_id": "conv-t", "text": "hello", "timeout": 60},
                 runtime,
@@ -382,9 +306,7 @@ class TestHandleChatSendExtra:
 
 
 class TestConversationManagementExtra:
-    async def test_conversation_create_sends_notification(
-        self, backend, ws, transport
-    ):
+    async def test_conversation_create_sends_notification(self, backend, ws, transport):
         """conversation.create via _ws_handler logic sends conversation.created."""
         conv_id = "conv-new"
         project = "myproj"
@@ -455,7 +377,11 @@ class TestConversationManagementExtra:
                 meta = {"engine": e.engine, "model": e.data.get("model")}
                 run_meta[e.run_id] = meta
                 messages.append(
-                    {"role": "user", "content": e.data.get("text", ""), "timestamp": e.timestamp}
+                    {
+                        "role": "user",
+                        "content": e.data.get("text", ""),
+                        "timestamp": e.timestamp,
+                    }
                 )
             elif e.event == "completed" and e.data.get("ok"):
                 answer = e.data.get("answer")
@@ -571,6 +497,7 @@ class TestDispatchRpcCommandExtra:
 
     async def test_rpc_default_conv_id(self, backend, ws, transport, runtime):
         """When conversation_id is missing, defaults to __rpc__."""
+
         async def fake_dispatch(cmd, args, *, send, **kw):
             await send(RenderedMessage(text="Help text"))
             return True
@@ -579,18 +506,14 @@ class TestDispatchRpcCommandExtra:
             "tunapi.tunadish.backend.dispatch_command",
             side_effect=fake_dispatch,
         ):
-            await backend._dispatch_rpc_command(
-                "help", "", {}, runtime, transport
-            )
+            await backend._dispatch_rpc_command("help", "", {}, runtime, transport)
 
         # Check that command.result was sent with __rpc__ conv_id
         msg = ws.find_method("command.result")
         assert msg is not None
         assert msg["params"]["conversation_id"] == "__rpc__"
 
-    async def test_trigger_updates_conv_settings(
-        self, backend, ws, transport, runtime
-    ):
+    async def test_trigger_updates_conv_settings(self, backend, ws, transport, runtime):
         """trigger command stores trigger_mode in settings."""
         await backend.context_store.set_context("conv-tr", RunContext(project="proj"))
 
@@ -975,9 +898,7 @@ class TestWriteApiHandlers:
 
     async def test_handoff_parse_valid(self, backend, ws, transport):
         """handoff.parse with valid URI returns parsed fields."""
-        with patch(
-            "tunapi.core.handoff.parse_handoff_uri"
-        ) as mock_parse:
+        with patch("tunapi.core.handoff.parse_handoff_uri") as mock_parse:
             parsed = MagicMock()
             parsed.project = "proj"
             parsed.session_id = "s1"
@@ -1005,9 +926,7 @@ class TestWriteApiHandlers:
 
     async def test_handoff_parse_invalid(self, backend, ws, transport):
         """handoff.parse with invalid URI sends error."""
-        with patch(
-            "tunapi.core.handoff.parse_handoff_uri", return_value=None
-        ):
+        with patch("tunapi.core.handoff.parse_handoff_uri", return_value=None):
             await backend._handle_handoff_parse({"uri": "bad://uri"}, transport)
         msg = ws.find_method("handoff.parse.result")
         assert msg is not None
@@ -1055,7 +974,11 @@ class TestStructuredJsonRpcHandlers:
         """memory.list.json returns entries."""
         await backend.context_store.set_context("conv-mlj", RunContext(project="proj"))
         await backend._facade.memory.add_entry(
-            project="proj", type="decision", title="Test", content="Content", source="test"
+            project="proj",
+            type="decision",
+            title="Test",
+            content="Content",
+            source="test",
         )
 
         await backend._handle_memory_list_json(
@@ -1136,9 +1059,7 @@ class TestCodeSearchMap:
     async def test_code_map_no_project_path(self, backend, ws, transport, runtime):
         """code.map with unknown project sends error."""
         with patch.object(backend, "_resolve_project_path", return_value=None):
-            await backend._handle_code_map(
-                {"project": "unknown"}, runtime, transport
-            )
+            await backend._handle_code_map({"project": "unknown"}, runtime, transport)
         msg = ws.find_method("code.map.result")
         assert msg is not None
         assert "error" in msg["params"]
@@ -1154,9 +1075,7 @@ class TestCodeSearchMap:
             ),
             patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
         ):
-            await backend._handle_code_map(
-                {"project": "proj"}, runtime, transport
-            )
+            await backend._handle_code_map({"project": "proj"}, runtime, transport)
 
         msg = ws.find_method("code.map.result")
         assert msg is not None
@@ -1361,13 +1280,606 @@ class TestResolveContextConvIdExtra:
     async def test_branch_prefix_with_matching_facade_entry(self, backend):
         """branch:X resolves to parent conv_id via facade lookup."""
         # Need a non-branch conv entry so the loop finds a project to query
-        await backend.context_store.set_context("parent-conv", RunContext(project="proj"))
+        await backend.context_store.set_context(
+            "parent-conv", RunContext(project="proj")
+        )
 
         branch_obj = MagicMock()
         branch_obj.session_id = "parent-conv"
 
         with patch.object(
-            backend._facade.conv_branches, "get", new_callable=AsyncMock, return_value=branch_obj
+            backend._facade.conv_branches,
+            "get",
+            new_callable=AsyncMock,
+            return_value=branch_obj,
         ):
             result = await backend._resolve_context_conv_id("branch:br-abc")
             assert result == "parent-conv"
+
+
+# ═══════════════════════════════════════════════════════════════
+# branch_handlers.py & run_handlers.py Coverage Boost
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestBranchHandlersCoverageBoost:
+    async def test_handle_branch_create_no_conv_id(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_create
+
+        await handle_branch_create(backend, {}, transport)
+
+    async def test_handle_branch_create_branch_prefix(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_create
+
+        backend._resolve_context_conv_id = AsyncMock(return_value="resolved-conv")
+        await backend.context_store.set_context(
+            "resolved-conv", RunContext(project="proj")
+        )
+
+        branch_obj = MagicMock(branch_id="br-new", label="custom-lbl")
+        backend._facade.conv_branches.create = AsyncMock(return_value=branch_obj)
+        backend._facade.conv_branches.list = AsyncMock(return_value=[])
+
+        await handle_branch_create(
+            backend,
+            {"conversation_id": "branch:br-abc", "label": "test-branch"},
+            transport,
+        )
+        backend._resolve_context_conv_id.assert_called_once_with("branch:br-abc")
+
+    async def test_handle_branch_create_label_parsing(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_create
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+
+        b1 = MagicMock(label="branch-5")
+        b2 = MagicMock(label="branch-invalid")
+        b3 = MagicMock(label="other-label")
+        backend._facade.conv_branches.list = AsyncMock(return_value=[b1, b2, b3])
+
+        branch_obj = MagicMock(branch_id="br-new", label="branch-6")
+        backend._facade.conv_branches.create = AsyncMock(return_value=branch_obj)
+
+        await handle_branch_create(backend, {"conversation_id": "conv-1"}, transport)
+        backend._facade.conv_branches.create.assert_called_once()
+        assert backend._facade.conv_branches.create.call_args[1]["label"] == "branch-6"
+
+    async def test_handle_branch_create_with_summary(self, backend, transport, ws):
+        from tunapi.tunadish.branch_handlers import handle_branch_create
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+        backend._active_transports = {transport}
+
+        e1 = MagicMock(event="prompt", timestamp="2026-05-28T12:00:00Z")
+        e1.data = {"text": "hello"}
+        e2 = MagicMock(event="completed", timestamp="2026-05-28T12:01:00Z")
+        e2.data = {"ok": True, "answer": "world"}
+
+        real_recent_entries = backend._journal.recent_entries
+
+        async def mock_recent_entries(channel_id, *, limit=200):
+            if channel_id == "conv-1":
+                return [e1, e2]
+            return await real_recent_entries(channel_id, limit=limit)
+
+        backend._journal.recent_entries = mock_recent_entries
+
+        branch_obj = MagicMock(branch_id="br-new", label="branch-1")
+        backend._facade.conv_branches.create = AsyncMock(return_value=branch_obj)
+
+        await handle_branch_create(
+            backend, {"conversation_id": "conv-1", "checkpoint_id": "r1"}, transport
+        )
+
+        entries = await backend._journal.recent_entries("branch:br-new")
+        assert len(entries) == 1
+        assert "hello" in entries[0].data["answer"]
+
+        methods = [m.get("method") for m in ws.sent]
+        assert "message.new" in methods
+        assert "branch.created" in methods
+
+    async def test_handle_branch_adopt_happy_path(self, backend, transport, ws):
+        from tunapi.tunadish.branch_handlers import handle_branch_adopt
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+        backend._active_transports = {transport}
+
+        branch_obj = MagicMock(
+            branch_id="br-123", label="branch-123", session_id="conv-1"
+        )
+        backend._facade.conv_branches.get = AsyncMock(return_value=branch_obj)
+        backend._facade.conv_branches.adopt = AsyncMock()
+
+        e1 = MagicMock(event="prompt")
+        e1.data = {"text": "test prompt"}
+        e2 = MagicMock(event="response")
+        e2.data = {"text": "test response"}
+        backend._journal.recent_entries = AsyncMock(return_value=[e1, e2])
+
+        await handle_branch_adopt(
+            backend, {"conversation_id": "conv-1", "branch_id": "br-123"}, transport
+        )
+
+        backend._facade.conv_branches.adopt.assert_called_once_with("proj", "br-123")
+        methods = [m.get("method") for m in ws.sent]
+        assert "message.new" in methods
+        assert "message.update" in methods
+        assert "branch.adopted" in methods
+
+    async def test_handle_branch_adopt_journal_exception(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_adopt
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+        backend._active_transports = {transport}
+
+        branch_obj = MagicMock(
+            branch_id="br-123", label="branch-123", session_id="conv-1"
+        )
+        backend._facade.conv_branches.get = AsyncMock(return_value=branch_obj)
+        backend._facade.conv_branches.adopt = AsyncMock()
+        backend._journal.recent_entries = AsyncMock(side_effect=Exception("db error"))
+
+        await handle_branch_adopt(
+            backend, {"conversation_id": "conv-1", "branch_id": "br-123"}, transport
+        )
+        backend._facade.conv_branches.adopt.assert_called_once()
+
+    async def test_build_branch_context_journal_exception_and_corners(self, backend):
+        from tunapi.tunadish.branch_handlers import build_branch_context
+
+        backend._journal.recent_entries = AsyncMock(side_effect=Exception("error"))
+        res = await build_branch_context(backend, "c1", None)
+        assert res == ""
+
+        backend._journal.recent_entries = AsyncMock(return_value=[])
+        res = await build_branch_context(backend, "c1", None)
+        assert res == ""
+
+    async def test_handle_branch_archive_early_returns(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_archive
+
+        await handle_branch_archive(backend, {}, transport)
+        await handle_branch_archive(
+            backend, {"conversation_id": "c1", "branch_id": "b1"}, transport
+        )
+
+    async def test_handle_branch_delete_corners(self, backend, transport):
+        from tunapi.tunadish.branch_handlers import handle_branch_delete
+
+        await handle_branch_delete(backend, {}, transport)
+        await handle_branch_delete(
+            backend, {"conversation_id": "c1", "branch_id": "b1"}, transport
+        )
+
+        backend._resolve_context_conv_id = AsyncMock(return_value="resolved-conv")
+        await backend.context_store.set_context(
+            "resolved-conv", RunContext(project="proj")
+        )
+        backend._facade.conv_branches.remove = AsyncMock()
+        await backend.context_store.set_active_branch("resolved-conv", "br-1")
+
+        await handle_branch_delete(
+            backend, {"conversation_id": "branch:br-1", "branch_id": "br-1"}, transport
+        )
+        backend._facade.conv_branches.remove.assert_called_once_with("proj", "br-1")
+
+        meta = backend.context_store._cache.get("resolved-conv")
+        assert meta is None or getattr(meta, "active_branch_id", None) is None
+
+
+class TestRunHandlersCoverageBoost:
+    async def test_execute_run_progress_ref_none(self, backend, runtime, transport):
+        from tunapi.tunadish.run_handlers import execute_run
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+
+        transport.send = AsyncMock(return_value=None)
+
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=False),
+            patch(
+                "tunapi.tunadish.backend.handle_message", new_callable=AsyncMock
+            ) as mock_handle,
+            patch("tunapi.tunadish.backend.set_run_base_dir", return_value="tok"),
+            patch("tunapi.tunadish.backend.reset_run_base_dir"),
+        ):
+            await execute_run(backend, "conv-1", "hello", runtime, transport)
+            mock_handle.assert_awaited_once()
+
+    async def test_execute_run_auto_engine_switch(self, backend, runtime, transport):
+        from tunapi.tunadish.run_handlers import execute_run
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+        await backend.context_store.update_conv_settings(
+            "conv-1", model="claude-sonnet"
+        )
+
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=False),
+            patch(
+                "tunapi.tunadish.backend.handle_message", new_callable=AsyncMock
+            ) as mock_handle,
+            patch("tunapi.tunadish.backend.set_run_base_dir", return_value="tok"),
+            patch("tunapi.tunadish.backend.reset_run_base_dir"),
+            patch(
+                "tunapi.engine_models.get_models", return_value=(["other-model"], False)
+            ),
+            patch("tunapi.engine_models.find_engine_for_model", return_value="gemini"),
+        ):
+            await execute_run(backend, "conv-1", "hello", runtime, transport)
+            mock_handle.assert_awaited_once()
+
+    async def test_make_conv_token_saver(self, backend):
+        from tunapi.tunadish.run_handlers import make_conv_token_saver
+
+        callback = make_conv_token_saver(backend, "conv-1")
+
+        token = MagicMock()
+        token.engine = "claude"
+        token.value = "val-123"
+        await callback(token, True)
+
+        backend._conv_sessions.set.assert_called_once_with(
+            "conv-1",
+            engine="claude",
+            token="val-123",
+        )
+
+    async def test_build_cross_session_summary_sibling_handling(self, backend):
+        from tunapi.tunadish.run_handlers import build_cross_session_summary
+
+        await backend.context_store.set_context("conv-1", RunContext(project="proj"))
+        await backend.context_store.set_context(
+            "conv-sibling", RunContext(project="proj")
+        )
+
+        e1 = MagicMock(event="prompt")
+        e1.data = {"text": "sib prompt"}
+        e2 = MagicMock(event="completed")
+        e2.data = {"ok": True, "answer": "sib answer"}
+
+        backend._journal.recent_entries = AsyncMock(return_value=[e1, e2])
+
+        res = await build_cross_session_summary(backend, "conv-1", "proj")
+        assert res is not None
+        assert "sib prompt" in res
+        assert "sib answer" in res
+
+
+import json
+
+
+class FakeWebsocketWithMessages:
+    def __init__(self, messages: list[str]):
+        self.messages = messages
+        self.sent: list[dict[str, Any]] = []
+        self._index = 0
+        self.remote_address = ("127.0.0.1", 12345)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._index >= len(self.messages):
+            raise StopAsyncIteration
+        msg = self.messages[self._index]
+        self._index += 1
+        return msg
+
+    async def send(self, data: str) -> None:
+        self.sent.append(json.loads(data))
+
+
+class TestWsHandlerRPCs:
+    async def test_ws_handler_lifecycle_and_ping(self, backend, runtime):
+        # ws connection reconnect notification: if running task exists, sends status
+        ref = MessageRef(channel_id="conv1", message_id="m1")
+        task = RunningTask()
+        backend.run_map["conv1"] = ref
+        backend.running_tasks[ref] = task
+        # task not done
+
+        reqs = [
+            json.dumps({"method": "ping", "id": 1}),
+            json.dumps({"method": "ping"}),  # no id (notified pong)
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+        await backend._ws_handler(runtime, False, ws)
+
+        # Reconnect notification for running task
+        status_msg = next((m for m in ws.sent if m.get("method") == "run.status"), None)
+        assert status_msg is not None
+        assert status_msg["params"]["status"] == "running"
+
+        # Ping responses
+        # with id: response sent
+        ping_resp = next((m for m in ws.sent if m.get("id") == 1), None)
+        assert ping_resp is not None
+        assert ping_resp["result"] == {"pong": True}
+        # without id: pong notification sent
+        pong_notify = next((m for m in ws.sent if m.get("method") == "pong"), None)
+        assert pong_notify is not None
+
+    async def test_ws_handler_chat_send_and_cancel(self, backend, runtime):
+        reqs = [
+            json.dumps({"method": "chat.send", "id": 2, "params": {"text": "hello"}}),
+            json.dumps(
+                {"method": "run.cancel", "id": 3, "params": {"conversation_id": "c1"}}
+            ),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        backend.handle_chat_send = AsyncMock()
+        backend.handle_run_cancel = AsyncMock()
+
+        await backend._ws_handler(runtime, False, ws)
+
+        backend.handle_chat_send.assert_called_once()
+        backend.handle_run_cancel.assert_called_once_with({"conversation_id": "c1"}, ws)
+
+        # verify accept/cancel responses
+        resp2 = next((m for m in ws.sent if m.get("id") == 2), None)
+        assert resp2["result"] == {"accepted": True}
+        resp3 = next((m for m in ws.sent if m.get("id") == 3), None)
+        assert resp3["result"] == {"cancelled": True}
+
+    async def test_ws_handler_context_and_project_methods(self, backend, runtime):
+        reqs = [
+            json.dumps({"method": "project.list", "id": 10}),
+            json.dumps({"method": "conversation.create", "id": 11}),
+            json.dumps({"method": "conversation.delete", "id": 12}),
+            json.dumps({"method": "conversation.list", "id": 13}),
+            json.dumps({"method": "conversation.history", "id": 14}),
+            json.dumps({"method": "project.context", "id": 15}),
+            json.dumps({"method": "branch.list.json", "id": 16}),
+            json.dumps({"method": "memory.list.json", "id": 17}),
+            json.dumps({"method": "review.list.json", "id": 18}),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        with (
+            patch(
+                "tunapi.tunadish.context_handlers.handle_project_list",
+                new_callable=AsyncMock,
+            ) as m_proj_list,
+            patch(
+                "tunapi.tunadish.context_handlers.handle_conversation_create",
+                new_callable=AsyncMock,
+            ) as m_conv_create,
+            patch(
+                "tunapi.tunadish.context_handlers.handle_conversation_delete",
+                new_callable=AsyncMock,
+            ) as m_conv_delete,
+            patch(
+                "tunapi.tunadish.context_handlers.handle_conversation_list",
+                new_callable=AsyncMock,
+            ) as m_conv_list,
+            patch(
+                "tunapi.tunadish.context_handlers.handle_conversation_history",
+                new_callable=AsyncMock,
+            ) as m_conv_hist,
+        ):
+            backend._handle_project_context = AsyncMock()
+            backend._handle_branch_list_json = AsyncMock()
+            backend._handle_memory_list_json = AsyncMock()
+            backend._handle_review_list_json = AsyncMock()
+
+            await backend._ws_handler(runtime, False, ws)
+
+            m_proj_list.assert_called_once()
+            m_conv_create.assert_called_once()
+            m_conv_delete.assert_called_once()
+            m_conv_list.assert_called_once()
+            m_conv_hist.assert_called_once()
+            backend._handle_project_context.assert_called_once()
+            backend._handle_branch_list_json.assert_called_once()
+            backend._handle_memory_list_json.assert_called_once()
+            backend._handle_review_list_json.assert_called_once()
+
+    async def test_ws_handler_code_search_map(self, backend, runtime):
+        reqs = [
+            json.dumps({"method": "code.search", "id": 20, "params": {"query": "q"}}),
+            json.dumps({"method": "code.map", "id": 21, "params": {}}),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        backend._handle_code_search = AsyncMock()
+        backend._handle_code_map = AsyncMock()
+
+        await backend._ws_handler(runtime, False, ws)
+
+        backend._handle_code_search.assert_called_once()
+        backend._handle_code_map.assert_called_once()
+
+    async def test_ws_handler_rpc_commands(self, backend, runtime):
+        # We test JSON-RPC direct command methods dispatching
+        reqs = [
+            json.dumps({"method": "help", "id": 30}),
+            json.dumps(
+                {
+                    "method": "model.set",
+                    "id": 31,
+                    "params": {"engine": "claude", "model": "opus"},
+                }
+            ),
+            # Test auto-detect engine from model
+            json.dumps({"method": "model.set", "id": 32, "params": {"model": "gpt-4"}}),
+            json.dumps(
+                {"method": "model.list", "id": 33, "params": {"engine": "claude"}}
+            ),
+            json.dumps(
+                {"method": "trigger.set", "id": 34, "params": {"mode": "always"}}
+            ),
+            json.dumps({"method": "project.set", "id": 35, "params": {"name": "p1"}}),
+            json.dumps({"method": "project.info", "id": 36}),
+            json.dumps(
+                {"method": "persona.set", "id": 37, "params": {"args": "architect"}}
+            ),
+            json.dumps({"method": "persona.list", "id": 38}),
+            json.dumps(
+                {"method": "memory.list", "id": 39, "params": {"type": "decision"}}
+            ),
+            json.dumps(
+                {
+                    "method": "memory.add",
+                    "id": 40,
+                    "params": {"type": "decision", "title": "t", "content": "c"},
+                }
+            ),
+            json.dumps({"method": "memory.search", "id": 41, "params": {"query": "q"}}),
+            json.dumps({"method": "memory.delete", "id": 42, "params": {"id": "m1"}}),
+            json.dumps(
+                {"method": "branch.list", "id": 43, "params": {"status": "active"}}
+            ),
+            json.dumps({"method": "branch.merge", "id": 44, "params": {"id": "b1"}}),
+            json.dumps({"method": "branch.discard", "id": 45, "params": {"id": "b2"}}),
+            json.dumps(
+                {"method": "review.list", "id": 46, "params": {"status": "pending"}}
+            ),
+            json.dumps(
+                {
+                    "method": "review.approve",
+                    "id": 47,
+                    "params": {"id": "r1", "comment": "ok"},
+                }
+            ),
+            json.dumps(
+                {
+                    "method": "review.reject",
+                    "id": 48,
+                    "params": {"id": "r2", "comment": "no"},
+                }
+            ),
+            json.dumps({"method": "context.get", "id": 49}),
+            json.dumps({"method": "session.new", "id": 50}),
+            json.dumps({"method": "status", "id": 51}),
+            json.dumps(
+                {"method": "roundtable.start", "id": 52, "params": {"topic": "t"}}
+            ),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        backend._dispatch_rpc_command = AsyncMock()
+        # Mock task group to test rawq index trigger on project.set
+        tg = MagicMock()
+        backend._task_group = tg
+        backend._rawq_ensure_index = AsyncMock()
+
+        with patch(
+            "tunapi.engine_models.find_engine_for_model", return_value="openai"
+        ) as mock_find_engine:
+            await backend._ws_handler(runtime, False, ws)
+            mock_find_engine.assert_called_once_with("gpt-4")
+
+        # Verify calls to _dispatch_rpc_command
+        # We can count total calls
+        assert backend._dispatch_rpc_command.call_count == 23
+        tg.start_soon.assert_called_once_with(
+            backend._rawq_ensure_index, "p1", runtime, ANY
+        )
+
+    async def test_ws_handler_branch_and_message_actions(self, backend, runtime):
+        reqs = [
+            json.dumps({"method": "branch.create", "id": 60}),
+            json.dumps({"method": "branch.switch", "id": 61}),
+            json.dumps({"method": "branch.adopt", "id": 62}),
+            json.dumps({"method": "branch.archive", "id": 63}),
+            json.dumps({"method": "branch.delete", "id": 64}),
+            json.dumps({"method": "message.retry", "id": 65}),
+            json.dumps({"method": "message.save", "id": 66}),
+            json.dumps({"method": "message.delete", "id": 67}),
+            json.dumps({"method": "message.adopt", "id": 68}),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        backend._handle_branch_create = AsyncMock()
+        backend._handle_branch_switch = AsyncMock()
+        backend._handle_branch_adopt = AsyncMock()
+        backend._handle_branch_archive = AsyncMock()
+        backend._handle_branch_delete = AsyncMock()
+        backend._handle_message_retry = AsyncMock()
+        backend._handle_message_save = AsyncMock()
+        backend._handle_message_delete = AsyncMock()
+        backend._handle_message_adopt = AsyncMock()
+
+        await backend._ws_handler(runtime, False, ws)
+
+        backend._handle_branch_create.assert_called_once()
+        backend._handle_branch_switch.assert_called_once()
+        backend._handle_branch_adopt.assert_called_once()
+        backend._handle_branch_archive.assert_called_once()
+        backend._handle_branch_delete.assert_called_once()
+        backend._handle_message_retry.assert_called_once()
+        backend._handle_message_save.assert_called_once()
+        backend._handle_message_delete.assert_called_once()
+        backend._handle_message_adopt.assert_called_once()
+
+    async def test_ws_handler_phase4_and_unknown(self, backend, runtime):
+        reqs = [
+            json.dumps({"method": "discussion.save_roundtable", "id": 70}),
+            json.dumps({"method": "discussion.link_branch", "id": 71}),
+            json.dumps({"method": "synthesis.create_from_discussion", "id": 72}),
+            json.dumps({"method": "review.request", "id": 73}),
+            json.dumps({"method": "handoff.create", "id": 74}),
+            json.dumps({"method": "handoff.parse", "id": 75}),
+            json.dumps({"method": "engine.list", "id": 76}),
+            json.dumps({"method": "unknown.method", "id": 77}),  # Unknown method
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        backend._handle_discussion_save = AsyncMock()
+        backend._handle_discussion_link_branch = AsyncMock()
+        backend._handle_synthesis_create = AsyncMock()
+        backend._handle_review_request = AsyncMock()
+        backend._handle_handoff_create = AsyncMock()
+        backend._handle_handoff_parse = AsyncMock()
+        backend._handle_engine_list = AsyncMock()
+
+        await backend._ws_handler(runtime, False, ws)
+
+        backend._handle_discussion_save.assert_called_once()
+        backend._handle_discussion_link_branch.assert_called_once()
+        backend._handle_synthesis_create.assert_called_once()
+        backend._handle_review_request.assert_called_once()
+        backend._handle_handoff_create.assert_called_once()
+        backend._handle_handoff_parse.assert_called_once()
+        backend._handle_engine_list.assert_called_once()
+
+        # Check unknown method error response
+        err_resp = next((m for m in ws.sent if m.get("id") == 77), None)
+        assert err_resp is not None
+        assert "error" in err_resp
+        assert err_resp["error"]["code"] == -32601
+
+    async def test_ws_handler_exception_handling(self, backend, runtime):
+        # handler raises exception
+        reqs = [
+            json.dumps({"method": "conversation.create", "id": 80}),
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        # Make handler throw error
+        with patch(
+            "tunapi.tunadish.context_handlers.handle_conversation_create",
+            side_effect=ValueError("fail"),
+        ):
+            await backend._ws_handler(runtime, False, ws)
+
+        # Check that error response for ID 80 was sent
+        err_resp = next((m for m in ws.sent if m.get("id") == 80), None)
+        assert err_resp is not None
+        assert err_resp["error"]["code"] == -32000
+        assert "fail" in err_resp["error"]["message"]
+
+    async def test_ws_handler_orphan_cancel_on_disconnect(self, backend, runtime):
+        # Test that active runs are cancelled when last transport disconnects
+        ref = MessageRef(channel_id="conv1", message_id="m1")
+        task = RunningTask()
+        backend.run_map["conv1"] = ref
+        backend.running_tasks[ref] = task
+
+        ws = FakeWebsocketWithMessages([])
+        await backend._ws_handler(runtime, False, ws)
+
+        assert task.cancel_requested.is_set()

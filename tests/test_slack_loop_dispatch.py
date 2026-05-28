@@ -18,88 +18,15 @@ from tunapi.slack.loop import (
     _try_dispatch_command,
     _ResolvedPrompt,
 )
-from tunapi.slack.parsing import SlackMessageEvent
-from tunapi.transport import MessageRef, RenderedMessage
+from tunapi.transport import RenderedMessage
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_msg(
-    text: str = "",
-    channel_id: str = "C1",
-    user_id: str = "U1",
-    ts: str = "100.0",
-    thread_ts: str | None = None,
-    files: list | None = None,
-) -> SlackMessageEvent:
-    return SlackMessageEvent(
-        channel_id=channel_id,
-        user_id=user_id,
-        text=text,
-        ts=ts,
-        thread_ts=thread_ts,
-        files=files,
-    )
-
-
-def _make_cfg(
-    *,
-    files_enabled: bool = False,
-    voice_enabled: bool = False,
-    bot_user_id: str = "BOTU",
-    channel_id: str | None = "C1",
-    session_mode: str = "stateless",
-    projects_root: str | None = None,
-) -> MagicMock:
-    cfg = MagicMock()
-    cfg.files_enabled = files_enabled
-    cfg.voice_enabled = voice_enabled
-    cfg.bot_user_id = bot_user_id
-    cfg.channel_id = channel_id
-    cfg.session_mode = session_mode
-    cfg.startup_msg = "Bot started"
-    cfg.files_deny_globs = ()
-    cfg.files_max_upload_bytes = 20 * 1024 * 1024
-    cfg.files_max_download_bytes = 50 * 1024 * 1024
-    cfg.voice_max_bytes = 10 * 1024 * 1024
-    cfg.voice_model = "gpt-4o-mini-transcribe"
-    cfg.voice_base_url = None
-    cfg.voice_api_key = None
-    cfg.projects_root = projects_root
-
-    cfg.runtime = MagicMock()
-    cfg.runtime.projects_root = projects_root
-    cfg.runtime.default_engine = "claude"
-
-    cfg.exec_cfg = MagicMock()
-    cfg.exec_cfg.transport = AsyncMock()
-    cfg.exec_cfg.transport.send = AsyncMock(
-        return_value=MessageRef(channel_id="C1", message_id="200.0")
-    )
-    return cfg
-
-
-def _make_resolved_message(
-    prompt: str = "hello",
-    engine_override: str | None = None,
-    context: MagicMock | None = None,
-) -> MagicMock:
-    rm = MagicMock()
-    rm.prompt = prompt
-    rm.resume_token = None
-    rm.engine_override = engine_override
-    rm.context = context
-    return rm
-
-
-def _make_resolved_runner(*, issue: str | None = None) -> MagicMock:
-    rr = MagicMock()
-    rr.issue = issue
-    rr.runner = MagicMock()
-    return rr
+from .fakes.slack import (
+    _make_msg,
+    _make_cfg,
+    _make_resolved_message,
+    _make_resolved_runner,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +54,7 @@ class TestResolveUploadDir:
 
         with patch("tunapi.core.files.resolve_incoming_dir") as mock_resolve:
             mock_resolve.return_value = Path("/tmp/incoming/default")
-            result = _resolve_upload_dir(cfg, "C1")
+            _resolve_upload_dir(cfg, "C1")
 
         mock_resolve.assert_called_once_with("default")
 
@@ -251,7 +178,9 @@ class TestRunEngine:
         send = AsyncMock(side_effect=lambda m: sent.append(m))
         resolved = _ResolvedPrompt(text="hello", file_context="")
 
-        await _run_engine(resolved, _make_msg(text="hello"), cfg, {}, sessions, chat_prefs, send)
+        await _run_engine(
+            resolved, _make_msg(text="hello"), cfg, {}, sessions, chat_prefs, send
+        )
 
         assert len(sent) == 1
         assert "claude not installed" in sent[0].text
@@ -268,7 +197,9 @@ class TestRunEngine:
         send = AsyncMock(side_effect=lambda m: sent.append(m))
         resolved = _ResolvedPrompt(text="hello", file_context="")
 
-        await _run_engine(resolved, _make_msg(text="hello"), cfg, {}, sessions, chat_prefs, send)
+        await _run_engine(
+            resolved, _make_msg(text="hello"), cfg, {}, sessions, chat_prefs, send
+        )
 
         assert len(sent) == 1
         assert "bad project path" in sent[0].text
@@ -307,10 +238,16 @@ class TestRunEngine:
         send = AsyncMock()
         resolved = _ResolvedPrompt(text="hello", file_context="")
 
-        with patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock) as mock_hm, \
-             patch("tunapi.slack.loop.set_run_base_dir", return_value="token"), \
-             patch("tunapi.slack.loop.reset_run_base_dir"):
-            await _run_engine(resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send)
+        with (
+            patch(
+                "tunapi.slack.loop.handle_message", new_callable=AsyncMock
+            ) as mock_hm,
+            patch("tunapi.slack.loop.set_run_base_dir", return_value="token"),
+            patch("tunapi.slack.loop.reset_run_base_dir"),
+        ):
+            await _run_engine(
+                resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send
+            )
 
         mock_hm.assert_called_once()
 
@@ -327,12 +264,18 @@ class TestRunEngine:
         send = AsyncMock()
         resolved = _ResolvedPrompt(text="hello", file_context="")
 
-        with patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock) as mock_hm, \
-             patch("tunapi.slack.loop.set_run_base_dir", return_value="token"), \
-             patch("tunapi.slack.loop.reset_run_base_dir"):
+        with (
+            patch(
+                "tunapi.slack.loop.handle_message", new_callable=AsyncMock
+            ) as mock_hm,
+            patch("tunapi.slack.loop.set_run_base_dir", return_value="token"),
+            patch("tunapi.slack.loop.reset_run_base_dir"),
+        ):
             mock_hm.side_effect = RuntimeError("boom")
             # Should NOT raise
-            await _run_engine(resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send)
+            await _run_engine(
+                resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send
+            )
 
     @pytest.mark.anyio()
     async def test_session_mode_chat_gets_resume_token(self, sessions, chat_prefs):
@@ -356,7 +299,9 @@ class TestRunEngine:
     @pytest.mark.anyio()
     async def test_persona_prefix_resolved(self, sessions, chat_prefs):
         cfg = _make_cfg()
-        cfg.runtime.resolve_message.return_value = _make_resolved_message(prompt="@critic review code")
+        cfg.runtime.resolve_message.return_value = _make_resolved_message(
+            prompt="@critic review code"
+        )
         cfg.runtime.resolve_engine.return_value = "claude"
         cfg.runtime.format_context_line.return_value = None
         cfg.runtime.resolve_run_cwd.return_value = None
@@ -366,12 +311,18 @@ class TestRunEngine:
         send = AsyncMock()
         resolved = _ResolvedPrompt(text="@critic review code", file_context="")
 
-        with patch("tunapi.slack.loop._resolve_persona_prefix", new_callable=AsyncMock) as mock_rp, \
-             patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop.set_run_base_dir", return_value="token"), \
-             patch("tunapi.slack.loop.reset_run_base_dir"):
+        with (
+            patch(
+                "tunapi.slack.loop._resolve_persona_prefix", new_callable=AsyncMock
+            ) as mock_rp,
+            patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock),
+            patch("tunapi.slack.loop.set_run_base_dir", return_value="token"),
+            patch("tunapi.slack.loop.reset_run_base_dir"),
+        ):
             mock_rp.return_value = "[역할: critic]\nBe harsh.\n\n---\n\nreview code"
-            await _run_engine(resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send)
+            await _run_engine(
+                resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send
+            )
 
         mock_rp.assert_called_once()
 
@@ -389,11 +340,15 @@ class TestRunEngine:
         send = AsyncMock()
         resolved = _ResolvedPrompt(text="hello", file_context="")
 
-        with patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop.set_run_base_dir", return_value="token"), \
-             patch("tunapi.slack.loop.reset_run_base_dir"), \
-             patch("tunapi.slack.loop.apply_run_options") as mock_apply:
-            await _run_engine(resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send)
+        with (
+            patch("tunapi.slack.loop.handle_message", new_callable=AsyncMock),
+            patch("tunapi.slack.loop.set_run_base_dir", return_value="token"),
+            patch("tunapi.slack.loop.reset_run_base_dir"),
+            patch("tunapi.slack.loop.apply_run_options"),
+        ):
+            await _run_engine(
+                resolved, _make_msg(), cfg, {}, sessions, chat_prefs, send
+            )
 
         chat_prefs.get_engine_model.assert_called_once()
 
@@ -420,10 +375,20 @@ class TestDispatchMessage:
         cfg = _make_cfg()
         msg = _make_msg(text="!help")
 
-        with patch("tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock) as mock_cmd, \
-             patch("tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock) as mock_resolve, \
-             patch("tunapi.slack.loop._run_engine", new_callable=AsyncMock) as mock_engine:
+        with (
+            patch(
+                "tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock
+            ),
+            patch(
+                "tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock
+            ) as mock_cmd,
+            patch(
+                "tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock
+            ) as mock_resolve,
+            patch(
+                "tunapi.slack.loop._run_engine", new_callable=AsyncMock
+            ) as mock_engine,
+        ):
             mock_cmd.return_value = True
             await _dispatch_message(msg, cfg, {}, sessions, chat_prefs)
 
@@ -435,10 +400,20 @@ class TestDispatchMessage:
         cfg = _make_cfg()
         msg = _make_msg(text="hello")
 
-        with patch("tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock) as mock_cmd, \
-             patch("tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock) as mock_resolve, \
-             patch("tunapi.slack.loop._run_engine", new_callable=AsyncMock) as mock_engine:
+        with (
+            patch(
+                "tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock
+            ),
+            patch(
+                "tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock
+            ) as mock_cmd,
+            patch(
+                "tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock
+            ) as mock_resolve,
+            patch(
+                "tunapi.slack.loop._run_engine", new_callable=AsyncMock
+            ) as mock_engine,
+        ):
             mock_cmd.return_value = False
             mock_resolve.return_value = None
             await _dispatch_message(msg, cfg, {}, sessions, chat_prefs)
@@ -450,10 +425,20 @@ class TestDispatchMessage:
         cfg = _make_cfg()
         msg = _make_msg(text="hello")
 
-        with patch("tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock) as mock_cmd, \
-             patch("tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock) as mock_resolve, \
-             patch("tunapi.slack.loop._run_engine", new_callable=AsyncMock) as mock_engine:
+        with (
+            patch(
+                "tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock
+            ),
+            patch(
+                "tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock
+            ) as mock_cmd,
+            patch(
+                "tunapi.slack.loop._resolve_prompt", new_callable=AsyncMock
+            ) as mock_resolve,
+            patch(
+                "tunapi.slack.loop._run_engine", new_callable=AsyncMock
+            ) as mock_engine,
+        ):
             mock_cmd.return_value = False
             mock_resolve.return_value = _ResolvedPrompt(text="hello", file_context="")
             await _dispatch_message(msg, cfg, {}, sessions, chat_prefs)
@@ -465,8 +450,16 @@ class TestDispatchMessage:
         cfg = _make_cfg()
         msg = _make_msg(text="!help")
 
-        with patch("tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock) as mock_bind, \
-             patch("tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock, return_value=True):
+        with (
+            patch(
+                "tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock
+            ) as mock_bind,
+            patch(
+                "tunapi.slack.loop._try_dispatch_command",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             await _dispatch_message(msg, cfg, {}, sessions, chat_prefs)
 
         mock_bind.assert_called_once_with("C1", cfg)
@@ -476,8 +469,14 @@ class TestDispatchMessage:
         cfg = _make_cfg()
         msg = _make_msg(text="!help", thread_ts="t1")
 
-        with patch("tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock), \
-             patch("tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock) as mock_cmd:
+        with (
+            patch(
+                "tunapi.slack.loop._auto_bind_channel_project", new_callable=AsyncMock
+            ),
+            patch(
+                "tunapi.slack.loop._try_dispatch_command", new_callable=AsyncMock
+            ) as mock_cmd,
+        ):
 
             async def capture_send(*args, **kwargs):
                 # Extract the send callback (7th arg: index 6)
@@ -586,6 +585,63 @@ class TestDispatchRtCommand:
         assert call_kwargs["continue_roundtable"] is None
         assert call_kwargs["close_roundtable"] is None
 
+    @pytest.mark.anyio()
+    async def test_roundtable_flow_callbacks(self, chat_prefs):
+        cfg = _make_cfg()
+        msg = _make_msg(text="!rt", thread_ts="t1")
+        send = AsyncMock()
+
+        rt_store = RoundtableStore()
+        session = RoundtableSession(
+            thread_id="t1",
+            channel_id="C1",
+            topic="test",
+            engines=["claude"],
+            total_rounds=1,
+        )
+        rt_store.put(session)
+        rt_store.complete("t1")
+
+        with (
+            patch("tunapi.slack.loop.handle_rt", new_callable=AsyncMock) as mock_rt,
+            patch(
+                "tunapi.core.chat_loop_helpers.start_roundtable_thread",
+                new_callable=AsyncMock,
+            ) as mock_start,
+            patch(
+                "tunapi.core.chat_loop_helpers.run_followup_round",
+                new_callable=AsyncMock,
+            ) as mock_followup,
+            patch(
+                "tunapi.core.chat_loop_helpers.archive_roundtable_thread",
+                new_callable=AsyncMock,
+            ) as mock_archive,
+        ):
+            await _dispatch_rt_command(
+                "follow-up more", msg, cfg, {}, chat_prefs, rt_store, send
+            )
+
+            call_kwargs = mock_rt.call_args[1]
+            start_fn = call_kwargs["start_roundtable"]
+            continue_fn = call_kwargs["continue_roundtable"]
+            close_fn = call_kwargs["close_roundtable"]
+
+            assert start_fn is not None
+            assert continue_fn is not None
+            assert close_fn is not None
+
+            # Test start callback
+            await start_fn("new topic", 2, ["claude"])
+            mock_start.assert_called_once()
+
+            # Test continue callback
+            await continue_fn("followup topic", None)
+            mock_followup.assert_called_once()
+
+            # Test close callback
+            await close_fn()
+            mock_archive.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # _try_dispatch_command — additional commands not covered elsewhere
@@ -614,7 +670,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_persona", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -626,7 +684,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_project", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -638,7 +698,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_models", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -650,7 +712,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_memory", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -662,7 +726,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_branch", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -674,7 +740,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_review", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -686,7 +754,9 @@ class TestTryDispatchCommandExtra:
         send = AsyncMock()
 
         with patch("tunapi.slack.loop.handle_context", new_callable=AsyncMock) as mock:
-            result = await _try_dispatch_command(msg, cfg, {}, sessions, chat_prefs, None, send)
+            result = await _try_dispatch_command(
+                msg, cfg, {}, sessions, chat_prefs, None, send
+            )
 
         assert result is True
         mock.assert_called_once()
@@ -697,7 +767,9 @@ class TestTryDispatchCommandExtra:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.slack.loop._dispatch_rt_command", new_callable=AsyncMock) as mock:
+        with patch(
+            "tunapi.slack.loop._dispatch_rt_command", new_callable=AsyncMock
+        ) as mock:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )

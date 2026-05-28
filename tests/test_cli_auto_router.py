@@ -103,7 +103,9 @@ def test_run_auto_router_success_releases_lock(monkeypatch, tmp_path: Path) -> N
 
     monkeypatch.setattr(cli, "build_runtime_spec", _build_runtime_spec)
     lock = _DummyLock()
-    monkeypatch.setattr(cli, "acquire_config_lock", lambda _path, _token, _transport=None: lock)
+    monkeypatch.setattr(
+        cli, "acquire_config_lock", lambda _path, _token, _transport=None: lock
+    )
 
     cli._run_auto_router(
         default_engine_override=None,

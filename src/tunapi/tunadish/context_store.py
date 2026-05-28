@@ -10,21 +10,30 @@ from ..context import RunContext
 @dataclass
 class ConversationSettings:
     """conversation별 독립 설정 (None이면 project default fallback)."""
+
     engine: str | None = None
     model: str | None = None
     persona: str | None = None
     trigger_mode: str | None = None
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in {
-            "engine": self.engine, "model": self.model,
-            "persona": self.persona, "trigger_mode": self.trigger_mode,
-        }.items() if v is not None}
+        return {
+            k: v
+            for k, v in {
+                "engine": self.engine,
+                "model": self.model,
+                "persona": self.persona,
+                "trigger_mode": self.trigger_mode,
+            }.items()
+            if v is not None
+        }
 
     def copy(self) -> "ConversationSettings":
         return ConversationSettings(
-            engine=self.engine, model=self.model,
-            persona=self.persona, trigger_mode=self.trigger_mode,
+            engine=self.engine,
+            model=self.model,
+            persona=self.persona,
+            trigger_mode=self.trigger_mode,
         )
 
 
@@ -73,7 +82,7 @@ class ConversationContextStore:
                     active_branch_id=ctx_data.get("active_branch_id"),
                     settings=settings,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     async def _save(self) -> None:
@@ -86,7 +95,11 @@ class ConversationContextStore:
                         "label": m.label,
                         "created_at": m.created_at,
                         "active_branch_id": m.active_branch_id,
-                        **({"settings": m.settings.to_dict()} if m.settings and m.settings.to_dict() else {}),
+                        **(
+                            {"settings": m.settings.to_dict()}
+                            if m.settings and m.settings.to_dict()
+                            else {}
+                        ),
                     }
                     for conv_id, m in self._cache.items()
                 }
@@ -113,7 +126,9 @@ class ConversationContextStore:
         self._cache[conv_id] = ConversationMeta(
             project=context.project,
             branch=context.branch,
-            label=label if label is not None else (existing.label if existing else conv_id[:8]),
+            label=label
+            if label is not None
+            else (existing.label if existing else conv_id[:8]),
             created_at=existing.created_at if existing else time.time(),
         )
         await self._save()
@@ -149,7 +164,9 @@ class ConversationContextStore:
             return meta.settings
         return ConversationSettings()
 
-    async def update_conv_settings(self, conv_id: str, **kwargs: str | None) -> ConversationSettings:
+    async def update_conv_settings(
+        self, conv_id: str, **kwargs: str | None
+    ) -> ConversationSettings:
         """conversation별 설정 부분 업데이트. 존재하지 않는 conv는 무시."""
         meta = self._cache.get(conv_id)
         if meta is None:

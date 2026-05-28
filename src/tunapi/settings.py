@@ -360,9 +360,7 @@ class TunapiSettings(BaseSettings):
             )
         return raw
 
-    def resolve_transport_ids(
-        self, *, override: str | None = None
-    ) -> list[str]:
+    def resolve_transport_ids(self, *, override: str | None = None) -> list[str]:
         """Return the list of transport ids to run.
 
         Priority:

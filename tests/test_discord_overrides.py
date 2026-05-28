@@ -50,7 +50,9 @@ class TestResolveOverrides:
     """Tests for resolve_overrides()."""
 
     @pytest.mark.anyio
-    async def test_no_overrides_returns_all_none(self, store: DiscordPrefsStore) -> None:
+    async def test_no_overrides_returns_all_none(
+        self, store: DiscordPrefsStore
+    ) -> None:
         result = await resolve_overrides(store, GUILD, CHANNEL, None, "claude")
         assert result == ResolvedOverrides()
 
@@ -244,9 +246,7 @@ class TestResolveDefaultEngine:
     async def test_no_overrides_no_config_returns_none(
         self, store: DiscordPrefsStore
     ) -> None:
-        engine, source = await resolve_default_engine(
-            store, GUILD, CHANNEL, None, None
-        )
+        engine, source = await resolve_default_engine(store, GUILD, CHANNEL, None, None)
         assert engine is None
         assert source is None
 

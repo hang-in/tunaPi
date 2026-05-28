@@ -44,7 +44,7 @@ class ConversationSessionStore:
                     token=entry["token"],
                     cwd=entry.get("cwd"),
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("conv_session_store.load_failed", path=str(self._path))
 
     async def _save(self) -> None:

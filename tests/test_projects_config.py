@@ -1,10 +1,18 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
 from tunapi import cli
-from tunapi.config import ConfigError, read_config
+from tunapi.config import (
+    ConfigError,
+    read_config,
+    ensure_table,
+    write_config,
+    dump_toml,
+    ProjectsConfig,
+)
 from tunapi.ids import RESERVED_CHAT_COMMANDS
 from tunapi.settings import TunapiSettings
 
@@ -157,3 +165,89 @@ def test_projects_relative_path_resolves(tmp_path: Path) -> None:
         reserved=RESERVED_CHAT_COMMANDS,
     )
     assert projects.projects["z80"].path == config_path.parent / "repo"
+
+
+class TestEnsureTable:
+    def test_creates_table(self, tmp_path: Path):
+        data: dict[str, Any] = {}
+        result = ensure_table(data, "section", config_path=tmp_path / "c.toml")
+        assert isinstance(result, dict)
+        assert data["section"] is result
+
+    def test_existing_table(self, tmp_path: Path):
+        data: dict[str, Any] = {"section": {"key": "val"}}
+        result = ensure_table(data, "section", config_path=tmp_path / "c.toml")
+        assert result == {"key": "val"}
+
+    def test_non_dict_raises(self, tmp_path: Path):
+        data: dict[str, Any] = {"section": "not a dict"}
+        with pytest.raises(ConfigError):
+            ensure_table(data, "section", config_path=tmp_path / "c.toml")
+
+
+class TestReadWriteConfigPush:
+    def test_round_trip(self, tmp_path: Path):
+        cfg = tmp_path / "tunapi.toml"
+        data = {"transport": "telegram", "default_engine": "claude"}
+        write_config(data, cfg)
+        loaded = read_config(cfg)
+        assert loaded["transport"] == "telegram"
+        assert loaded["default_engine"] == "claude"
+
+    def test_read_missing(self, tmp_path: Path):
+        with pytest.raises(ConfigError):
+            read_config(tmp_path / "nonexistent.toml")
+
+
+class TestDumpToml:
+    def test_basic(self):
+        result = dump_toml({"key": "value"})
+        assert 'key = "value"' in result
+
+
+class TestProjectsConfigPush:
+    def test_resolve_none(self):
+        cfg = ProjectsConfig(projects={})
+        assert cfg.resolve(None) is None
+
+    def test_resolve_default(self):
+        from tunapi.config import ProjectConfig
+
+        pc = ProjectConfig(alias="proj", path=Path("/p"), worktrees_dir=Path(".wt"))
+        cfg = ProjectsConfig(projects={"proj": pc}, default_project="proj")
+        result = cfg.resolve(None)
+        assert result is not None
+
+    def test_resolve_alias(self):
+        from tunapi.config import ProjectConfig
+
+        pc = ProjectConfig(alias="proj", path=Path("/p"), worktrees_dir=Path(".wt"))
+        cfg = ProjectsConfig(projects={"proj": pc})
+        result = cfg.resolve("proj")
+        assert result is not None
+
+    def test_resolve_case_insensitive(self):
+        from tunapi.config import ProjectConfig
+
+        pc = ProjectConfig(alias="proj", path=Path("/p"), worktrees_dir=Path(".wt"))
+        cfg = ProjectsConfig(projects={"proj": pc})
+        result = cfg.resolve("PROJ")
+        assert result is not None
+
+    def test_resolve_missing(self):
+        cfg = ProjectsConfig(projects={})
+        assert cfg.resolve("missing") is None
+
+
+class TestConfigReadErrorsPush:
+    def test_read_invalid(self, tmp_path: Path):
+        cfg = tmp_path / "bad.toml"
+        cfg.write_text("invalid [[[")
+        with pytest.raises(ConfigError):
+            read_config(cfg)
+
+
+class TestDumpTomlNestedPush:
+    def test_nested(self):
+        result = dump_toml({"a": {"b": "c"}})
+        assert "b" in result

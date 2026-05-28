@@ -56,9 +56,7 @@ def token_fingerprint(token: str) -> str:
     return digest[:10]
 
 
-def lock_path_for_config(
-    config_path: Path, *, transport_id: str | None = None
-) -> Path:
+def lock_path_for_config(config_path: Path, *, transport_id: str | None = None) -> Path:
     if transport_id:
         return config_path.with_suffix(f".{transport_id}.lock")
     return config_path.with_suffix(".lock")
@@ -98,9 +96,7 @@ def acquire_lock(
                 if _pid_running(existing.pid):
                     raise LockError(path=lock_path, state="running") from None
             # stale lock → 탈취 (tmp 파일 생성 후 os.replace()로 원자적 교체)
-            tmp_path = lock_path.with_suffix(
-                f"{lock_path.suffix}.{os.getpid()}.tmp"
-            )
+            tmp_path = lock_path.with_suffix(f"{lock_path.suffix}.{os.getpid()}.tmp")
             _write_lock_info(
                 tmp_path,
                 pid=os.getpid(),
@@ -115,7 +111,9 @@ def acquire_lock(
             return LockHandle(path=lock_path)
         else:
             # fd 획득 성공 — lock info 기록
-            _write_lock_info_fd(fd, pid=os.getpid(), token_fingerprint=token_fingerprint)
+            _write_lock_info_fd(
+                fd, pid=os.getpid(), token_fingerprint=token_fingerprint
+            )
             return LockHandle(path=lock_path)
 
     except OSError as exc:

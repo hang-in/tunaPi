@@ -3,10 +3,8 @@ plus the core handle_rt shared handler."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from unittest.mock import AsyncMock, MagicMock
 
-import anyio
 import pytest
 
 from tunapi.core.roundtable import (
@@ -1173,13 +1171,17 @@ class TestParseRtArgs:
 
 class TestParseFollowupArgs:
     def test_simple_topic(self):
-        topic, engines, err = parse_followup_args("what about caching?", ["claude", "gemini"])
+        topic, engines, err = parse_followup_args(
+            "what about caching?", ["claude", "gemini"]
+        )
         assert topic == "what about caching?"
         assert engines is None
         assert err is None
 
     def test_engine_filter(self):
-        topic, engines, err = parse_followup_args('claude "question"', ["claude", "gemini"])
+        topic, engines, err = parse_followup_args(
+            'claude "question"', ["claude", "gemini"]
+        )
         assert topic == "question"
         assert engines == ["claude"]
 

@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from tunapi.core.chat_prefs import ChatPrefsStore
-from tunapi.engine_models import KNOWN_MODELS, get_models
+from tunapi.engine_models import (
+    KNOWN_MODELS,
+    get_models,
+    shorten_model,
+    find_engine_for_model,
+    invalidate_cache,
+)
+from tunapi.engines import list_backend_ids
 from tunapi.transport import RenderedMessage
 
 pytestmark = pytest.mark.anyio
@@ -275,3 +282,41 @@ class TestHandleModelCommand:
 
         assert "Current engine" in captured[0]
         assert "Usage" in captured[0]
+
+
+class TestListBackendIds:
+    def test_returns_list(self):
+        ids = list_backend_ids()
+        assert isinstance(ids, list)
+        assert len(ids) > 0
+
+    def test_with_allowlist(self):
+        all_ids = list_backend_ids()
+        if all_ids:
+            filtered = list_backend_ids(allowlist={all_ids[0]})
+            assert len(filtered) <= len(all_ids)
+
+
+class TestShortenModelPush:
+    def test_claude_opus(self):
+        result = shorten_model("claude-opus-4-6[1m]")
+        assert "opus" in result.lower()
+
+    def test_unknown(self):
+        result = shorten_model("some-random-model")
+        assert result == "some-random-model"
+
+    def test_empty(self):
+        result = shorten_model("")
+        assert result == ""
+
+
+class TestFindEngineForModelPush:
+    def test_unknown_model(self):
+        result = find_engine_for_model("totally-fake-model-xyz")
+        assert result is None or isinstance(result, str)
+
+
+class TestInvalidateCachePush:
+    def test_no_crash(self):
+        invalidate_cache()

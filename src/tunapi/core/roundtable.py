@@ -624,7 +624,8 @@ async def handle_rt(
     runtime: TransportRuntime,
     send: Callable[[RenderedMessage], Awaitable[None]],
     start_roundtable: Callable[[str, int, list[str]], Awaitable[None]],
-    continue_roundtable: Callable[[str, list[str] | None], Awaitable[None]] | None = None,
+    continue_roundtable: Callable[[str, list[str] | None], Awaitable[None]]
+    | None = None,
     close_roundtable: Callable[[], Awaitable[None]] | None = None,
     thread_id: str | None = None,
 ) -> None:

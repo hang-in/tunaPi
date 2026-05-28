@@ -1,4 +1,5 @@
 """Additional tests for the Mattermost HTTP client — covering uncovered lines."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -22,7 +23,9 @@ from tunapi.mattermost.client_api import (
 # ---------------------------------------------------------------------------
 
 
-def _json_response(data: Any, status: int = 200, headers: dict[str, str] | None = None) -> httpx.Response:
+def _json_response(
+    data: Any, status: int = 200, headers: dict[str, str] | None = None
+) -> httpx.Response:
     return httpx.Response(
         status_code=status,
         json=data,
@@ -193,7 +196,9 @@ class TestDecodeResult:
         assert result is None
 
     def test_invalid_payload(self, client: HttpMattermostClient):
-        result = client._decode_result(method="test", payload={"not_valid": True}, model=User)  # noqa: SLF001
+        result = client._decode_result(
+            method="test", payload={"not_valid": True}, model=User
+        )  # noqa: SLF001
         assert result is None
 
     def test_valid_payload(self, client: HttpMattermostClient):
@@ -250,9 +255,7 @@ class TestCreateDirectChannel:
     async def test_success(
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
-        transport.enqueue(
-            _json_response({"id": "ch1", "type": "D", "team_id": ""})
-        )
+        transport.enqueue(_json_response({"id": "ch1", "type": "D", "team_id": ""}))
         ch = await client.create_direct_channel("u1", "u2")
         assert isinstance(ch, Channel)
         assert ch.type == "D"
@@ -288,7 +291,9 @@ class TestPatchPost:
     async def test_minimal(
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
-        transport.enqueue(_json_response({"id": "p1", "channel_id": "c1", "message": "same"}))
+        transport.enqueue(
+            _json_response({"id": "p1", "channel_id": "c1", "message": "same"})
+        )
         await client.patch_post("p1")
         import json
 
@@ -324,7 +329,14 @@ class TestUpdatePostWithProps:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({"id": "p1", "channel_id": "c1", "message": "edited", "props": {"k": "v"}})
+            _json_response(
+                {
+                    "id": "p1",
+                    "channel_id": "c1",
+                    "message": "edited",
+                    "props": {"k": "v"},
+                }
+            )
         )
         post = await client.update_post("p1", "edited", props={"k": "v"})
         assert isinstance(post, Post)
@@ -356,13 +368,15 @@ class TestGetFileInfo:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({
-                "id": "f1",
-                "name": "report.pdf",
-                "size": 5000,
-                "mime_type": "application/pdf",
-                "extension": "pdf",
-            })
+            _json_response(
+                {
+                    "id": "f1",
+                    "name": "report.pdf",
+                    "size": 5000,
+                    "mime_type": "application/pdf",
+                    "extension": "pdf",
+                }
+            )
         )
         fi = await client.get_file_info("f1")
         assert isinstance(fi, FileInfo)
@@ -413,11 +427,13 @@ class TestAddReaction:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({
-                "user_id": "u1",
-                "post_id": "p1",
-                "emoji_name": "thumbsup",
-            })
+            _json_response(
+                {
+                    "user_id": "u1",
+                    "post_id": "p1",
+                    "emoji_name": "thumbsup",
+                }
+            )
         )
         result = await client.add_reaction("u1", "p1", "thumbsup")
         assert result is True

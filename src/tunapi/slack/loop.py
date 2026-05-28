@@ -13,7 +13,7 @@ from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
     archive_roundtable_thread,
     auto_bind_channel_project,
-    dispatch_roundtable_command,
+    dispatch_roundtable_command_flow,
     handle_cancel_reaction_by_message_id,
     handle_file_command,
     handle_voice_attachments,
@@ -29,7 +29,7 @@ from ..core.memory_facade import ProjectMemoryFacade
 from ..core.roundtable import (
     RoundtableSession,
     RoundtableStore,
-    run_followup_round,
+    run_followup_round,  # noqa: F401
 )
 from ..journal import (
     Journal,
@@ -262,58 +262,20 @@ async def _dispatch_rt_command(
     facade: ProjectMemoryFacade | None = None,
 ) -> None:
     """Handle the !rt / /rt command, including follow-up and close."""
-    thread_id = msg.thread_ts
-
-    async def _continue_roundtable_session(
-        session: RoundtableSession,
-        topic: str,
-        engines_filter: list[str] | None,
-        ambient_context: Any | None,
-    ) -> None:
-        await run_followup_round(
-            session,
-            topic,
-            engines_filter,
-            cfg=cfg,
-            running_tasks=running_tasks,
-            ambient_context=ambient_context,
-        )
-
-    async def _archive_roundtable_session(
-        session: RoundtableSession,
-        project: str | None,
-        branch: str | None,
-    ) -> None:
-        await _archive_roundtable(
-            session,
-            journal,
-            send,
-            facade=facade,
-            project=project,
-            branch=branch,
-        )
-
-    await dispatch_roundtable_command(
+    await dispatch_roundtable_command_flow(
         args,
-        runtime=cfg.runtime,
+        cfg=cfg,
         channel_id=msg.channel_id,
-        thread_id=thread_id,
+        thread_id=msg.thread_ts,
+        running_tasks=running_tasks,
         chat_prefs=chat_prefs,
         roundtables=roundtables,
         send=send,
-        start_roundtable=lambda topic, rounds, engines: _start_roundtable(
-            msg.channel_id,
-            topic,
-            rounds,
-            engines,
-            cfg=cfg,
-            running_tasks=running_tasks,
-            chat_prefs=chat_prefs,
-            roundtables=roundtables,
-        ),
         handle_rt_command=handle_rt,
-        continue_roundtable_session=_continue_roundtable_session,
-        archive_roundtable_session=_archive_roundtable_session,
+        render_header=_render_roundtable_header,
+        close_message="Roundtable closed.",
+        journal=journal,
+        facade=facade,
     )
 
 

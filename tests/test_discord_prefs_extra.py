@@ -10,7 +10,6 @@ import pytest
 from tunapi.discord.prefs import (
     PREFS_VERSION,
     DiscordChannelPrefsData,
-    DiscordPrefs,
     DiscordPrefsStore,
     _coerce_str,
     _coerce_str_map,
@@ -22,6 +21,7 @@ pytestmark = pytest.mark.anyio
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _make_store(tmp_path: Path) -> DiscordPrefsStore:
     config_path = tmp_path / "tunapi.toml"
@@ -35,6 +35,7 @@ def _prefs_path(tmp_path: Path) -> Path:
 # ===========================================================================
 # _coerce_str / _coerce_str_map (module-level helpers)
 # ===========================================================================
+
 
 class TestCoerceStr:
     def test_valid_string(self) -> None:
@@ -83,6 +84,7 @@ class TestCoerceStrMap:
 # DiscordChannelPrefsData
 # ===========================================================================
 
+
 class TestDiscordChannelPrefsData:
     def test_defaults(self) -> None:
         d = DiscordChannelPrefsData()
@@ -95,6 +97,7 @@ class TestDiscordChannelPrefsData:
 # ===========================================================================
 # Load / save basics
 # ===========================================================================
+
 
 class TestLoadSave:
     async def test_fresh_store_returns_none(self, tmp_path: Path) -> None:
@@ -134,6 +137,7 @@ class TestLoadSave:
 # Model overrides
 # ===========================================================================
 
+
 class TestModelOverrides:
     async def test_set_get_clear(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -155,11 +159,15 @@ class TestModelOverrides:
         assert await store.get_model_override(1, 100, "claude") is None
         assert await store.get_model_override(1, 100, "gemini") is None
 
-    async def test_clear_model_overrides_no_channel_is_noop(self, tmp_path: Path) -> None:
+    async def test_clear_model_overrides_no_channel_is_noop(
+        self, tmp_path: Path
+    ) -> None:
         store = _make_store(tmp_path)
         await store.clear_model_overrides(1, 999)  # no error
 
-    async def test_clear_model_overrides_no_overrides_is_noop(self, tmp_path: Path) -> None:
+    async def test_clear_model_overrides_no_overrides_is_noop(
+        self, tmp_path: Path
+    ) -> None:
         store = _make_store(tmp_path)
         await store.set_trigger_mode(1, 100, "all")
         await store.clear_model_overrides(1, 100)  # model_overrides is None
@@ -175,6 +183,7 @@ class TestModelOverrides:
 # ===========================================================================
 # Reasoning overrides
 # ===========================================================================
+
 
 class TestReasoningOverrides:
     async def test_set_get_clear(self, tmp_path: Path) -> None:
@@ -196,7 +205,9 @@ class TestReasoningOverrides:
         await store.clear_reasoning_overrides(1, 100)
         assert await store.get_reasoning_override(1, 100, "claude") is None
 
-    async def test_clear_reasoning_overrides_no_channel_is_noop(self, tmp_path: Path) -> None:
+    async def test_clear_reasoning_overrides_no_channel_is_noop(
+        self, tmp_path: Path
+    ) -> None:
         store = _make_store(tmp_path)
         await store.clear_reasoning_overrides(1, 999)
 
@@ -209,6 +220,7 @@ class TestReasoningOverrides:
 # ===========================================================================
 # Trigger mode
 # ===========================================================================
+
 
 class TestTriggerMode:
     async def test_set_get_clear(self, tmp_path: Path) -> None:
@@ -232,6 +244,7 @@ class TestTriggerMode:
 # Default engine
 # ===========================================================================
 
+
 class TestDefaultEngine:
     async def test_set_get_clear(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -253,6 +266,7 @@ class TestDefaultEngine:
 # ===========================================================================
 # get_all_overrides
 # ===========================================================================
+
 
 class TestGetAllOverrides:
     async def test_empty_channel(self, tmp_path: Path) -> None:
@@ -280,6 +294,7 @@ class TestGetAllOverrides:
 # clear_channel
 # ===========================================================================
 
+
 class TestClearChannel:
     async def test_clears_everything(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -297,6 +312,7 @@ class TestClearChannel:
 # ===========================================================================
 # Channel key — guild_id=None (DM case)
 # ===========================================================================
+
 
 class TestChannelKeyDM:
     async def test_dm_channel_uses_channel_id_only(self, tmp_path: Path) -> None:
@@ -320,6 +336,7 @@ class TestChannelKeyDM:
 # Pruning — channel entry removed when all fields are None
 # ===========================================================================
 
+
 class TestPruning:
     async def test_channel_pruned_when_empty(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -329,7 +346,9 @@ class TestPruning:
         data = json.loads(prefs.read_text(encoding="utf-8"))
         assert data["channels"] == {}
 
-    async def test_channel_not_pruned_when_other_fields_set(self, tmp_path: Path) -> None:
+    async def test_channel_not_pruned_when_other_fields_set(
+        self, tmp_path: Path
+    ) -> None:
         store = _make_store(tmp_path)
         await store.set_trigger_mode(1, 100, "all")
         await store.set_model_override(1, 100, "claude", "opus")
@@ -342,6 +361,7 @@ class TestPruning:
 # ===========================================================================
 # Migration
 # ===========================================================================
+
 
 class TestMigration:
     async def test_no_legacy_file_no_migration(self, tmp_path: Path) -> None:
@@ -381,7 +401,9 @@ class TestMigration:
         await store.ensure_loaded()
         assert not _prefs_path(tmp_path).exists()
 
-    async def test_legacy_channel_with_only_empty_values_not_migrated(self, tmp_path: Path) -> None:
+    async def test_legacy_channel_with_only_empty_values_not_migrated(
+        self, tmp_path: Path
+    ) -> None:
         legacy_path = tmp_path / "discord_state.json"
         data = {
             "channels": {
@@ -412,16 +434,19 @@ class TestMigration:
         await store.ensure_loaded()
         assert await store.get_model_override(3, 4, "claude") == "opus"
 
-    async def test_migration_not_run_when_prefs_file_exists(self, tmp_path: Path) -> None:
+    async def test_migration_not_run_when_prefs_file_exists(
+        self, tmp_path: Path
+    ) -> None:
         # Write a prefs file first
         prefs = _prefs_path(tmp_path)
         prefs.parent.mkdir(parents=True, exist_ok=True)
         prefs.write_text(json.dumps({"version": 1, "channels": {}}), encoding="utf-8")
         # Write a legacy file with data
         legacy_path = tmp_path / "discord_state.json"
-        legacy_path.write_text(json.dumps({
-            "channels": {"1:2": {"model_overrides": {"claude": "opus"}}}
-        }), encoding="utf-8")
+        legacy_path.write_text(
+            json.dumps({"channels": {"1:2": {"model_overrides": {"claude": "opus"}}}}),
+            encoding="utf-8",
+        )
         store = _make_store(tmp_path)
         await store.ensure_loaded()
         # Legacy data should NOT be migrated since prefs file already exists
@@ -431,6 +456,7 @@ class TestMigration:
 # ===========================================================================
 # Version upgrade path
 # ===========================================================================
+
 
 class TestVersionUpgrade:
     async def test_older_version_upgraded_and_persisted(self, tmp_path: Path) -> None:
@@ -452,6 +478,7 @@ class TestVersionUpgrade:
 # ===========================================================================
 # Default config_path
 # ===========================================================================
+
 
 class TestDefaultPath:
     def test_none_config_path_uses_home(self) -> None:

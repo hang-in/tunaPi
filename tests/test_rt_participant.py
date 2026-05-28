@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from tunapi.core.rt_participant import (
-    RoundtableParticipant,
     build_participants_from_config,
     build_participants_from_engines,
 )

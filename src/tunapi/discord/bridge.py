@@ -11,6 +11,7 @@ import discord
 from tunapi.markdown import MarkdownFormatter
 from tunapi.progress import ProgressState
 from tunapi.transport import MessageRef, RenderedMessage, SendOptions
+from tunapi.core.presenter import ChatPresenter
 
 from .client import DiscordBotClient
 from .render import MAX_BODY_CHARS, prepare_discord, prepare_discord_multi
@@ -56,7 +57,7 @@ class ClearView(discord.ui.View):
         super().__init__(timeout=None)
 
 
-class DiscordPresenter:
+class DiscordPresenter(ChatPresenter):
     """Presenter for rendering messages to Discord format."""
 
     def __init__(
@@ -65,8 +66,14 @@ class DiscordPresenter:
         formatter: MarkdownFormatter | None = None,
         message_overflow: str = "split",
     ) -> None:
-        self._formatter = formatter or MarkdownFormatter()
-        self._message_overflow = message_overflow
+        super().__init__(
+            prepare=prepare_discord,
+            prepare_multi=lambda parts: prepare_discord_multi(
+                parts, max_body_chars=MAX_BODY_CHARS
+            ),
+            formatter=formatter,
+            message_overflow=message_overflow,
+        )
 
     def render_progress(
         self,
@@ -76,13 +83,10 @@ class DiscordPresenter:
         label: str = "working",
     ) -> RenderedMessage:
         """Render a progress update message."""
-        parts = self._formatter.render_progress_parts(
-            state, elapsed_s=elapsed_s, label=label
-        )
-        text = prepare_discord(parts)
+        rendered = super().render_progress(state, elapsed_s=elapsed_s, label=label)
         is_cancelled = _is_cancelled_label(label)
         return RenderedMessage(
-            text=text,
+            text=rendered.text,
             extra={
                 "show_cancel": not is_cancelled,
             },
@@ -97,22 +101,17 @@ class DiscordPresenter:
         answer: str,
     ) -> RenderedMessage:
         """Render a final response message."""
-        parts = self._formatter.render_final_parts(
+        rendered = super().render_final(
             state, elapsed_s=elapsed_s, status=status, answer=answer
         )
-        if self._message_overflow == "split":
-            messages = prepare_discord_multi(parts, max_body_chars=MAX_BODY_CHARS)
-            text = messages[0]
-            extra: dict = {"show_cancel": False}
-            if len(messages) > 1:
-                followups = [
-                    RenderedMessage(text=msg, extra={"show_cancel": False})
-                    for msg in messages[1:]
-                ]
-                extra["followups"] = followups
-            return RenderedMessage(text=text, extra=extra)
-        text = prepare_discord(parts)
-        return RenderedMessage(text=text, extra={"show_cancel": False})
+        extra: dict = {"show_cancel": False}
+        if rendered.extra and "followups" in rendered.extra:
+            followups = [
+                RenderedMessage(text=msg.text, extra={"show_cancel": False})
+                for msg in rendered.extra["followups"]
+            ]
+            extra["followups"] = followups
+        return RenderedMessage(text=rendered.text, extra=extra)
 
 
 def _is_cancelled_label(label: str) -> bool:

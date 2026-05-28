@@ -14,11 +14,13 @@ from tunapi.discord.outbox import (
     OutboxOp,
     RetryAfter,
 )
+from .fakes.discord import FakeClock, FakeSleep
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _async_return(value):
     return value
@@ -39,31 +41,6 @@ def _make_op(
         channel_id=channel_id,
         label=label,
     )
-
-
-class FakeClock:
-    """Controllable clock for deterministic timing tests."""
-
-    def __init__(self, start: float = 0.0):
-        self._now = start
-
-    def __call__(self) -> float:
-        return self._now
-
-    def advance(self, seconds: float) -> None:
-        self._now += seconds
-
-
-class FakeSleep:
-    """Records sleep calls and advances the clock."""
-
-    def __init__(self, clock: FakeClock):
-        self._clock = clock
-        self.calls: list[float] = []
-
-    async def __call__(self, seconds: float) -> None:
-        self.calls.append(seconds)
-        self._clock.advance(seconds)
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +455,6 @@ class TestRetryAfterHandling:
     async def test_retry_after_coalesced_during_retry(self):
         """If a new op replaces the retried op, retried op gets None."""
         call_count = 0
-        gate = anyio.Event()
 
         async def _flaky():
             nonlocal call_count
@@ -580,7 +556,7 @@ class TestCloseAndDrop:
             op = _make_op(result_value="first")
             # Execute first op to set next_at far in the future
             await outbox.enqueue(key="k1", op=op)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         # Now enqueue another op that will be pending due to rate limit
@@ -692,8 +668,6 @@ class TestFatalError:
         await outbox.ensure_worker()
 
         # Monkey-patch to cause a fatal error during the run loop
-        original_pick = outbox._pick_locked
-
         def _exploding_pick():
             raise RuntimeError("fatal!")
 

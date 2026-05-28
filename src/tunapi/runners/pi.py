@@ -24,7 +24,12 @@ from ..model import (
     StartedEvent,
     TunapiEvent,
 )
-from ..runner import JsonlSubprocessRunner, MsgspecJsonlRunnerMixin, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    MsgspecJsonlRunnerMixin,
+    ResumeTokenMixin,
+    Runner,
+)
 from .run_options import get_run_options
 from ..schemas import pi as pi_schema
 from ..utils.paths import get_run_base_dir
@@ -184,7 +189,9 @@ def _process_content_blocks(
                 result_content = item.get("content", "")
                 is_error = item.get("is_error", False)
                 if action is None:
-                    action = Action(id=tool_use_id, kind="tool", title="tool result", detail={})
+                    action = Action(
+                        id=tool_use_id, kind="tool", title="tool result", detail={}
+                    )
                 detail = dict(action.detail)
                 detail["result"] = result_content
                 detail["is_error"] = is_error
@@ -273,18 +280,21 @@ def translate_pi_event(
                     _process_content_blocks(
                         content,
                         state=state,
-                        parent_tool_use_id=parent_id if isinstance(parent_id, str) else None,
+                        parent_tool_use_id=parent_id
+                        if isinstance(parent_id, str)
+                        else None,
                     )
                 )
             return out
 
         case pi_schema.MessageUpdate(
-            message=_message, assistantMessageEvent=assistant_event, event=update_event
+            message=_message,
+            assistantMessageEvent=_assistant_event,
+            event=update_event,
         ):
             # pi wraps the actual payload in an "event" sub-object (future-proof)
             if update_event is not None:
                 _message = update_event.message
-                assistant_event = update_event.assistantMessageEvent
             # assistantMessageEvent carries type/delta metadata but no "role" field.
             # The full content (with role) is always in the message field.
             msg = _message
@@ -295,7 +305,9 @@ def translate_pi_event(
                     _process_content_blocks(
                         content,
                         state=state,
-                        parent_tool_use_id=parent_id if isinstance(parent_id, str) else None,
+                        parent_tool_use_id=parent_id
+                        if isinstance(parent_id, str)
+                        else None,
                     )
                 )
             return out

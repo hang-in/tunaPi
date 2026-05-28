@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,7 +14,7 @@ from tunapi.context import RunContext
 from tunapi.core.memory_facade import ProjectMemoryFacade
 from tunapi.journal import Journal, JournalEntry
 from tunapi.runner_bridge import RunningTask
-from tunapi.transport import MessageRef, RenderedMessage
+from tunapi.transport import MessageRef
 from tunapi.tunadish.backend import (
     TunadishBackend,
     _RAWQ_CONTEXT_RE,
@@ -24,8 +22,6 @@ from tunapi.tunadish.backend import (
 )
 from tunapi.tunadish.context_store import (
     ConversationContextStore,
-    ConversationMeta,
-    ConversationSettings,
 )
 from tunapi.tunadish.rawq_bridge import (
     _DEFAULT_EXCLUDE,
@@ -153,8 +149,7 @@ class TestSiblingContextRegex:
 
     def test_removes_sibling_block(self):
         text = (
-            "<sibling_sessions>\nsession info\n</sibling_sessions>\n---\n"
-            "User question"
+            "<sibling_sessions>\nsession info\n</sibling_sessions>\n---\nUser question"
         )
         cleaned = _SIBLING_CONTEXT_RE.sub("", text)
         assert "<sibling_sessions>" not in cleaned
@@ -243,7 +238,7 @@ class TestDiscoverProjects:
         config_file = tmp_path / "tunapi.toml"
         config_file.write_text(
             f'projects_root = "{projects_root}"\n'
-            f'[projects.myproj]\n'
+            f"[projects.myproj]\n"
             f'path = "{proj_dir}"\n'
         )
 
@@ -334,6 +329,7 @@ class TestBuildCrossSessionSummary:
 
         # Write a journal entry for conv2
         import time
+
         entry = JournalEntry(
             run_id="run1",
             channel_id="conv2",
@@ -377,16 +373,24 @@ class TestBuildAdoptSummary:
         branch.branch_id = "br-aaaabbbb"
 
         # Add prompt and response entries
-        await backend._journal.append(JournalEntry(
-            run_id="r1", channel_id="conv1",
-            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            event="prompt", data={"text": "Fix the bug"},
-        ))
-        await backend._journal.append(JournalEntry(
-            run_id="r1", channel_id="conv1",
-            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            event="response", data={"text": "I fixed the bug in module.py"},
-        ))
+        await backend._journal.append(
+            JournalEntry(
+                run_id="r1",
+                channel_id="conv1",
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                event="prompt",
+                data={"text": "Fix the bug"},
+            )
+        )
+        await backend._journal.append(
+            JournalEntry(
+                run_id="r1",
+                channel_id="conv1",
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                event="response",
+                data={"text": "I fixed the bug in module.py"},
+            )
+        )
 
         result = await backend._build_adopt_summary(branch, "conv1")
         assert "feature" in result
@@ -407,14 +411,24 @@ class TestBuildBranchContext:
         import time
 
         ts = time.strftime("%Y-%m-%dT%H:%M:%S")
-        await backend._journal.append(JournalEntry(
-            run_id="r1", channel_id="conv1", timestamp=ts,
-            event="prompt", data={"text": "What is this project?"},
-        ))
-        await backend._journal.append(JournalEntry(
-            run_id="r1", channel_id="conv1", timestamp=ts,
-            event="completed", data={"ok": True, "answer": "It is a chat bridge."},
-        ))
+        await backend._journal.append(
+            JournalEntry(
+                run_id="r1",
+                channel_id="conv1",
+                timestamp=ts,
+                event="prompt",
+                data={"text": "What is this project?"},
+            )
+        )
+        await backend._journal.append(
+            JournalEntry(
+                run_id="r1",
+                channel_id="conv1",
+                timestamp=ts,
+                event="completed",
+                data={"ok": True, "answer": "It is a chat bridge."},
+            )
+        )
 
         result = await backend._build_branch_context("conv1", None)
         assert "branch-context" in result
@@ -427,14 +441,24 @@ class TestBuildBranchContext:
         ts = time.strftime("%Y-%m-%dT%H:%M:%S")
         # Add many entries (>8 lines)
         for i in range(10):
-            await backend._journal.append(JournalEntry(
-                run_id=f"r{i}", channel_id="conv1", timestamp=ts,
-                event="prompt", data={"text": f"Question {i}"},
-            ))
-            await backend._journal.append(JournalEntry(
-                run_id=f"r{i}", channel_id="conv1", timestamp=ts,
-                event="completed", data={"ok": True, "answer": f"Answer {i}"},
-            ))
+            await backend._journal.append(
+                JournalEntry(
+                    run_id=f"r{i}",
+                    channel_id="conv1",
+                    timestamp=ts,
+                    event="prompt",
+                    data={"text": f"Question {i}"},
+                )
+            )
+            await backend._journal.append(
+                JournalEntry(
+                    run_id=f"r{i}",
+                    channel_id="conv1",
+                    timestamp=ts,
+                    event="completed",
+                    data={"ok": True, "answer": f"Answer {i}"},
+                )
+            )
 
         result = await backend._build_branch_context("conv1", None)
         assert "생략" in result
@@ -456,7 +480,9 @@ class TestMakeConvTokenSaver:
         await saver(token, done)
 
         backend._conv_sessions.set.assert_awaited_once_with(
-            "conv-42", engine="claude", token="tok-abc",
+            "conv-42",
+            engine="claude",
+            token="tok-abc",
         )
 
 
@@ -516,7 +542,6 @@ class TestRpcMethodRouting:
 
     async def test_ping_with_rpc_id(self, ws, transport):
         """ping with rpc_id sends pong response."""
-        b = TunadishBackend()
         # Simulate the ping handling directly
         rpc_id = "req-1"
         await transport._send_response(rpc_id, {"pong": True})
@@ -550,15 +575,20 @@ class TestConversationHandlers:
         }
         conv_id = params["conversation_id"]
         from tunapi.context import RunContext
+
         await backend.context_store.set_context(
-            conv_id, RunContext(project=params["project"]), label=params["label"],
+            conv_id,
+            RunContext(project=params["project"]),
+            label=params["label"],
         )
 
         ctx = await backend.context_store.get_context(conv_id)
         assert ctx is not None
         assert ctx.project == "myproj"
 
-    async def test_conversation_delete_clears_context(self, backend, ws, transport, tmp_path):
+    async def test_conversation_delete_clears_context(
+        self, backend, ws, transport, tmp_path
+    ):
         await backend.context_store.set_context("conv-del", RunContext(project="proj"))
 
         # Simulate delete
@@ -582,15 +612,21 @@ class TestConversationHandlers:
 
 
 class TestDispatchRpcCommand:
-    async def test_model_set_updates_conv_settings(self, backend, ws, transport, runtime):
+    async def test_model_set_updates_conv_settings(
+        self, backend, ws, transport, runtime
+    ):
         await backend.context_store.set_context("conv-1", RunContext(project="proj"))
 
-        with patch("tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock) as mock_dispatch:
+        with patch(
+            "tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock
+        ) as mock_dispatch:
             mock_dispatch.return_value = True
             await backend._dispatch_rpc_command(
-                "model", "claude opus-4",
+                "model",
+                "claude opus-4",
                 {"conversation_id": "conv-1"},
-                runtime, transport,
+                runtime,
+                transport,
             )
             mock_dispatch.assert_awaited_once()
             call_kwargs = mock_dispatch.call_args
@@ -599,12 +635,16 @@ class TestDispatchRpcCommand:
     async def test_trigger_set_routing(self, backend, ws, transport, runtime):
         await backend.context_store.set_context("conv-1", RunContext(project="proj"))
 
-        with patch("tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock) as mock_dispatch:
+        with patch(
+            "tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock
+        ) as mock_dispatch:
             mock_dispatch.return_value = True
             await backend._dispatch_rpc_command(
-                "trigger", "always",
+                "trigger",
+                "always",
                 {"conversation_id": "conv-1"},
-                runtime, transport,
+                runtime,
+                transport,
             )
             args = mock_dispatch.call_args[0]
             assert args[0] == "trigger"
@@ -661,11 +701,14 @@ class TestHandleChatSend:
         """chat.send with !help dispatches to command handler."""
         await backend.context_store.set_context("conv-cmd", RunContext(project="proj"))
 
-        with patch("tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock) as mock_dispatch:
+        with patch(
+            "tunapi.tunadish.backend.dispatch_command", new_callable=AsyncMock
+        ) as mock_dispatch:
             mock_dispatch.return_value = True
             await backend.handle_chat_send(
                 {"conversation_id": "conv-cmd", "text": "!help"},
-                runtime, transport,
+                runtime,
+                transport,
             )
             mock_dispatch.assert_awaited_once()
 
@@ -680,7 +723,8 @@ class TestHandleChatSend:
             # This should return immediately without executing
             await backend.handle_chat_send(
                 {"conversation_id": "conv-locked", "text": "hello"},
-                runtime, transport,
+                runtime,
+                transport,
             )
         finally:
             lock.release()
@@ -739,10 +783,22 @@ class TestFormatContextBlock:
     def test_multiple_results(self):
         result = {
             "results": [
-                {"file": "a.py", "lines": [1, 5], "language": "python",
-                 "scope": "", "confidence": 0.9, "content": "aaa"},
-                {"file": "b.py", "lines": [10, 15], "language": "python",
-                 "scope": "", "confidence": 0.7, "content": "bbb"},
+                {
+                    "file": "a.py",
+                    "lines": [1, 5],
+                    "language": "python",
+                    "scope": "",
+                    "confidence": 0.9,
+                    "content": "aaa",
+                },
+                {
+                    "file": "b.py",
+                    "lines": [10, 15],
+                    "language": "python",
+                    "scope": "",
+                    "confidence": 0.7,
+                    "content": "bbb",
+                },
             ]
         }
         block = format_context_block(result)
@@ -752,8 +808,14 @@ class TestFormatContextBlock:
     def test_content_rstripped(self):
         result = {
             "results": [
-                {"file": "x.py", "lines": [], "language": "python",
-                 "scope": "", "confidence": 0.5, "content": "code   \n\n"},
+                {
+                    "file": "x.py",
+                    "lines": [],
+                    "language": "python",
+                    "scope": "",
+                    "confidence": 0.5,
+                    "content": "code   \n\n",
+                },
             ]
         }
         block = format_context_block(result)
@@ -861,13 +923,25 @@ class TestRawqDefaults:
 class TestRawqEnrichMessage:
     async def test_short_text_gets_larger_budget(self, backend, runtime):
         """Text < 100 chars should use token_budget=4000."""
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=Path("/proj")), \
-             patch("tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock) as mock_search:
-            mock_search.return_value = {"results": [
-                {"file": "a.py", "lines": [1, 5], "language": "python",
-                 "scope": "", "confidence": 0.9, "content": "code"},
-            ]}
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=Path("/proj")),
+            patch(
+                "tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock
+            ) as mock_search,
+        ):
+            mock_search.return_value = {
+                "results": [
+                    {
+                        "file": "a.py",
+                        "lines": [1, 5],
+                        "language": "python",
+                        "scope": "",
+                        "confidence": 0.9,
+                        "content": "code",
+                    },
+                ]
+            }
             result = await backend._rawq_enrich_message("short q", "proj", runtime)
             call_kwargs = mock_search.call_args[1]
             assert call_kwargs["token_budget"] == 4000
@@ -875,24 +949,36 @@ class TestRawqEnrichMessage:
 
     async def test_medium_text_gets_medium_budget(self, backend, runtime):
         text = "x" * 200
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=Path("/proj")), \
-             patch("tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock) as mock_search:
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=Path("/proj")),
+            patch(
+                "tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock
+            ) as mock_search,
+        ):
             mock_search.return_value = None
             # Falls through to map fallback
-            with patch("tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock) as mock_map:
+            with patch(
+                "tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock
+            ) as mock_map:
                 mock_map.return_value = None
-                result = await backend._rawq_enrich_message(text, "proj", runtime)
+                await backend._rawq_enrich_message(text, "proj", runtime)
             call_kwargs = mock_search.call_args[1]
             assert call_kwargs["token_budget"] == 2000
 
     async def test_long_text_gets_small_budget(self, backend, runtime):
         text = "x" * 600
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=Path("/proj")), \
-             patch("tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock) as mock_search:
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=Path("/proj")),
+            patch(
+                "tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock
+            ) as mock_search,
+        ):
             mock_search.return_value = None
-            with patch("tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock) as mock_map:
+            with patch(
+                "tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock
+            ) as mock_map:
                 mock_map.return_value = None
                 await backend._rawq_enrich_message(text, "proj", runtime)
             assert mock_search.call_args[1]["token_budget"] == 1000
@@ -903,16 +989,26 @@ class TestRawqEnrichMessage:
             assert result == "hello"
 
     async def test_no_project_path_returns_original(self, backend, runtime):
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=None):
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=None),
+        ):
             result = await backend._rawq_enrich_message("hello", "proj", runtime)
             assert result == "hello"
 
     async def test_no_search_results_falls_back_to_map(self, backend, runtime):
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=Path("/proj")), \
-             patch("tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock, return_value=None), \
-             patch("tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock) as mock_map:
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=Path("/proj")),
+            patch(
+                "tunapi.tunadish.rawq_bridge.search",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock
+            ) as mock_map,
+        ):
             mock_map.return_value = {
                 "files": [{"path": "main.py", "symbols": [{"name": "main"}]}],
             }
@@ -920,10 +1016,20 @@ class TestRawqEnrichMessage:
             assert "<project_structure>" in result
 
     async def test_no_search_and_no_map_returns_original(self, backend, runtime):
-        with patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True), \
-             patch.object(backend, "_resolve_project_path", return_value=Path("/proj")), \
-             patch("tunapi.tunadish.rawq_bridge.search", new_callable=AsyncMock, return_value=None), \
-             patch("tunapi.tunadish.rawq_bridge.get_map", new_callable=AsyncMock, return_value=None):
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=True),
+            patch.object(backend, "_resolve_project_path", return_value=Path("/proj")),
+            patch(
+                "tunapi.tunadish.rawq_bridge.search",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "tunapi.tunadish.rawq_bridge.get_map",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
             result = await backend._rawq_enrich_message("hello", "proj", runtime)
             assert result == "hello"
 
@@ -957,7 +1063,7 @@ class TestWsDisconnectCleanup:
 
         # Simulate the cleanup logic from ws_handler finally block
         if not b._active_transports:
-            for conv_id, ref in list(b.run_map.items()):
+            for _conv_id, ref in list(b.run_map.items()):
                 t = b.running_tasks.get(ref)
                 if t is not None and not t.cancel_requested.is_set():
                     t.cancel_requested.set()

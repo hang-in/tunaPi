@@ -57,14 +57,18 @@ class ProgressTracker:
                 # - engine label has no "/" yet (no manual override pre-set)
                 # - title is not the same as the engine name (case-insensitive)
                 # - title has no spaces (rules out session labels / descriptions)
-                if title and "/" not in self.engine:
-                    # Treat title as a model ID only when it contains a digit
-                    # (version number) and has no spaces.  This filters out
-                    # session labels like "Session" or "Codex" while accepting
-                    # "claude-opus-4-6", "gemini-2.5-pro", "o4-mini", etc.
-                    if " " not in title and any(c.isdigit() for c in title):
-                        shortened = shorten_model(title)
-                        self.engine = f"{self.engine}/{shortened}"
+                # Treat title as a model ID only when it contains a digit
+                # (version number) and has no spaces.  This filters out
+                # session labels like "Session" or "Codex" while accepting
+                # "claude-opus-4-6", "gemini-2.5-pro", "o4-mini", etc.
+                if (
+                    title
+                    and "/" not in self.engine
+                    and " " not in title
+                    and any(c.isdigit() for c in title)
+                ):
+                    shortened = shorten_model(title)
+                    self.engine = f"{self.engine}/{shortened}"
                 return True
             case ActionEvent(action=action, phase=phase, ok=ok):
                 if action.kind == "turn":

@@ -53,18 +53,20 @@ class TunadishTransport(Transport):
         if rpc_id is not None:
             self._pending_rpc_id = None
             if "error" in params and isinstance(params["error"], str):
-                raw = json.dumps({
-                    "jsonrpc": "2.0",
-                    "id": rpc_id,
-                    "error": {"code": -32000, "message": params["error"]},
-                })
+                raw = json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rpc_id,
+                        "error": {"code": -32000, "message": params["error"]},
+                    }
+                )
             else:
                 raw = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": params})
         else:
             raw = json.dumps({"method": method, "params": params})
         try:
             await self._ws.send(raw)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self._closed = True
             logger.warning("ws.push_failed (marking closed)", error=str(e))
 
@@ -75,7 +77,7 @@ class TunadishTransport(Transport):
         raw = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result})
         try:
             await self._ws.send(raw)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self._closed = True
             logger.warning("ws.push_failed (marking closed)", error=str(e))
 
@@ -83,14 +85,16 @@ class TunadishTransport(Transport):
         """JSON-RPC 2.0 에러 response 전송."""
         if self._closed:
             return
-        raw = json.dumps({
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "error": {"code": code, "message": message},
-        })
+        raw = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": code, "message": message},
+            }
+        )
         try:
             await self._ws.send(raw)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self._closed = True
             logger.warning("ws.push_failed (marking closed)", error=str(e))
 

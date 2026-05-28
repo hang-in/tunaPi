@@ -1,12 +1,18 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
 import anyio
 from functools import partial
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
 
 from tunapi.backends import EngineBackend
 from tunapi.config import dump_toml
 from tunapi.telegram import onboarding
 from tunapi.telegram.api_models import User
+
+pytestmark = pytest.mark.anyio
 
 
 def test_mask_token_short() -> None:
@@ -303,3 +309,255 @@ def test_capture_chat_id_prompts_for_token(monkeypatch) -> None:
 
     assert chat is not None
     assert chat.chat_id == 789
+
+
+# test_coverage_push.py에서 가져온 Onboarding Interactive 테스트들
+from tunapi.telegram.onboarding import (
+    OnboardingCancelled,
+    OnboardingState,
+    OnboardingStep,
+    step_persona,
+    run_onboarding,
+    step_default_engine,
+    capture_chat,
+    step_save_config,
+    step_token_and_bot,
+    ChatInfo,
+)
+
+
+class TestStepPersona:
+    async def test_workspace(self):
+        ui = MagicMock()
+        ui.select = AsyncMock(return_value="workspace")
+        ui.print = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_persona(ui, svc, state)
+        assert state.persona == "workspace"
+        assert state.session_mode == "chat"
+        assert state.topics_enabled is True
+
+    async def test_assistant(self):
+        ui = MagicMock()
+        ui.select = AsyncMock(return_value="assistant")
+        ui.print = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_persona(ui, svc, state)
+        assert state.persona == "assistant"
+        assert state.session_mode == "chat"
+        assert state.topics_enabled is False
+
+    async def test_handoff(self):
+        ui = MagicMock()
+        ui.select = AsyncMock(return_value="handoff")
+        ui.print = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_persona(ui, svc, state)
+        assert state.persona == "handoff"
+        assert state.session_mode == "stateless"
+        assert state.show_resume_line is True
+
+
+class TestRunOnboarding:
+    async def test_cancelled(self):
+        ui = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        failing_step = OnboardingStep(
+            title="fail",
+            number=1,
+            run=AsyncMock(side_effect=OnboardingCancelled()),
+        )
+        with patch("tunapi.telegram.onboarding.STEPS", [failing_step]):
+            result = await run_onboarding(ui, svc, state)
+        assert result is False
+
+    async def test_skip_non_applicable(self):
+        ui = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        skipped = OnboardingStep(
+            title="skip",
+            number=1,
+            run=AsyncMock(),
+            applies=lambda _: False,
+        )
+        with patch("tunapi.telegram.onboarding.STEPS", [skipped]):
+            result = await run_onboarding(ui, svc, state)
+        assert result is True
+        skipped.run.assert_not_called()
+
+
+class TestStepDefaultEngine:
+    async def test_installed_engines(self):
+        ui = MagicMock()
+        ui.select = AsyncMock(return_value="claude")
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.list_engines.return_value = [
+            ("claude", True, None),
+            ("codex", False, "npm i codex"),
+        ]
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_default_engine(ui, svc, state)
+        assert state.default_engine == "claude"
+
+    async def test_no_engines_save_anyway(self):
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=True)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.list_engines.return_value = [("claude", False, "install")]
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_default_engine(ui, svc, state)
+        assert state.default_engine is None
+
+    async def test_no_engines_cancel(self):
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=False)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.list_engines.return_value = []
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        with pytest.raises(OnboardingCancelled):
+            await step_default_engine(ui, svc, state)
+
+
+class TestCaptureChat:
+    async def test_missing_token(self):
+        ui = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        with pytest.raises(RuntimeError, match="missing token"):
+            await capture_chat(ui, svc, state)
+
+    async def test_success(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        chat_info = ChatInfo(
+            chat_id=99,
+            username="me",
+            title=None,
+            first_name="Alice",
+            last_name=None,
+            chat_type="private",
+        )
+        svc = MagicMock()
+        svc.wait_for_chat = AsyncMock(return_value=chat_info)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        await capture_chat(ui, svc, state)
+        assert state.chat is not None
+        assert state.chat.chat_id == 99
+
+    async def test_group_chat(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        chat_info = ChatInfo(
+            chat_id=-100,
+            username=None,
+            title="Dev Team",
+            first_name=None,
+            last_name=None,
+            chat_type="supergroup",
+        )
+        svc = MagicMock()
+        svc.wait_for_chat = AsyncMock(return_value=chat_info)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        await capture_chat(ui, svc, state)
+        assert state.chat.chat_type == "supergroup"
+
+
+class TestStepTokenAndBot:
+    async def test_have_token(self):
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=True)
+        ui.password = AsyncMock(return_value="tok123")
+        ui.print = MagicMock()
+        user = User(id=1, is_bot=True, first_name="Bot", username="mybot")
+        svc = MagicMock()
+        svc.get_bot_info = AsyncMock(return_value=user)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_token_and_bot(ui, svc, state)
+        assert state.token == "tok123"
+        assert state.bot_username == "mybot"
+        assert state.bot_name == "Bot"
+
+    async def test_no_token_shows_instructions(self):
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=False)
+        ui.password = AsyncMock(return_value="tok123")
+        ui.print = MagicMock()
+        user = User(id=1, is_bot=True, first_name="Bot", username=None)
+        svc = MagicMock()
+        svc.get_bot_info = AsyncMock(return_value=user)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        await step_token_and_bot(ui, svc, state)
+        assert state.token == "tok123"
+        # Should have printed botfather instructions
+        assert ui.print.call_count >= 2
+
+
+class TestStepSaveConfig:
+    async def test_save_declined(self):
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=False)
+        ui.svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        with pytest.raises(OnboardingCancelled):
+            await step_save_config(ui, ui.svc, state)
+
+    async def test_save_ok(self, tmp_path: Path):
+        config_path = tmp_path / "tunapi.toml"
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=True)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.write_config = MagicMock()
+        state = OnboardingState(config_path=config_path, force=False)
+        state.token = "tok"
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "chat"
+        state.show_resume_line = False
+        await step_save_config(ui, svc, state)
+        svc.write_config.assert_called_once()
+
+    async def test_save_malformed_existing(self, tmp_path: Path):
+        from tunapi.config import ConfigError
+
+        config_path = tmp_path / "tunapi.toml"
+        config_path.write_text("bad toml {{")
+        ui = MagicMock()
+        ui.confirm = AsyncMock(return_value=True)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.read_config = MagicMock(side_effect=ConfigError("bad"))
+        svc.write_config = MagicMock()
+        state = OnboardingState(config_path=config_path, force=False)
+        state.token = "tok"
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "chat"
+        state.show_resume_line = False
+        await step_save_config(ui, svc, state)
+        # Should still write config despite malformed existing
+        svc.write_config.assert_called_once()
+        # Backup should have been attempted
+        assert (config_path.with_suffix(".toml.bak")).exists()

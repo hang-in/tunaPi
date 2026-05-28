@@ -54,10 +54,9 @@ class MattermostTransport:
     ) -> MessageRef | None:
         ch = str(channel_id)
         root_id: str | None = None
-        if options is not None:
+        if options is not None and options.thread_id is not None:
             # Only thread when explicitly requested (user replied in a thread)
-            if options.thread_id is not None:
-                root_id = str(options.thread_id)
+            root_id = str(options.thread_id)
             # Don't delete the progress message — leave it in channel
 
         props = message.extra.get("props") if message.extra else None

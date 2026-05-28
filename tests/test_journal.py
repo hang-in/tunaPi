@@ -110,7 +110,7 @@ class TestJournalAppendRead:
 
     async def test_limit_respected(self, tmp_path):
         j = Journal(tmp_path / "journals")
-        for i in range(10):
+        for i in range(10):  # noqa: PERF401
             await j.append(_entry(run_id=f"run{i}"))
 
         entries = await j.recent_entries("ch1", limit=3)
@@ -242,8 +242,12 @@ class TestBuildHandoffPreamble:
     def test_basic_preamble(self):
         entries = [
             _entry(run_id="r1", event="prompt", data={"text": "fix the bug"}),
-            _entry(run_id="r1", event="action", data={"kind": "edit", "title": "main.py"}),
-            _entry(run_id="r1", event="completed", data={"answer": "Fixed!", "ok": True}),
+            _entry(
+                run_id="r1", event="action", data={"kind": "edit", "title": "main.py"}
+            ),
+            _entry(
+                run_id="r1", event="completed", data={"answer": "Fixed!", "ok": True}
+            ),
         ]
         result = build_handoff_preamble(entries, old_engine="claude")
         assert result is not None
@@ -286,9 +290,13 @@ class TestBuildHandoffPreamble:
     def test_multiple_runs(self):
         entries = [
             _entry(run_id="r1", event="prompt", data={"text": "first"}),
-            _entry(run_id="r1", event="completed", data={"answer": "done1", "ok": True}),
+            _entry(
+                run_id="r1", event="completed", data={"answer": "done1", "ok": True}
+            ),
             _entry(run_id="r2", event="prompt", data={"text": "second"}),
-            _entry(run_id="r2", event="completed", data={"answer": "done2", "ok": True}),
+            _entry(
+                run_id="r2", event="completed", data={"answer": "done2", "ok": True}
+            ),
         ]
         result = build_handoff_preamble(entries, old_engine="claude")
         assert "first" in result
@@ -296,14 +304,16 @@ class TestBuildHandoffPreamble:
 
     def test_many_actions_capped(self):
         entries = [_entry(run_id="r1", event="prompt", data={"text": "work"})]
-        for i in range(10):
-            entries.append(
+        entries.extend(
+            [
                 _entry(
                     run_id="r1",
                     event="action",
                     data={"kind": "edit", "title": f"file{i}.py"},
                 )
-            )
+                for i in range(10)
+            ]
+        )
         entries.append(
             _entry(run_id="r1", event="completed", data={"answer": "done", "ok": True})
         )

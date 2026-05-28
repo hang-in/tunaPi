@@ -165,9 +165,7 @@ class SlackBackend(TransportBackend):
                     [".git/**", ".env", ".envrc", "*.pem", ".ssh/**"],
                 )
             ),
-            files_max_upload_bytes=files_cfg.get(
-                "max_upload_bytes", 20 * 1024 * 1024
-            ),
+            files_max_upload_bytes=files_cfg.get("max_upload_bytes", 20 * 1024 * 1024),
             files_max_download_bytes=files_cfg.get(
                 "max_download_bytes", 50 * 1024 * 1024
             ),

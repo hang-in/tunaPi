@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 
 from tunapi.mattermost.api_models import WebSocketBroadcast, WebSocketEvent
-from tunapi.mattermost.parsing import parse_posted_event, parse_reaction_event, parse_ws_event
+from tunapi.mattermost.parsing import (
+    parse_posted_event,
+    parse_reaction_event,
+    parse_ws_event,
+)
 from tunapi.mattermost.types import MattermostIncomingMessage, MattermostReactionEvent
 
 
@@ -55,30 +59,22 @@ class TestParsePostedEvent:
 
     def test_channel_filter_blocks(self):
         ev = _posted_event(channel_id="c2")
-        msg = parse_posted_event(
-            ev, bot_user_id="bot1", allowed_channel_ids=["c1"]
-        )
+        msg = parse_posted_event(ev, bot_user_id="bot1", allowed_channel_ids=["c1"])
         assert msg is None
 
     def test_channel_filter_allows_dm(self):
         ev = _posted_event(channel_id="c2", channel_type="D")
-        msg = parse_posted_event(
-            ev, bot_user_id="bot1", allowed_channel_ids=["c1"]
-        )
+        msg = parse_posted_event(ev, bot_user_id="bot1", allowed_channel_ids=["c1"])
         assert msg is not None
 
     def test_user_filter_blocks(self):
         ev = _posted_event(user_id="u2")
-        msg = parse_posted_event(
-            ev, bot_user_id="bot1", allowed_user_ids=["u1"]
-        )
+        msg = parse_posted_event(ev, bot_user_id="bot1", allowed_user_ids=["u1"])
         assert msg is None
 
     def test_user_filter_allows(self):
         ev = _posted_event(user_id="u1")
-        msg = parse_posted_event(
-            ev, bot_user_id="bot1", allowed_user_ids=["u1"]
-        )
+        msg = parse_posted_event(ev, bot_user_id="bot1", allowed_user_ids=["u1"])
         assert msg is not None
 
     def test_thread_reply(self):
@@ -99,9 +95,7 @@ class TestParsePostedEvent:
 
     def test_empty_allowed_channels_allows_all(self):
         ev = _posted_event(channel_id="any")
-        msg = parse_posted_event(
-            ev, bot_user_id="bot1", allowed_channel_ids=[]
-        )
+        msg = parse_posted_event(ev, bot_user_id="bot1", allowed_channel_ids=[])
         assert msg is not None
 
 
@@ -110,12 +104,14 @@ class TestParseReactionEvent:
         ev = WebSocketEvent(
             event="reaction_added",
             data={
-                "reaction": json.dumps({
-                    "user_id": "u1",
-                    "post_id": "p1",
-                    "emoji_name": "octagonal_sign",
-                    "create_at": 0,
-                }),
+                "reaction": json.dumps(
+                    {
+                        "user_id": "u1",
+                        "post_id": "p1",
+                        "emoji_name": "octagonal_sign",
+                        "create_at": 0,
+                    }
+                ),
             },
             broadcast=WebSocketBroadcast(channel_id="c1"),
         )
@@ -128,12 +124,14 @@ class TestParseReactionEvent:
         ev = WebSocketEvent(
             event="reaction_added",
             data={
-                "reaction": json.dumps({
-                    "user_id": "bot1",
-                    "post_id": "p1",
-                    "emoji_name": "octagonal_sign",
-                    "create_at": 0,
-                }),
+                "reaction": json.dumps(
+                    {
+                        "user_id": "bot1",
+                        "post_id": "p1",
+                        "emoji_name": "octagonal_sign",
+                        "create_at": 0,
+                    }
+                ),
             },
             broadcast=WebSocketBroadcast(channel_id="c1"),
         )
@@ -151,12 +149,14 @@ class TestParseWsEvent:
         ev = WebSocketEvent(
             event="reaction_added",
             data={
-                "reaction": json.dumps({
-                    "user_id": "u1",
-                    "post_id": "p1",
-                    "emoji_name": "thumbsup",
-                    "create_at": 0,
-                }),
+                "reaction": json.dumps(
+                    {
+                        "user_id": "u1",
+                        "post_id": "p1",
+                        "emoji_name": "thumbsup",
+                        "create_at": 0,
+                    }
+                ),
             },
             broadcast=WebSocketBroadcast(channel_id="c1"),
         )

@@ -12,6 +12,20 @@ from tunapi.config import ConfigError
 from tunapi.telegram import onboarding
 from tunapi.telegram.api_models import Chat, Message, Update, User
 from tunapi.telegram.client import TelegramRetryAfter
+from unittest.mock import MagicMock, AsyncMock, patch
+
+from tunapi.telegram.onboarding import (
+    OnboardingCancelled,
+    OnboardingState,
+    build_transport_patch,
+    build_config_patch,
+    prompt_token,
+    LiveServices,
+    suppress_logging,
+    display_path,
+    ChatInfo,
+    always_true,
+)
 
 
 class DummyUI:
@@ -538,3 +552,335 @@ async def test_step_default_engine_no_installed(tmp_path: Path) -> None:
         await onboarding.step_default_engine(
             cast(onboarding.UI, ui), cast(onboarding.Services, svc), state
         )
+
+
+# ===========================================================================
+# Migrated Onboarding Helper Tests
+# ===========================================================================
+
+
+class TestBuildTransportPatch:
+    def test_valid(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.chat = ChatInfo(
+            chat_id=123,
+            username="bot",
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type="private",
+        )
+        state.session_mode = "chat"
+        state.show_resume_line = False
+        patch = build_transport_patch(state, bot_token="tok")
+        assert patch["bot_token"] == "tok"
+        assert patch["chat_id"] == 123
+        assert patch["session_mode"] == "chat"
+        assert patch["show_resume_line"] is False
+
+    def test_missing_chat_raises(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.session_mode = "chat"
+        state.show_resume_line = False
+        with pytest.raises(RuntimeError, match="missing chat"):
+            build_transport_patch(state, bot_token="tok")
+
+    def test_missing_session_mode_raises(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.show_resume_line = False
+        with pytest.raises(RuntimeError, match="missing session mode"):
+            build_transport_patch(state, bot_token="tok")
+
+    def test_missing_resume_raises(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "chat"
+        with pytest.raises(RuntimeError, match="missing resume"):
+            build_transport_patch(state, bot_token="tok")
+
+
+class TestBuildConfigPatch:
+    def test_with_engine(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "chat"
+        state.show_resume_line = True
+        state.default_engine = "codex"
+        patch = build_config_patch(state, bot_token="tok")
+        assert patch["default_engine"] == "codex"
+        assert patch["transport"] == "telegram"
+
+    def test_without_engine(self):
+        state = OnboardingState(config_path=Path("/cfg.toml"), force=False)
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "stateless"
+        state.show_resume_line = True
+        patch = build_config_patch(state, bot_token="tok")
+        assert "default_engine" not in patch
+
+
+class TestPromptToken:
+    @pytest.mark.anyio
+    async def test_success(self):
+        ui = MagicMock()
+        ui.password = AsyncMock(return_value="my-token")
+        ui.print = MagicMock()
+        user = User(id=1, is_bot=True, first_name="Bot", username="testbot")
+        svc = MagicMock()
+        svc.get_bot_info = AsyncMock(return_value=user)
+        token, info = await prompt_token(ui, svc)
+        assert token == "my-token"
+        assert info.username == "testbot"
+
+    @pytest.mark.anyio
+    async def test_empty_then_success(self):
+        ui = MagicMock()
+        ui.password = AsyncMock(side_effect=["", "real-token"])
+        ui.print = MagicMock()
+        user = User(id=1, is_bot=True, first_name="Bot", username=None)
+        svc = MagicMock()
+        svc.get_bot_info = AsyncMock(return_value=user)
+        token, info = await prompt_token(ui, svc)
+        assert token == "real-token"
+
+    @pytest.mark.anyio
+    async def test_failed_retry_cancel(self):
+        ui = MagicMock()
+        ui.password = AsyncMock(return_value="bad-token")
+        ui.confirm = AsyncMock(return_value=False)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        svc.get_bot_info = AsyncMock(return_value=None)
+        with pytest.raises(OnboardingCancelled):
+            await prompt_token(ui, svc)
+
+    @pytest.mark.anyio
+    async def test_password_returns_none_raises(self):
+        ui = MagicMock()
+        ui.password = AsyncMock(return_value=None)
+        ui.print = MagicMock()
+        svc = MagicMock()
+        with pytest.raises(OnboardingCancelled):
+            await prompt_token(ui, svc)
+
+
+class TestLiveServices:
+    def test_list_engines(self):
+        svc = LiveServices()
+        with patch("tunapi.telegram.onboarding.list_backends") as mock_lb:
+            be = MagicMock()
+            be.id = "claude"
+            be.cli_cmd = "claude"
+            be.install_cmd = None
+            mock_lb.return_value = [be]
+            with patch("shutil.which", return_value="/usr/bin/claude"):
+                rows = svc.list_engines()
+        assert len(rows) == 1
+        assert rows[0] == ("claude", True, None)
+
+    def test_read_config(self, tmp_path: Path):
+        svc = LiveServices()
+        cfg = tmp_path / "tunapi.toml"
+        cfg.write_text('[transports]\n[transports.telegram]\nbot_token = "tok"\n')
+        data = svc.read_config(cfg)
+        assert "transports" in data
+
+    def test_write_config(self, tmp_path: Path):
+        svc = LiveServices()
+        cfg = tmp_path / "tunapi.toml"
+        svc.write_config(cfg, {"transport": "telegram"})
+        assert cfg.exists()
+
+
+class TestStepCaptureChat:
+    @pytest.mark.anyio
+    async def test_missing_persona_raises(self):
+        ui = MagicMock()
+        svc = MagicMock()
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        with pytest.raises(RuntimeError, match="missing persona"):
+            from tunapi.telegram.onboarding import step_capture_chat
+
+            await step_capture_chat(ui, svc, state)
+
+    @pytest.mark.anyio
+    async def test_assistant_mode(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        chat = ChatInfo(
+            chat_id=1,
+            username="u",
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type="private",
+        )
+        svc = MagicMock()
+        svc.wait_for_chat = AsyncMock(return_value=chat)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        state.persona = "assistant"
+        from tunapi.telegram.onboarding import step_capture_chat
+
+        await step_capture_chat(ui, svc, state)
+        assert state.chat is not None
+
+    @pytest.mark.anyio
+    async def test_workspace_success(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        chat = ChatInfo(
+            chat_id=-100,
+            username=None,
+            title="Team",
+            first_name=None,
+            last_name=None,
+            chat_type="supergroup",
+        )
+        svc = MagicMock()
+        svc.wait_for_chat = AsyncMock(return_value=chat)
+        svc.validate_topics = AsyncMock(return_value=None)
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        state.persona = "workspace"
+        from tunapi.telegram.onboarding import step_capture_chat
+
+        await step_capture_chat(ui, svc, state)
+        assert state.chat is not None
+
+    @pytest.mark.anyio
+    async def test_workspace_validation_fails_switch_to_assistant(self):
+        from tunapi.config import ConfigError
+
+        ui = MagicMock()
+        ui.print = MagicMock()
+        ui.select = AsyncMock(return_value="assistant")
+        chat = ChatInfo(
+            chat_id=-100,
+            username=None,
+            title="Team",
+            first_name=None,
+            last_name=None,
+            chat_type="supergroup",
+        )
+        svc = MagicMock()
+        svc.wait_for_chat = AsyncMock(return_value=chat)
+        svc.validate_topics = AsyncMock(return_value=ConfigError("no topics"))
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        state.persona = "workspace"
+        from tunapi.telegram.onboarding import step_capture_chat
+
+        await step_capture_chat(ui, svc, state)
+        assert state.persona == "assistant"
+        assert state.topics_enabled is False
+
+    @pytest.mark.anyio
+    async def test_workspace_validation_retry_then_ok(self):
+        from tunapi.config import ConfigError
+
+        ui = MagicMock()
+        ui.print = MagicMock()
+        # select is only called once (on first failure), then retry succeeds
+        ui.select = AsyncMock(side_effect=["retry"])
+        svc = MagicMock()
+        chat = ChatInfo(
+            chat_id=-100,
+            username=None,
+            title="Team",
+            first_name=None,
+            last_name=None,
+            chat_type="supergroup",
+        )
+        svc.wait_for_chat = AsyncMock(return_value=chat)
+        # First validation fails, retry succeeds
+        call_count = 0
+
+        async def validate_side_effect(token, chat_id, scope):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ConfigError("no topics")
+            return None
+
+        svc.validate_topics = validate_side_effect
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        state.persona = "workspace"
+        from tunapi.telegram.onboarding import step_capture_chat
+
+        await step_capture_chat(ui, svc, state)
+        assert state.persona == "workspace"
+
+    @pytest.mark.anyio
+    async def test_workspace_validation_cancel(self):
+        from tunapi.config import ConfigError
+
+        ui = MagicMock()
+        ui.print = MagicMock()
+        ui.select = AsyncMock(return_value=None)
+        svc = MagicMock()
+        chat = ChatInfo(
+            chat_id=-100,
+            username=None,
+            title="Team",
+            first_name=None,
+            last_name=None,
+            chat_type="supergroup",
+        )
+        svc.wait_for_chat = AsyncMock(return_value=chat)
+        svc.validate_topics = AsyncMock(return_value=ConfigError("no topics"))
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        state.token = "tok"
+        state.persona = "workspace"
+        with pytest.raises(OnboardingCancelled):
+            from tunapi.telegram.onboarding import step_capture_chat
+
+            await step_capture_chat(ui, svc, state)
+
+
+class TestSuppressLogging:
+    def test_context_manager(self):
+        with suppress_logging():
+            pass  # should not raise
+
+
+class TestDisplayPath:
+    def test_non_home(self):
+        result = display_path(Path("/etc/config.toml"))
+        assert result == "/etc/config.toml"
+
+
+class TestAlwaysTrue:
+    def test_returns_true(self):
+        state = OnboardingState(config_path=Path("/x"), force=False)
+        assert always_true(state) is True

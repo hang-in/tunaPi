@@ -7,12 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tunapi.core.commands import parse_command
-from tunapi.core.roundtable import RoundtableSession, RoundtableStore
+from tunapi.core.roundtable import RoundtableSession
 from tunapi.mattermost.loop import (
-    _ResolvedPrompt,
     _archive_roundtable,
-    _handle_cancel_reaction,
     _handle_file_command,
     _resolve_prompt,
     _send_startup,
@@ -20,7 +17,6 @@ from tunapi.mattermost.loop import (
 )
 from tunapi.mattermost.types import (
     MattermostIncomingMessage,
-    MattermostReactionEvent,
 )
 from tunapi.transport import MessageRef, RenderedMessage
 
@@ -142,7 +138,9 @@ class TestHandleFileCommand:
         cfg = _make_cfg(files_enabled=True)
         msg = _make_msg(file_ids=("f1",))
 
-        with patch("tunapi.mattermost.loop._put_files", new_callable=AsyncMock) as mock_put:
+        with patch(
+            "tunapi.mattermost.loop._put_files", new_callable=AsyncMock
+        ) as mock_put:
             mock_result = MagicMock()
             mock_result.message = "saved file.txt"
             mock_put.return_value = [mock_result]
@@ -157,7 +155,9 @@ class TestHandleFileCommand:
         cfg = _make_cfg(files_enabled=True)
         msg = _make_msg(file_ids=("f1",))
 
-        with patch("tunapi.mattermost.loop._put_files", new_callable=AsyncMock) as mock_put:
+        with patch(
+            "tunapi.mattermost.loop._put_files", new_callable=AsyncMock
+        ) as mock_put:
             mock_put.return_value = []
             await _handle_file_command("put", msg, cfg)
 
@@ -230,7 +230,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_help", new_callable=AsyncMock) as mock_help:
+        with patch(
+            "tunapi.mattermost.loop.handle_help", new_callable=AsyncMock
+        ) as mock_help:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -256,7 +258,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_cancel", new_callable=AsyncMock) as mock_cancel:
+        with patch(
+            "tunapi.mattermost.loop.handle_cancel", new_callable=AsyncMock
+        ) as mock_cancel:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -270,7 +274,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_status", new_callable=AsyncMock) as mock_status:
+        with patch(
+            "tunapi.mattermost.loop.handle_status", new_callable=AsyncMock
+        ) as mock_status:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -302,7 +308,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_model", new_callable=AsyncMock) as mock_model:
+        with patch(
+            "tunapi.mattermost.loop.handle_model", new_callable=AsyncMock
+        ) as mock_model:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -316,7 +324,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_trigger", new_callable=AsyncMock) as mock_trigger:
+        with patch(
+            "tunapi.mattermost.loop.handle_trigger", new_callable=AsyncMock
+        ) as mock_trigger:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -337,7 +347,13 @@ class TestTryDispatchCommand:
         project_sessions = AsyncMock()
 
         result = await _try_dispatch_command(
-            msg, cfg, {}, sessions, chat_prefs, None, send,
+            msg,
+            cfg,
+            {},
+            sessions,
+            chat_prefs,
+            None,
+            send,
             project_sessions=project_sessions,
         )
 
@@ -350,7 +366,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_persona", new_callable=AsyncMock) as mock_persona:
+        with patch(
+            "tunapi.mattermost.loop.handle_persona", new_callable=AsyncMock
+        ) as mock_persona:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -364,7 +382,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_project", new_callable=AsyncMock) as mock_project:
+        with patch(
+            "tunapi.mattermost.loop.handle_project", new_callable=AsyncMock
+        ) as mock_project:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -378,7 +398,9 @@ class TestTryDispatchCommand:
         cfg = _make_cfg()
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop.handle_models", new_callable=AsyncMock) as mock_models:
+        with patch(
+            "tunapi.mattermost.loop.handle_models", new_callable=AsyncMock
+        ) as mock_models:
             result = await _try_dispatch_command(
                 msg, cfg, {}, sessions, chat_prefs, None, send
             )
@@ -400,7 +422,9 @@ class TestResolvePrompt:
         msg = _make_msg(text="", file_ids=("f1",))
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop._put_files", new_callable=AsyncMock) as mock_put:
+        with patch(
+            "tunapi.mattermost.loop._put_files", new_callable=AsyncMock
+        ) as mock_put:
             mock_result = MagicMock()
             mock_result.message = "saved"
             mock_put.return_value = [mock_result]
@@ -500,7 +524,9 @@ class TestResolvePrompt:
         msg = _make_msg(text="check this", channel_type="D", file_ids=("f1",))
         send = AsyncMock()
 
-        with patch("tunapi.mattermost.loop._put_files", new_callable=AsyncMock) as mock_put:
+        with patch(
+            "tunapi.mattermost.loop._put_files", new_callable=AsyncMock
+        ) as mock_put:
             mock_result = MagicMock()
             mock_result.ok = True
             mock_result.path = "/tmp/file.py"
@@ -608,8 +634,12 @@ class TestArchiveRoundtable:
         send = AsyncMock()
 
         await _archive_roundtable(
-            session, journal, send,
-            facade=facade, project="myproj", branch="main",
+            session,
+            journal,
+            send,
+            facade=facade,
+            project="myproj",
+            branch="main",
         )
 
         facade.save_roundtable.assert_called_once()

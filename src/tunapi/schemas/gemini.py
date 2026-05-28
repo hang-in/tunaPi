@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Union
-
 import msgspec
 
 __all__ = [
@@ -17,13 +15,17 @@ __all__ = [
 ]
 
 
-class GeminiInitEvent(msgspec.Struct, tag="init", tag_field="type", forbid_unknown_fields=False):
+class GeminiInitEvent(
+    msgspec.Struct, tag="init", tag_field="type", forbid_unknown_fields=False
+):
     timestamp: str = ""
     session_id: str = ""
     model: str = ""
 
 
-class GeminiMessageEvent(msgspec.Struct, tag="message", tag_field="type", forbid_unknown_fields=False):
+class GeminiMessageEvent(
+    msgspec.Struct, tag="message", tag_field="type", forbid_unknown_fields=False
+):
     timestamp: str = ""
     session_id: str = ""
     role: str = ""
@@ -31,7 +33,9 @@ class GeminiMessageEvent(msgspec.Struct, tag="message", tag_field="type", forbid
     delta: bool = False
 
 
-class GeminiToolUseEvent(msgspec.Struct, tag="tool_use", tag_field="type", forbid_unknown_fields=False):
+class GeminiToolUseEvent(
+    msgspec.Struct, tag="tool_use", tag_field="type", forbid_unknown_fields=False
+):
     timestamp: str = ""
     session_id: str = ""
     tool_name: str = ""
@@ -39,7 +43,9 @@ class GeminiToolUseEvent(msgspec.Struct, tag="tool_use", tag_field="type", forbi
     parameters: dict[str, object] = msgspec.field(default_factory=dict)
 
 
-class GeminiToolResultEvent(msgspec.Struct, tag="tool_result", tag_field="type", forbid_unknown_fields=False):
+class GeminiToolResultEvent(
+    msgspec.Struct, tag="tool_result", tag_field="type", forbid_unknown_fields=False
+):
     timestamp: str = ""
     session_id: str = ""
     tool_id: str = ""
@@ -55,20 +61,22 @@ class GeminiResultStats(msgspec.Struct, forbid_unknown_fields=False):
     tool_calls: int = 0
 
 
-class GeminiResultEvent(msgspec.Struct, tag="result", tag_field="type", forbid_unknown_fields=False):
+class GeminiResultEvent(
+    msgspec.Struct, tag="result", tag_field="type", forbid_unknown_fields=False
+):
     timestamp: str = ""
     session_id: str = ""
     status: str = ""
     stats: GeminiResultStats = msgspec.field(default_factory=GeminiResultStats)
 
 
-GeminiStreamEvent = Union[
-    GeminiInitEvent,
-    GeminiMessageEvent,
-    GeminiToolUseEvent,
-    GeminiToolResultEvent,
-    GeminiResultEvent,
-]
+GeminiStreamEvent = (
+    GeminiInitEvent
+    | GeminiMessageEvent
+    | GeminiToolUseEvent
+    | GeminiToolResultEvent
+    | GeminiResultEvent
+)
 
 _DECODER = msgspec.json.Decoder(GeminiStreamEvent)
 

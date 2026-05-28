@@ -15,7 +15,12 @@ from ..runners.run_options import EngineRunOptions
 from ..logging import get_logger
 from ..transport import MessageRef, RenderedMessage
 from . import files
-from .roundtable import RoundtableSession, RoundtableStore, run_roundtable
+from .roundtable import (
+    RoundtableSession,
+    RoundtableStore,
+    run_roundtable,
+    run_followup_round,
+)
 from .voice import is_audio_file, transcribe_audio
 
 logger = get_logger(__name__)
@@ -224,6 +229,82 @@ async def dispatch_roundtable_command(
         continue_roundtable=continue_rt,
         close_roundtable=close_rt,
         thread_id=thread_id,
+    )
+
+
+async def dispatch_roundtable_command_flow(
+    args: str,
+    *,
+    cfg: Any,
+    channel_id: str,
+    thread_id: str | None,
+    running_tasks: Any,
+    chat_prefs: Any | None,
+    roundtables: RoundtableStore | None,
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    handle_rt_command: Callable[..., Awaitable[None]],
+    render_header: Callable[[str, int, list[str]], str],
+    close_message: str,
+    journal: Any | None = None,
+    facade: Any | None = None,
+) -> None:
+    """Handle the roundtable command, coordinating start, continue, and archive flow."""
+
+    async def _start_rt(topic: str, rounds: int, engines: list[str]) -> None:
+        await start_roundtable_thread(
+            channel_id,
+            topic,
+            rounds,
+            engines,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            chat_prefs=chat_prefs,
+            roundtables=roundtables,
+            render_header=render_header,
+        )
+
+    async def _continue_rt(
+        session: RoundtableSession,
+        topic: str,
+        engines_filter: list[str] | None,
+        ambient_context: Any | None,
+    ) -> None:
+        await run_followup_round(
+            session,
+            topic,
+            engines_filter,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            ambient_context=ambient_context,
+        )
+
+    async def _archive_rt(
+        session: RoundtableSession,
+        project: str | None,
+        branch: str | None,
+    ) -> None:
+        await archive_roundtable_thread(
+            session,
+            journal,
+            send,
+            close_message=close_message,
+            facade=facade,
+            project=project,
+            branch=branch,
+        )
+
+    await dispatch_roundtable_command(
+        args,
+        runtime=cfg.runtime,
+        channel_id=channel_id,
+        thread_id=thread_id,
+        chat_prefs=chat_prefs,
+        roundtables=roundtables,
+        send=send,
+        start_roundtable=_start_rt,
+        handle_rt_command=handle_rt_command,
+        continue_roundtable_session=_continue_rt,
+        archive_roundtable_session=_archive_rt,
     )
 
 

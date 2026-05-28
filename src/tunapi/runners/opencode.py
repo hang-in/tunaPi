@@ -31,7 +31,12 @@ from ..model import (
     StartedEvent,
     TunapiEvent,
 )
-from ..runner import JsonlSubprocessRunner, MsgspecJsonlRunnerMixin, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    MsgspecJsonlRunnerMixin,
+    ResumeTokenMixin,
+    Runner,
+)
 from .run_options import get_run_options
 from ..schemas import opencode as opencode_schema
 from ..utils.paths import relativize_path

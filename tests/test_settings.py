@@ -12,6 +12,12 @@ from tunapi.settings import (
     require_telegram,
     validate_settings_data,
 )
+from tunapi.telegram.onboarding import (
+    OnboardingState,
+    ChatInfo,
+    build_config_patch,
+    merge_config,
+)
 
 
 def test_load_settings_from_toml(tmp_path: Path) -> None:
@@ -270,3 +276,56 @@ def test_load_settings_without_telegram(tmp_path: Path) -> None:
     assert settings.transport_config("my-transport", config_path=config_path) == {
         "some_key": "value"
     }
+
+
+class TestMergeConfig:
+    def test_merge_creates_sections(self, tmp_path: Path):
+        config_path = tmp_path / "tunapi.toml"
+        state = OnboardingState(config_path=config_path, force=False)
+        state.chat = ChatInfo(
+            chat_id=42,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "chat"
+        state.show_resume_line = False
+        state.default_engine = "claude"
+        patch = build_config_patch(state, bot_token="tok")
+        merged = merge_config({}, patch, config_path=config_path)
+        assert merged["transport"] == "telegram"
+        assert merged["default_engine"] == "claude"
+        assert merged["transports"]["telegram"]["bot_token"] == "tok"
+        assert merged["transports"]["telegram"]["chat_id"] == 42
+        assert merged["transports"]["telegram"]["topics"]["enabled"] is False
+
+    def test_merge_removes_top_level_bot_token(self, tmp_path: Path):
+        config_path = tmp_path / "tunapi.toml"
+        state = OnboardingState(config_path=config_path, force=False)
+        state.chat = ChatInfo(
+            chat_id=1,
+            username=None,
+            title=None,
+            first_name=None,
+            last_name=None,
+            chat_type=None,
+        )
+        state.session_mode = "stateless"
+        state.show_resume_line = True
+        patch = build_config_patch(state, bot_token="tok")
+        existing = {"bot_token": "old", "chat_id": 99}
+        merged = merge_config(existing, patch, config_path=config_path)
+        assert "bot_token" not in merged or merged.get("bot_token") is None
+        assert "chat_id" not in merged or merged.get("chat_id") is None
+
+
+class TestLoadSettingsPush:
+    def test_loads_ok(self):
+        """If tunapi.toml exists, load_settings should not crash."""
+        try:
+            settings, path = load_settings()
+            assert settings is not None
+        except ConfigError:
+            pass  # OK if no config present

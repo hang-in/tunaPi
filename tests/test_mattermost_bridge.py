@@ -23,7 +23,14 @@ pytestmark = pytest.mark.anyio
 class TestMattermostPresenter:
     def test_render_progress(self):
         presenter = MattermostPresenter()
-        state = ProgressState(engine="claude", action_count=3, actions=(), resume=None, resume_line=None, context_line=None)
+        state = ProgressState(
+            engine="claude",
+            action_count=3,
+            actions=(),
+            resume=None,
+            resume_line=None,
+            context_line=None,
+        )
         result = presenter.render_progress(state, elapsed_s=10.0)
         assert isinstance(result, RenderedMessage)
         assert "claude" in result.text
@@ -31,7 +38,14 @@ class TestMattermostPresenter:
 
     def test_render_final(self):
         presenter = MattermostPresenter()
-        state = ProgressState(engine="claude", action_count=1, actions=(), resume=None, resume_line=None, context_line=None)
+        state = ProgressState(
+            engine="claude",
+            action_count=1,
+            actions=(),
+            resume=None,
+            resume_line=None,
+            context_line=None,
+        )
         result = presenter.render_final(
             state, elapsed_s=5.0, status="done", answer="The answer is 42."
         )
@@ -40,7 +54,14 @@ class TestMattermostPresenter:
     def test_render_final_split_overflow(self):
         presenter = MattermostPresenter(message_overflow="split")
         long_answer = "\n\n".join(f"paragraph {i}" * 50 for i in range(30))
-        state = ProgressState(engine="claude", action_count=1, actions=(), resume=None, resume_line=None, context_line=None)
+        state = ProgressState(
+            engine="claude",
+            action_count=1,
+            actions=(),
+            resume=None,
+            resume_line=None,
+            context_line=None,
+        )
         result = presenter.render_final(
             state, elapsed_s=1.0, status="done", answer=long_answer
         )

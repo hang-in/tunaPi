@@ -1,9 +1,11 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 import tunapi.runtime_loader as runtime_loader
 from tunapi.config import ConfigError
+from tunapi.runtime_loader import resolve_default_engine, resolve_plugins_allowlist
 from tunapi.settings import TunapiSettings
 
 
@@ -50,3 +52,65 @@ def test_resolve_default_engine_unknown(tmp_path: Path) -> None:
             config_path=tmp_path / "tunapi.toml",
             engine_ids=["codex"],
         )
+
+
+class TestResolvePluginsAllowlist:
+    def test_none_settings(self):
+        assert resolve_plugins_allowlist(None) is None
+
+    def test_empty_enabled(self):
+        settings = MagicMock()
+        settings.plugins.enabled = []
+        assert resolve_plugins_allowlist(settings) is None
+
+    def test_with_enabled(self):
+        settings = MagicMock()
+        settings.plugins.enabled = ["claude", "codex"]
+        result = resolve_plugins_allowlist(settings)
+        assert result == ["claude", "codex"]
+
+
+class TestResolveDefaultEnginePush:
+    def test_override(self):
+        settings = MagicMock()
+        settings.default_engine = "codex"
+        result = resolve_default_engine(
+            override="claude",
+            settings=settings,
+            config_path=Path("/c.toml"),
+            engine_ids=["claude", "codex"],
+        )
+        assert result == "claude"
+
+    def test_from_settings(self):
+        settings = MagicMock()
+        settings.default_engine = "codex"
+        result = resolve_default_engine(
+            override=None,
+            settings=settings,
+            config_path=Path("/c.toml"),
+            engine_ids=["claude", "codex"],
+        )
+        assert result == "codex"
+
+    def test_fallback_codex(self):
+        settings = MagicMock()
+        settings.default_engine = None
+        result = resolve_default_engine(
+            override=None,
+            settings=settings,
+            config_path=Path("/c.toml"),
+            engine_ids=["claude", "codex"],
+        )
+        assert result == "codex"
+
+    def test_unknown_engine(self):
+        settings = MagicMock()
+        settings.default_engine = "unknown"
+        with pytest.raises(ConfigError, match="Unknown default engine"):
+            resolve_default_engine(
+                override=None,
+                settings=settings,
+                config_path=Path("/c.toml"),
+                engine_ids=["claude", "codex"],
+            )

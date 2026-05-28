@@ -5,7 +5,6 @@ from __future__ import annotations
 import anyio
 
 from tunapi.core.outbox import (
-    EDIT_PRIORITY,
     SEND_PRIORITY,
     Outbox,
     OutboxOp,
@@ -173,3 +172,10 @@ class TestOutboxClose:
 
 async def _async_return(value):
     return value
+
+
+class TestRetryAfterPush:
+    def test_attributes(self):
+        exc = RetryAfter(3.5)
+        assert exc.retry_after == 3.5
+        assert "3.5" in str(exc)

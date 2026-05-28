@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from typing import Any
 
-import anyio
 import pytest
 
 from tunapi.core.memory_facade import ProjectMemoryFacade
@@ -108,8 +106,12 @@ class TestDiscussionLinkBranch:
     async def test_link_branch(self, backend, transport, ws):
         # Setup: create discussion and branch
         await backend._facade.discussions.create_record(
-            "proj", discussion_id="d1", topic="T", participants=["claude"],
-            rounds=1, transcript=[],
+            "proj",
+            discussion_id="d1",
+            topic="T",
+            participants=["claude"],
+            rounds=1,
+            transcript=[],
         )
         await backend._facade.branches.create_branch("proj", "main")
 
@@ -129,8 +131,12 @@ class TestDiscussionLinkBranch:
 class TestSynthesisCreate:
     async def test_create_synthesis(self, backend, transport, ws):
         await backend._facade.discussions.create_record(
-            "proj", discussion_id="d1", topic="Design",
-            participants=["claude"], rounds=1, transcript=[],
+            "proj",
+            discussion_id="d1",
+            topic="Design",
+            participants=["claude"],
+            rounds=1,
+            transcript=[],
             summary="Use REST API",
         )
         params = {"project": "proj", "discussion_id": "d1"}
@@ -156,8 +162,12 @@ class TestReviewRequest:
     async def test_request_review(self, backend, transport, ws):
         # Create discussion + synthesis first
         await backend._facade.discussions.create_record(
-            "proj", discussion_id="d1", topic="Design",
-            participants=["claude"], rounds=1, transcript=[],
+            "proj",
+            discussion_id="d1",
+            topic="Design",
+            participants=["claude"],
+            rounds=1,
+            transcript=[],
             summary="REST",
         )
         artifact = await backend._facade.save_synthesis_from_discussion("proj", "d1")

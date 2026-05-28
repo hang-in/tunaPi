@@ -1,20 +1,29 @@
 """Direct unit tests for core/lifecycle.py."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import anyio
+import pytest
+
+pytestmark = pytest.mark.anyio
 
 from tunapi.core.lifecycle import (
     cleanup_heartbeat,
     detect_abnormal_termination,
     graceful_drain,
+    heartbeat_loop,
+    recover_pending_runs,
+    register_sigterm_handler,
     save_shutdown_state,
     send_restart_notification,
 )
+from tunapi.journal import Journal, PendingRunLedger
 
 
 class TestDetectAbnormalTermination:
@@ -230,3 +239,159 @@ class TestGracefulDrain:
                 await graceful_drain(tasks, log_prefix="test")
 
         anyio.run(_run)
+
+
+class TestDetectAbnormalTerminationPush:
+    async def test_no_heartbeat(self, tmp_path: Path):
+        # No heartbeat file -> no warning
+        await detect_abnormal_termination(
+            heartbeat_path=tmp_path / "heartbeat",
+            shutdown_state_path=tmp_path / "shutdown",
+            log_prefix="test",
+        )
+
+    async def test_shutdown_state_exists(self, tmp_path: Path):
+        hb = tmp_path / "heartbeat"
+        hb.write_text(datetime.now(tz=UTC).isoformat())
+        ss = tmp_path / "shutdown"
+        ss.write_text("{}")
+        await detect_abnormal_termination(
+            heartbeat_path=hb,
+            shutdown_state_path=ss,
+            log_prefix="test",
+        )
+
+    async def test_stale_heartbeat(self, tmp_path: Path):
+        from datetime import timedelta
+
+        hb = tmp_path / "heartbeat"
+        old_time = datetime.now(tz=UTC) - timedelta(seconds=60)
+        hb.write_text(old_time.isoformat())
+        await detect_abnormal_termination(
+            heartbeat_path=hb,
+            shutdown_state_path=tmp_path / "shutdown",
+            log_prefix="test",
+        )
+
+    async def test_fresh_heartbeat(self, tmp_path: Path):
+        hb = tmp_path / "heartbeat"
+        hb.write_text(datetime.now(tz=UTC).isoformat())
+        await detect_abnormal_termination(
+            heartbeat_path=hb,
+            shutdown_state_path=tmp_path / "shutdown",
+            log_prefix="test",
+        )
+
+
+class TestSendRestartNotificationPush:
+    async def test_no_shutdown_state(self, tmp_path: Path):
+        send_fn = AsyncMock()
+        await send_restart_notification(
+            shutdown_state_path=tmp_path / "shutdown",
+            channel_id="ch1",
+            send_fn=send_fn,
+        )
+        send_fn.assert_not_called()
+
+    async def test_with_shutdown_state(self, tmp_path: Path):
+        ss = tmp_path / "shutdown"
+        ss.write_text(
+            json.dumps(
+                {
+                    "reason": "sigterm",
+                    "running_tasks": 2,
+                    "timestamp": "2024-01-01T00:00:00",
+                }
+            )
+        )
+        send_fn = AsyncMock()
+        await send_restart_notification(
+            shutdown_state_path=ss,
+            channel_id="ch1",
+            send_fn=send_fn,
+        )
+        send_fn.assert_called_once()
+        assert not ss.exists()
+
+    async def test_with_no_channel_id(self, tmp_path: Path):
+        ss = tmp_path / "shutdown"
+        ss.write_text("{}")
+        send_fn = AsyncMock()
+        await send_restart_notification(
+            shutdown_state_path=ss,
+            channel_id=None,
+            send_fn=send_fn,
+        )
+        send_fn.assert_not_called()
+        assert not ss.exists()
+
+    async def test_no_running_tasks(self, tmp_path: Path):
+        ss = tmp_path / "shutdown"
+        ss.write_text(json.dumps({"reason": "user", "running_tasks": 0}))
+        send_fn = AsyncMock()
+        await send_restart_notification(
+            shutdown_state_path=ss,
+            channel_id="ch1",
+            send_fn=send_fn,
+        )
+        send_fn.assert_called_once()
+
+
+class TestRegisterSigtermHandlerPush:
+    def test_registers(self):
+        shutdown = anyio.Event()
+        register_sigterm_handler(shutdown, log_prefix="test")
+
+
+class TestGracefulDrainPush:
+    async def test_no_tasks(self):
+        await graceful_drain({}, log_prefix="test")
+
+    async def test_with_tasks(self):
+        done = anyio.Event()
+        done.set()
+        task = MagicMock()
+        task.done = done
+        await graceful_drain({"k": task}, log_prefix="test")
+
+
+class TestRecoverPendingRunsPush:
+    async def test_no_pending(self, tmp_path: Path):
+        journal = MagicMock(spec=Journal)
+        ledger = AsyncMock(spec=PendingRunLedger)
+        ledger.get_all = AsyncMock(return_value=[])
+        send_fn = AsyncMock()
+        await recover_pending_runs(
+            journal=journal,
+            ledger=ledger,
+            send_fn=send_fn,
+        )
+        send_fn.assert_not_called()
+
+    async def test_with_pending(self, tmp_path: Path):
+        journal = AsyncMock(spec=Journal)
+        journal.mark_interrupted = AsyncMock()
+        run = MagicMock()
+        run.channel_id = "ch1"
+        run.run_id = "run1"
+        ledger = AsyncMock(spec=PendingRunLedger)
+        ledger.get_all = AsyncMock(return_value=[run])
+        ledger.clear_all = AsyncMock()
+        send_fn = AsyncMock()
+        await recover_pending_runs(
+            journal=journal,
+            ledger=ledger,
+            send_fn=send_fn,
+        )
+        send_fn.assert_called_once()
+        journal.mark_interrupted.assert_called_once()
+        ledger.clear_all.assert_called_once()
+
+
+class TestHeartbeatLoopPush:
+    async def test_writes_file(self, tmp_path: Path):
+        hb = tmp_path / "heartbeat"
+        with anyio.move_on_after(0.1):
+            await heartbeat_loop(hb)
+        # File should have been written at least once
+        assert hb.exists()

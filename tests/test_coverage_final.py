@@ -8,13 +8,13 @@ Targets:
 - telegram/loop_state.py: stateless helpers (chat_session_key, classify_message, etc.)
 - discord/commands/registration.py: discover_command_ids, _format_plugin_starter_message
 """
+# ruff: noqa: E402
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import anyio
 import pytest
@@ -23,20 +23,16 @@ import pytest
 # 1. runner_bridge.py
 # ---------------------------------------------------------------------------
 from tunapi.model import (
-    Action,
-    ActionEvent,
-    CompletedEvent,
     ResumeToken,
     StartedEvent,
 )
-from tunapi.progress import ProgressState, ProgressTracker
+from tunapi.progress import ProgressTracker
 from tunapi.runner_bridge import (
     ExecBridgeConfig,
     IncomingMessage,
     ProgressEdits,
     ProgressMessageState,
     RunOutcome,
-    RunningTask,
     _finalize_run,
     _flatten_exception_group,
     _format_error,
@@ -50,15 +46,20 @@ from tunapi.transport import MessageRef, RenderedMessage
 
 # -- _strip_resume_lines --
 
+
 def test_strip_resume_lines_filters() -> None:
     text = "resume:abc\nhello world\nresume:def"
-    result = _strip_resume_lines(text, is_resume_line=lambda l: l.startswith("resume:"))
+    result = _strip_resume_lines(
+        text, is_resume_line=lambda line: line.startswith("resume:")
+    )
     assert result == "hello world"
 
 
 def test_strip_resume_lines_all_removed() -> None:
     text = "resume:abc\nresume:def"
-    result = _strip_resume_lines(text, is_resume_line=lambda l: l.startswith("resume:"))
+    result = _strip_resume_lines(
+        text, is_resume_line=lambda line: line.startswith("resume:")
+    )
     assert result == "continue"
 
 
@@ -69,6 +70,7 @@ def test_strip_resume_lines_none_removed() -> None:
 
 
 # -- _flatten_exception_group --
+
 
 def test_flatten_single_exception() -> None:
     exc = ValueError("test")
@@ -94,6 +96,7 @@ def test_flatten_nested_exception_group() -> None:
 
 # -- _format_error --
 
+
 @pytest.mark.anyio
 async def test_format_error_single() -> None:
     exc = ValueError("bad input")
@@ -111,7 +114,7 @@ async def test_format_error_group_single_after_cancel_filter() -> None:
     cancel_cls = anyio.get_cancelled_exc_class()
     inner = ValueError("real error")
     cancel = cancel_cls()
-    group = BaseExceptionGroup("g", [cancel, inner])
+    BaseExceptionGroup("g", [cancel, inner])
     # ExceptionGroup filters out cancel exceptions, leaving just one
     result = _format_error(ExceptionGroup("g", [inner]))
     assert result == "real error"
@@ -128,6 +131,7 @@ async def test_format_error_multiple_messages() -> None:
 
 
 # -- sync_resume_token --
+
 
 def test_sync_resume_token_uses_resume_arg() -> None:
     tracker = ProgressTracker(engine="test")
@@ -147,6 +151,7 @@ def test_sync_resume_token_falls_back_to_tracker() -> None:
 
 # -- RunOutcome defaults --
 
+
 def test_run_outcome_defaults() -> None:
     o = RunOutcome()
     assert o.cancelled is False
@@ -156,10 +161,9 @@ def test_run_outcome_defaults() -> None:
 
 # -- IncomingMessage --
 
+
 def test_incoming_message() -> None:
-    msg = IncomingMessage(
-        channel_id=123, message_id=456, text="hello", thread_id=789
-    )
+    msg = IncomingMessage(channel_id=123, message_id=456, text="hello", thread_id=789)
     assert msg.channel_id == 123
     assert msg.text == "hello"
     assert msg.thread_id == 789
@@ -168,17 +172,17 @@ def test_incoming_message() -> None:
 
 # -- ExecBridgeConfig --
 
+
 def test_exec_bridge_config() -> None:
     transport = MagicMock()
     presenter = MagicMock()
-    cfg = ExecBridgeConfig(
-        transport=transport, presenter=presenter, final_notify=True
-    )
+    cfg = ExecBridgeConfig(transport=transport, presenter=presenter, final_notify=True)
     assert cfg.final_notify is True
     assert cfg.engine_meta is None
 
 
 # -- ProgressMessageState --
+
 
 def test_progress_message_state() -> None:
     ref = MessageRef(channel_id=1, message_id=2)
@@ -189,6 +193,7 @@ def test_progress_message_state() -> None:
 
 
 # -- send_initial_progress --
+
 
 @pytest.mark.anyio
 async def test_send_initial_progress_sends_message() -> None:
@@ -201,9 +206,7 @@ async def test_send_initial_progress_sends_message() -> None:
     rendered = RenderedMessage(text="progress")
     presenter.render_progress.return_value = rendered
 
-    cfg = ExecBridgeConfig(
-        transport=transport, presenter=presenter, final_notify=False
-    )
+    cfg = ExecBridgeConfig(transport=transport, presenter=presenter, final_notify=False)
     tracker = ProgressTracker(engine="test")
     reply_to = MessageRef(channel_id=1, message_id=5)
 
@@ -229,9 +232,7 @@ async def test_send_initial_progress_edit_existing() -> None:
     rendered = RenderedMessage(text="progress")
     presenter.render_progress.return_value = rendered
 
-    cfg = ExecBridgeConfig(
-        transport=transport, presenter=presenter, final_notify=False
-    )
+    cfg = ExecBridgeConfig(transport=transport, presenter=presenter, final_notify=False)
     tracker = ProgressTracker(engine="test")
     reply_to = MessageRef(channel_id=1, message_id=5)
 
@@ -256,9 +257,7 @@ async def test_send_initial_progress_send_returns_none() -> None:
     presenter = MagicMock()
     presenter.render_progress.return_value = RenderedMessage(text="p")
 
-    cfg = ExecBridgeConfig(
-        transport=transport, presenter=presenter, final_notify=False
-    )
+    cfg = ExecBridgeConfig(transport=transport, presenter=presenter, final_notify=False)
     tracker = ProgressTracker(engine="test")
     reply_to = MessageRef(channel_id=1, message_id=5)
 
@@ -270,6 +269,7 @@ async def test_send_initial_progress_send_returns_none() -> None:
 
 
 # -- send_result_message --
+
 
 @pytest.mark.anyio
 async def test_send_result_message_deletes_progress() -> None:
@@ -323,6 +323,7 @@ async def test_send_result_message_no_delete_when_edited() -> None:
 
 # -- _finalize_run --
 
+
 @pytest.mark.anyio
 async def test_finalize_run_writes_journal_entries() -> None:
     journal = AsyncMock()
@@ -361,13 +362,19 @@ async def test_finalize_run_completes_ledger() -> None:
     incoming = IncomingMessage(channel_id=1, message_id=2, text="hi")
 
     await _finalize_run(
-        None, "run-001", incoming, "claude", tracker,
-        event="completed", ledger=ledger,
+        None,
+        "run-001",
+        incoming,
+        "claude",
+        tracker,
+        event="completed",
+        ledger=ledger,
     )
     ledger.complete.assert_awaited_once_with("run-001")
 
 
 # -- ProgressEdits.on_event --
+
 
 @pytest.mark.anyio
 async def test_progress_edits_on_event_no_ref() -> None:
@@ -452,13 +459,12 @@ from tunapi.cli.config import (
     config_get,
     config_list,
     config_path_cmd,
-    config_set,
-    config_unset,
 )
 from tunapi.config import ConfigError
 
 
 # -- _config_path_display --
+
 
 def test_config_path_display_home_relative() -> None:
     home = Path.home()
@@ -474,6 +480,7 @@ def test_config_path_display_absolute() -> None:
 
 
 # -- _fail_missing_config --
+
 
 def test_fail_missing_config_exists(tmp_path: Path, capsys) -> None:
     p = tmp_path / "tunapi.toml"
@@ -492,6 +499,7 @@ def test_fail_missing_config_not_exists(tmp_path: Path, capsys) -> None:
 
 # -- _resolve_config_path_override --
 
+
 def test_resolve_config_path_override_none() -> None:
     result = _resolve_config_path_override(None)
     assert isinstance(result, Path)
@@ -505,8 +513,8 @@ def test_resolve_config_path_override_value() -> None:
 
 # -- _resolve_home_config_path --
 
+
 def test_resolve_home_config_path_override(monkeypatch) -> None:
-    import tunapi.cli.config as config_mod
     import sys
 
     fake_module = MagicMock()
@@ -518,22 +526,27 @@ def test_resolve_home_config_path_override(monkeypatch) -> None:
 
 def test_resolve_home_config_path_default(monkeypatch) -> None:
     import sys
+
     monkeypatch.delitem(sys.modules, "tunapi.cli", raising=False)
     result = _resolve_home_config_path()
     from tunapi.config import HOME_CONFIG_PATH
+
     assert result == HOME_CONFIG_PATH
 
 
 # -- _exit_config_error --
 
+
 def test_exit_config_error_raises(capsys) -> None:
     import typer
+
     with pytest.raises(typer.Exit) as exc_info:
         _exit_config_error(ConfigError("boom"), code=3)
     assert exc_info.value.exit_code == 3
 
 
 # -- _parse_key_path (additional edge cases beyond test_cli_helpers) --
+
 
 def test_parse_key_path_empty() -> None:
     with pytest.raises(ConfigError, match="non-empty"):
@@ -560,6 +573,7 @@ def test_parse_key_path_with_hyphens() -> None:
 
 # -- _parse_value (additional) --
 
+
 def test_parse_value_empty() -> None:
     assert _parse_value("") == ""
     assert _parse_value("   ") == ""
@@ -577,6 +591,7 @@ def test_parse_value_string_fallback() -> None:
 
 # -- _toml_literal (additional) --
 
+
 def test_toml_literal_bool() -> None:
     assert _toml_literal(True) == "true"
     assert _toml_literal(False) == "false"
@@ -587,6 +602,7 @@ def test_toml_literal_int() -> None:
 
 
 # -- _flatten_config (additional) --
+
 
 def test_flatten_config_empty() -> None:
     assert _flatten_config({}) == []
@@ -601,32 +617,45 @@ def test_flatten_config_nested() -> None:
 
 # -- _normalized_value_from_settings (additional) --
 
+
 def test_normalized_value_missing_key() -> None:
     from tunapi.settings import TunapiSettings
-    settings = TunapiSettings.model_validate({
-        "transport": "telegram",
-        "transports": {"telegram": {"bot_token": "t", "chat_id": 1}},
-    })
+
+    settings = TunapiSettings.model_validate(
+        {
+            "transport": "telegram",
+            "transports": {"telegram": {"bot_token": "t", "chat_id": 1}},
+        }
+    )
     from tunapi.cli.config import _MISSING
+
     result = _normalized_value_from_settings(settings, ["nonexistent_key"])
     assert result is _MISSING
 
 
 def test_normalized_value_deep_missing() -> None:
     from tunapi.settings import TunapiSettings
-    settings = TunapiSettings.model_validate({
-        "transport": "telegram",
-        "transports": {"telegram": {"bot_token": "t", "chat_id": 1}},
-    })
+
+    settings = TunapiSettings.model_validate(
+        {
+            "transport": "telegram",
+            "transports": {"telegram": {"bot_token": "t", "chat_id": 1}},
+        }
+    )
     from tunapi.cli.config import _MISSING
-    result = _normalized_value_from_settings(settings, ["transports", "telegram", "nonexistent"])
+
+    result = _normalized_value_from_settings(
+        settings, ["transports", "telegram", "nonexistent"]
+    )
     assert result is _MISSING
 
 
 # -- _load_config_or_exit --
 
+
 def test_load_config_or_exit_missing(tmp_path: Path) -> None:
     import typer
+
     p = tmp_path / "missing.toml"
     with pytest.raises(typer.Exit) as exc_info:
         _load_config_or_exit(p, missing_code=5)
@@ -642,6 +671,7 @@ def test_load_config_or_exit_valid(tmp_path: Path) -> None:
 
 def test_load_config_or_exit_invalid(tmp_path: Path) -> None:
     import typer
+
     p = tmp_path / "tunapi.toml"
     p.write_text("invalid toml {{{")
     with pytest.raises(typer.Exit):
@@ -649,6 +679,7 @@ def test_load_config_or_exit_invalid(tmp_path: Path) -> None:
 
 
 # -- config_path_cmd --
+
 
 def test_config_path_cmd(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
@@ -662,12 +693,11 @@ def test_config_path_cmd(capsys, monkeypatch) -> None:
 
 # -- config_list --
 
+
 def test_config_list(tmp_path: Path, capsys, monkeypatch) -> None:
     p = tmp_path / "tunapi.toml"
     p.write_text('transport = "telegram"\nwatch_config = true\n')
-    monkeypatch.setattr(
-        "tunapi.cli.config._resolve_config_path_override", lambda _: p
-    )
+    monkeypatch.setattr("tunapi.cli.config._resolve_config_path_override", lambda _: p)
     config_list(config_path=None)
     captured = capsys.readouterr()
     assert "transport" in captured.out
@@ -676,12 +706,11 @@ def test_config_list(tmp_path: Path, capsys, monkeypatch) -> None:
 
 # -- config_get --
 
+
 def test_config_get(tmp_path: Path, capsys, monkeypatch) -> None:
     p = tmp_path / "tunapi.toml"
     p.write_text('transport = "telegram"\n')
-    monkeypatch.setattr(
-        "tunapi.cli.config._resolve_config_path_override", lambda _: p
-    )
+    monkeypatch.setattr("tunapi.cli.config._resolve_config_path_override", lambda _: p)
     config_get(key="transport", config_path=None)
     captured = capsys.readouterr()
     assert "telegram" in captured.out
@@ -689,11 +718,10 @@ def test_config_get(tmp_path: Path, capsys, monkeypatch) -> None:
 
 def test_config_get_missing_key(tmp_path: Path, monkeypatch) -> None:
     import typer
+
     p = tmp_path / "tunapi.toml"
     p.write_text('transport = "telegram"\n')
-    monkeypatch.setattr(
-        "tunapi.cli.config._resolve_config_path_override", lambda _: p
-    )
+    monkeypatch.setattr("tunapi.cli.config._resolve_config_path_override", lambda _: p)
     with pytest.raises(typer.Exit) as exc_info:
         config_get(key="missing_key", config_path=None)
     assert exc_info.value.exit_code == 1
@@ -701,11 +729,10 @@ def test_config_get_missing_key(tmp_path: Path, monkeypatch) -> None:
 
 def test_config_get_table_key(tmp_path: Path, capsys, monkeypatch) -> None:
     import typer
+
     p = tmp_path / "tunapi.toml"
     p.write_text('[transports]\n[transports.telegram]\nbot_token = "t"\nchat_id = 1\n')
-    monkeypatch.setattr(
-        "tunapi.cli.config._resolve_config_path_override", lambda _: p
-    )
+    monkeypatch.setattr("tunapi.cli.config._resolve_config_path_override", lambda _: p)
     with pytest.raises(typer.Exit) as exc_info:
         config_get(key="transports", config_path=None)
     assert exc_info.value.exit_code == 2
@@ -729,6 +756,7 @@ from tunapi.markdown import MarkdownParts
 
 # -- escape_slack --
 
+
 def test_escape_slack() -> None:
     assert escape_slack("a & b") == "a &amp; b"
     assert escape_slack("<tag>") == "&lt;tag&gt;"
@@ -740,6 +768,7 @@ def test_escape_slack_no_change() -> None:
 
 
 # -- markdown_to_mrkdwn --
+
 
 def test_markdown_to_mrkdwn_empty() -> None:
     assert markdown_to_mrkdwn("") == ""
@@ -758,7 +787,7 @@ def test_markdown_to_mrkdwn_bold() -> None:
 def test_markdown_to_mrkdwn_escape_and_link() -> None:
     result = markdown_to_mrkdwn("[A & B](http://example.com?a=1&b=2)")
     assert "&amp;" in result
-    assert "<http://example.com?a=1&amp;b=2|A &amp; B>" == result
+    assert result == "<http://example.com?a=1&amp;b=2|A &amp; B>"
 
 
 def test_markdown_to_mrkdwn_mixed() -> None:
@@ -769,6 +798,7 @@ def test_markdown_to_mrkdwn_mixed() -> None:
 
 
 # -- trim_body --
+
 
 def test_trim_body_none() -> None:
     assert trim_body(None) is None
@@ -791,6 +821,7 @@ def test_trim_body_long() -> None:
 
 
 # -- split_mrkdwn_body --
+
 
 def test_split_mrkdwn_body_short() -> None:
     body = "short text"
@@ -823,6 +854,7 @@ def test_split_mrkdwn_body_single_large_paragraph() -> None:
 
 # -- prepare_slack --
 
+
 def test_prepare_slack_basic() -> None:
     parts = MarkdownParts(header="**Header**", body="some body", footer="footer")
     result = prepare_slack(parts)
@@ -838,6 +870,7 @@ def test_prepare_slack_no_body() -> None:
 
 
 # -- prepare_slack_multi --
+
 
 def test_prepare_slack_multi_short() -> None:
     parts = MarkdownParts(header="H", body="short", footer="F")
@@ -883,87 +916,201 @@ from tunapi.telegram.onboarding import (
 
 # -- ChatInfo --
 
+
 def test_chat_info_is_group() -> None:
-    c = ChatInfo(chat_id=1, username=None, title="Test", first_name=None, last_name=None, chat_type="supergroup")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title="Test",
+        first_name=None,
+        last_name=None,
+        chat_type="supergroup",
+    )
     assert c.is_group is True
 
 
 def test_chat_info_is_not_group() -> None:
-    c = ChatInfo(chat_id=1, username="bob", title=None, first_name=None, last_name=None, chat_type="private")
+    c = ChatInfo(
+        chat_id=1,
+        username="bob",
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="private",
+    )
     assert c.is_group is False
 
 
 def test_chat_info_display_group() -> None:
-    c = ChatInfo(chat_id=1, username=None, title="My Group", first_name=None, last_name=None, chat_type="group")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title="My Group",
+        first_name=None,
+        last_name=None,
+        chat_type="group",
+    )
     assert c.display == 'group "My Group"'
 
 
 def test_chat_info_display_group_no_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="group")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="group",
+    )
     assert c.display == "group chat"
 
 
 def test_chat_info_display_channel() -> None:
-    c = ChatInfo(chat_id=1, username=None, title="Chan", first_name=None, last_name=None, chat_type="channel")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title="Chan",
+        first_name=None,
+        last_name=None,
+        chat_type="channel",
+    )
     assert c.display == 'channel "Chan"'
 
 
 def test_chat_info_display_channel_no_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="channel")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="channel",
+    )
     assert c.display == "channel"
 
 
 def test_chat_info_display_private_username() -> None:
-    c = ChatInfo(chat_id=1, username="alice", title=None, first_name=None, last_name=None, chat_type="private")
+    c = ChatInfo(
+        chat_id=1,
+        username="alice",
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="private",
+    )
     assert c.display == "@alice"
 
 
 def test_chat_info_display_private_name() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name="John", last_name="Doe", chat_type="private")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name="John",
+        last_name="Doe",
+        chat_type="private",
+    )
     assert c.display == "John Doe"
 
 
 def test_chat_info_display_private_no_info() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="private")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="private",
+    )
     assert c.display == "private chat"
 
 
 def test_chat_info_kind_private() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="private")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="private",
+    )
     assert c.kind == "private chat"
 
 
 def test_chat_info_kind_none() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type=None)
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type=None,
+    )
     assert c.kind == "private chat"
 
 
 def test_chat_info_kind_group_with_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title="Dev", first_name=None, last_name=None, chat_type="supergroup")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title="Dev",
+        first_name=None,
+        last_name=None,
+        chat_type="supergroup",
+    )
     assert c.kind == 'supergroup "Dev"'
 
 
 def test_chat_info_kind_group_no_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="group")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="group",
+    )
     assert c.kind == "group"
 
 
 def test_chat_info_kind_channel_with_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title="News", first_name=None, last_name=None, chat_type="channel")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title="News",
+        first_name=None,
+        last_name=None,
+        chat_type="channel",
+    )
     assert c.kind == 'channel "News"'
 
 
 def test_chat_info_kind_channel_no_title() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="channel")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="channel",
+    )
     assert c.kind == "channel"
 
 
 def test_chat_info_kind_unknown() -> None:
-    c = ChatInfo(chat_id=1, username=None, title=None, first_name=None, last_name=None, chat_type="other_type")
+    c = ChatInfo(
+        chat_id=1,
+        username=None,
+        title=None,
+        first_name=None,
+        last_name=None,
+        chat_type="other_type",
+    )
     assert c.kind == "other_type"
 
 
 # -- OnboardingState --
+
 
 def test_onboarding_state_is_stateful() -> None:
     s = OnboardingState(config_path=Path("/tmp"), force=False, session_mode="chat")
@@ -989,6 +1136,7 @@ def test_onboarding_state_bot_ref() -> None:
 
 # -- mask_token --
 
+
 def test_mask_token_short() -> None:
     assert mask_token("abc") == "***"
 
@@ -1012,6 +1160,7 @@ def test_mask_token_strips_whitespace() -> None:
 
 # -- require_value --
 
+
 def test_require_value_ok() -> None:
     assert require_value(42) == 42
     assert require_value("hello") == "hello"
@@ -1023,6 +1172,7 @@ def test_require_value_none() -> None:
 
 
 # -- display_path --
+
 
 def test_display_path_home() -> None:
     home = Path.home()
@@ -1038,6 +1188,7 @@ def test_display_path_non_home() -> None:
 
 # -- config_issue --
 
+
 def test_config_issue() -> None:
     p = Path("/etc/tunapi.toml")
     issue = config_issue(p, title="test issue")
@@ -1047,6 +1198,7 @@ def test_config_issue() -> None:
 
 
 # -- check_setup --
+
 
 def test_check_setup_missing_cli(monkeypatch) -> None:
     backend = MagicMock()
@@ -1090,6 +1242,7 @@ from tunapi.telegram.loop_state import (
 
 # -- diff_keys --
 
+
 def test_diff_keys_no_diff() -> None:
     assert diff_keys({"a": 1, "b": 2}, {"a": 1, "b": 2}) == []
 
@@ -1109,6 +1262,7 @@ def test_diff_keys_empty() -> None:
 
 
 # -- chat_session_key --
+
 
 def test_chat_session_key_no_store() -> None:
     msg = MagicMock()
@@ -1155,6 +1309,7 @@ def test_chat_session_key_group_no_sender() -> None:
 
 
 # -- classify_message --
+
 
 def test_classify_message_normal() -> None:
     msg = MagicMock()
@@ -1206,6 +1361,7 @@ def test_classify_message_media_group_doc_files_disabled() -> None:
 
 # -- allowed_chat_ids --
 
+
 def test_allowed_chat_ids() -> None:
     cfg = MagicMock()
     cfg.chat_ids = [1, 2]
@@ -1237,6 +1393,7 @@ from tunapi.discord.commands.registration import (
 
 # -- discover_command_ids --
 
+
 def test_discover_command_ids(monkeypatch) -> None:
     monkeypatch.setattr(
         "tunapi.discord.commands.registration.list_command_ids",
@@ -1256,6 +1413,7 @@ def test_discover_command_ids_with_allowlist(monkeypatch) -> None:
 
 
 # -- _format_plugin_starter_message --
+
 
 def test_format_plugin_starter_message_short() -> None:
     result = _format_plugin_starter_message("help", "")

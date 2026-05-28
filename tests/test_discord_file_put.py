@@ -9,14 +9,7 @@ import pytest
 from tunapi.discord.file_transfer import DEFAULT_DENY_GLOBS, save_attachment_to_path
 
 
-class FakeAttachment:
-    def __init__(self, *, filename: str, payload: bytes) -> None:
-        self.filename = filename
-        self.size = len(payload)
-        self._payload = payload
-
-    async def read(self) -> bytes:
-        return self._payload
+from .fakes.discord import FakeAttachment
 
 
 @pytest.mark.anyio

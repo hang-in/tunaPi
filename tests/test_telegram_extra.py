@@ -1,4 +1,5 @@
 """Tests for Telegram update_routing and commands/topics."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -6,10 +7,18 @@ from collections import deque
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import anyio
 import pytest
+
+from tunapi.telegram.api_models import User
+from tunapi.telegram.onboarding import (
+    check_setup as tg_check_setup,
+    get_bot_info,
+    wait_for_chat,
+    validate_topics_onboarding,
+)
 
 from tunapi.config import ProjectConfig, ProjectsConfig
 from tunapi.runners.mock import Return, ScriptRunner
@@ -861,3 +870,617 @@ class TestHandleTopicCommand:
         )
         # Should show usage or error
         assert len(_sent_texts(transport)) >= 1
+
+
+# ===========================================================================
+# Onboarding / Setup Tests
+# ===========================================================================
+
+
+class TestTelegramCheckSetup:
+    def _make_backend(self) -> Any:
+        from tunapi.backends import EngineBackend
+
+        return EngineBackend(
+            id="claude",
+            build_runner=MagicMock(),
+            cli_cmd="claude",
+            install_cmd="npm i claude",
+        )
+
+    def test_telegram_configured(self, monkeypatch):
+        settings = MagicMock()
+        settings.transport = "telegram"
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                return_value=(settings, Path("/c.toml")),
+            ),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("tunapi.telegram.onboarding.require_telegram"),
+        ):
+            result = tg_check_setup(self._make_backend())
+        assert result.ok
+
+    def test_telegram_config_error(self, monkeypatch):
+        from tunapi.config import ConfigError
+
+        settings = MagicMock()
+        settings.transport = "telegram"
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                return_value=(settings, Path("/c.toml")),
+            ),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch(
+                "tunapi.telegram.onboarding.require_telegram",
+                side_effect=ConfigError("bad"),
+            ),
+        ):
+            result = tg_check_setup(self._make_backend())
+        assert not result.ok
+
+    def test_load_settings_error_file_exists(self, tmp_path: Path):
+        from tunapi.config import ConfigError
+
+        cfg = tmp_path / "tunapi.toml"
+        cfg.touch()
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                side_effect=ConfigError("bad"),
+            ),
+            patch("tunapi.telegram.onboarding.HOME_CONFIG_PATH", cfg),
+            patch("shutil.which", return_value=None),
+        ):
+            result = tg_check_setup(self._make_backend())
+        assert not result.ok
+        titles = [i.title for i in result.issues]
+        assert "configure telegram" in titles
+
+    def test_load_settings_error_no_file(self, tmp_path: Path):
+        from tunapi.config import ConfigError
+
+        cfg = tmp_path / "nonexistent.toml"
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                side_effect=ConfigError("bad"),
+            ),
+            patch("tunapi.telegram.onboarding.HOME_CONFIG_PATH", cfg),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+        ):
+            result = tg_check_setup(self._make_backend())
+        titles = [i.title for i in result.issues]
+        assert "create a config" in titles
+
+    def test_transport_override_non_telegram(self, tmp_path: Path):
+        from tunapi.config import ConfigError
+
+        cfg = tmp_path / "nonexistent.toml"
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                side_effect=ConfigError("bad"),
+            ),
+            patch("tunapi.telegram.onboarding.HOME_CONFIG_PATH", cfg),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+        ):
+            result = tg_check_setup(self._make_backend(), transport_override="slack")
+        titles = [i.title for i in result.issues]
+        assert "create a config" in titles
+
+    def test_non_telegram_transport(self):
+        settings = MagicMock()
+        settings.transport = "slack"
+        with (
+            patch(
+                "tunapi.telegram.onboarding.load_settings",
+                return_value=(settings, Path("/c.toml")),
+            ),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+        ):
+            result = tg_check_setup(self._make_backend())
+        assert result.ok  # No telegram-specific issues
+
+
+class TestGetBotInfo:
+    @pytest.mark.anyio
+    async def test_success(self):
+        user = User(id=1, is_bot=True, first_name="Bot")
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_me = AsyncMock(return_value=user)
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await get_bot_info("tok123")
+        assert result is not None
+        assert result.first_name == "Bot"
+
+    @pytest.mark.anyio
+    async def test_retry_on_rate_limit(self):
+        from tunapi.telegram.client import TelegramRetryAfter
+
+        user = User(id=1, is_bot=True, first_name="Bot")
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_me = AsyncMock(side_effect=[TelegramRetryAfter(0.01), user])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await get_bot_info("tok", sleep=AsyncMock())
+        assert result is not None
+
+    @pytest.mark.anyio
+    async def test_all_retries_fail(self):
+        from tunapi.telegram.client import TelegramRetryAfter
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_me = AsyncMock(side_effect=[TelegramRetryAfter(0.01)] * 3)
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await get_bot_info("tok", sleep=AsyncMock())
+        assert result is None
+
+
+class TestWaitForChat:
+    @pytest.mark.anyio
+    async def test_receives_message(self):
+        chat_obj = MagicMock()
+        chat_obj.id = 42
+        chat_obj.username = "user"
+        chat_obj.title = None
+        chat_obj.first_name = "Alice"
+        chat_obj.last_name = None
+        chat_obj.type = "private"
+
+        msg_obj = MagicMock()
+        msg_obj.from_ = MagicMock()
+        msg_obj.from_.is_bot = False
+        msg_obj.chat = chat_obj
+
+        update = MagicMock()
+        update.update_id = 1
+        update.message = msg_obj
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_updates = AsyncMock(side_effect=[[], [update]])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await wait_for_chat("tok", sleep=AsyncMock())
+        assert result.chat_id == 42
+        assert result.username == "user"
+
+    @pytest.mark.anyio
+    async def test_skips_bot_messages(self):
+        # First update has bot sender, second has human
+        bot_msg = MagicMock()
+        bot_msg.from_ = MagicMock()
+        bot_msg.from_.is_bot = True
+
+        chat_obj = MagicMock()
+        chat_obj.id = 99
+        chat_obj.username = None
+        chat_obj.title = None
+        chat_obj.first_name = "Bob"
+        chat_obj.last_name = None
+        chat_obj.type = "private"
+
+        human_msg = MagicMock()
+        human_msg.from_ = MagicMock()
+        human_msg.from_.is_bot = False
+        human_msg.chat = chat_obj
+
+        upd1 = MagicMock()
+        upd1.update_id = 1
+        upd1.message = bot_msg
+
+        upd2 = MagicMock()
+        upd2.update_id = 2
+        upd2.message = human_msg
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_updates = AsyncMock(side_effect=[[], [upd1], [upd2]])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await wait_for_chat("tok", sleep=AsyncMock())
+        assert result.chat_id == 99
+
+    @pytest.mark.anyio
+    async def test_skips_none_message(self):
+        chat_obj = MagicMock()
+        chat_obj.id = 77
+        chat_obj.username = None
+        chat_obj.title = None
+        chat_obj.first_name = None
+        chat_obj.last_name = None
+        chat_obj.type = "private"
+
+        none_upd = MagicMock()
+        none_upd.update_id = 1
+        none_upd.message = None
+
+        real_msg = MagicMock()
+        real_msg.from_ = None
+        real_msg.chat = chat_obj
+
+        real_upd = MagicMock()
+        real_upd.update_id = 2
+        real_upd.message = real_msg
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_updates = AsyncMock(side_effect=[[], [none_upd], [real_upd]])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await wait_for_chat("tok", sleep=AsyncMock())
+        assert result.chat_id == 77
+
+    @pytest.mark.anyio
+    async def test_skips_none_updates(self):
+        chat_obj = MagicMock()
+        chat_obj.id = 55
+        chat_obj.username = None
+        chat_obj.title = None
+        chat_obj.first_name = None
+        chat_obj.last_name = None
+        chat_obj.type = "private"
+
+        real_msg = MagicMock()
+        real_msg.from_ = None
+        real_msg.chat = chat_obj
+
+        real_upd = MagicMock()
+        real_upd.update_id = 1
+        real_upd.message = real_msg
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_updates = AsyncMock(side_effect=[[], None, [real_upd]])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await wait_for_chat("tok", sleep=AsyncMock())
+        assert result.chat_id == 55
+
+    @pytest.mark.anyio
+    async def test_drains_backlog(self):
+        drain_upd = MagicMock()
+        drain_upd.update_id = 5
+
+        chat_obj = MagicMock()
+        chat_obj.id = 88
+        chat_obj.username = None
+        chat_obj.title = None
+        chat_obj.first_name = None
+        chat_obj.last_name = None
+        chat_obj.type = "private"
+
+        msg = MagicMock()
+        msg.from_ = None
+        msg.chat = chat_obj
+
+        real_upd = MagicMock()
+        real_upd.update_id = 6
+        real_upd.message = msg
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.get_updates = AsyncMock(side_effect=[[drain_upd], [real_upd]])
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            result = await wait_for_chat("tok", sleep=AsyncMock())
+        assert result.chat_id == 88
+
+
+class TestValidateTopicsOnboarding:
+    @pytest.mark.anyio
+    async def test_success(self):
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            with patch(
+                "tunapi.telegram.onboarding._validate_topics_setup_for", AsyncMock()
+            ):
+                result = await validate_topics_onboarding("tok", 123, "auto", ())
+        assert result is None
+
+    @pytest.mark.anyio
+    async def test_config_error(self):
+        from tunapi.config import ConfigError
+
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            with patch(
+                "tunapi.telegram.onboarding._validate_topics_setup_for",
+                AsyncMock(side_effect=ConfigError("bad topics")),
+            ):
+                result = await validate_topics_onboarding("tok", 123, "auto", ())
+        assert result is not None
+        assert "bad topics" in str(result)
+
+    @pytest.mark.anyio
+    async def test_generic_error(self):
+        with patch("tunapi.telegram.onboarding.TelegramClient") as mock_cls:
+            mock_bot = AsyncMock()
+            mock_bot.close = AsyncMock()
+            mock_cls.return_value = mock_bot
+            with patch(
+                "tunapi.telegram.onboarding._validate_topics_setup_for",
+                AsyncMock(side_effect=RuntimeError("oops")),
+            ):
+                result = await validate_topics_onboarding("tok", 123, "auto", ())
+        assert result is not None
+        assert "oops" in str(result)
+
+
+# ===========================================================================
+# Backlog and resume helpers
+# ===========================================================================
+
+from tunapi.telegram.loop import (
+    _drain_backlog,
+    _wait_for_resume,
+    _send_startup,
+    send_with_resume,
+)
+from tunapi.telegram.builtin_commands import dispatch_builtin_command
+from tunapi.model import ResumeToken
+
+
+class TestDrainBacklog:
+    @pytest.mark.anyio
+    async def test_no_updates(self):
+        cfg = MagicMock()
+        cfg.bot.get_updates = AsyncMock(return_value=[])
+        result = await _drain_backlog(cfg, None)
+        assert result is None
+
+    @pytest.mark.anyio
+    async def test_failed(self):
+        cfg = MagicMock()
+        cfg.bot.get_updates = AsyncMock(return_value=None)
+        result = await _drain_backlog(cfg, None)
+        assert result is None
+
+    @pytest.mark.anyio
+    async def test_drain_multiple(self):
+        upd1 = MagicMock()
+        upd1.update_id = 10
+        upd2 = MagicMock()
+        upd2.update_id = 11
+        cfg = MagicMock()
+        cfg.bot.get_updates = AsyncMock(side_effect=[[upd1, upd2], []])
+        result = await _drain_backlog(cfg, None)
+        assert result == 12  # last update_id + 1
+
+
+class TestWaitForResume:
+    @pytest.mark.anyio
+    async def test_resume_already_available(self):
+        task = MagicMock()
+        task.resume = ResumeToken(engine="claude", value="tok")
+        result = await _wait_for_resume(task)
+        assert result is not None
+        assert result.value == "tok"
+
+    @pytest.mark.anyio
+    async def test_resume_set_later(self):
+        resume_ready = anyio.Event()
+        done = anyio.Event()
+        task = MagicMock()
+        task.resume = None
+        task.resume_ready = resume_ready
+        task.done = done
+
+        async def set_resume():
+            task.resume = ResumeToken(engine="claude", value="later")
+            resume_ready.set()
+
+        async with anyio.create_task_group() as tg:
+
+            async def run():
+                nonlocal task
+                result = await _wait_for_resume(task)
+                assert result is not None
+                assert result.value == "later"
+
+            tg.start_soon(run)
+            tg.start_soon(set_resume)
+
+    @pytest.mark.anyio
+    async def test_done_before_resume(self):
+        resume_ready = anyio.Event()
+        done = anyio.Event()
+        task = MagicMock()
+        task.resume = None
+        task.resume_ready = resume_ready
+        task.done = done
+
+        async def set_done():
+            done.set()
+
+        async with anyio.create_task_group() as tg:
+
+            async def run():
+                result = await _wait_for_resume(task)
+                assert result is None
+
+            tg.start_soon(run)
+            tg.start_soon(set_done)
+
+
+class TestSendStartup:
+    @pytest.mark.anyio
+    async def test_sends_message(self):
+        cfg = MagicMock()
+        cfg.startup_msg = "bot started"
+        cfg.chat_id = 123
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+        await _send_startup(cfg)
+        cfg.exec_cfg.transport.send.assert_called_once()
+        call_kwargs = cfg.exec_cfg.transport.send.call_args.kwargs
+        assert call_kwargs["channel_id"] == 123
+
+    @pytest.mark.anyio
+    async def test_send_returns_none(self):
+        cfg = MagicMock()
+        cfg.startup_msg = "hi"
+        cfg.chat_id = 1
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=None)
+        await _send_startup(cfg)  # should not raise
+
+
+class TestSendWithResume:
+    @pytest.mark.anyio
+    async def test_no_resume(self):
+        cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+
+        done = anyio.Event()
+        done.set()
+
+        task = type(
+            "FakeTask",
+            (),
+            {
+                "resume": None,
+                "resume_ready": anyio.Event(),
+                "done": done,
+                "context": None,
+            },
+        )()
+
+        enqueue = AsyncMock()
+
+        await send_with_resume(
+            cfg,
+            enqueue,
+            task,
+            chat_id=1,
+            user_msg_id=2,
+            thread_id=None,
+            session_key=None,
+            text="hello",
+        )
+        enqueue.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_with_resume(self):
+        cfg = MagicMock()
+        cfg.exec_cfg.transport = AsyncMock()
+        cfg.exec_cfg.transport.send = AsyncMock(return_value=MagicMock())
+
+        task = type(
+            "FakeTask",
+            (),
+            {
+                "resume": ResumeToken(engine="claude", value="tok"),
+                "context": None,
+            },
+        )()
+
+        enqueue = AsyncMock()
+
+        with patch(
+            "tunapi.telegram.loop._send_queued_progress", AsyncMock(return_value=None)
+        ):
+            await send_with_resume(
+                cfg,
+                enqueue,
+                task,
+                chat_id=1,
+                user_msg_id=2,
+                thread_id=None,
+                session_key=None,
+                text="hello",
+            )
+        enqueue.assert_called_once()
+
+
+def _make_cmd_ctx(
+    command_id: str = "file",
+    *,
+    topics_enabled: bool = False,
+    files_enabled: bool = True,
+    topic_store: Any = None,
+    chat_prefs: Any = None,
+) -> Any:
+    cfg = MagicMock()
+    cfg.topics.enabled = topics_enabled
+    cfg.files.enabled = files_enabled
+    msg = _msg()
+    tg = MagicMock()
+    tg.start_soon = MagicMock()
+    ctx = MagicMock()
+    ctx.cfg = cfg
+    ctx.msg = msg
+    ctx.args_text = ""
+    ctx.ambient_context = None
+    ctx.topic_store = topic_store
+    ctx.chat_prefs = chat_prefs
+    ctx.resolved_scope = None
+    ctx.scope_chat_ids = frozenset()
+    ctx.reply = AsyncMock()
+    ctx.task_group = tg
+    return ctx
+
+
+class TestDispatchBuiltinCommand:
+    def test_file_disabled(self):
+        ctx = _make_cmd_ctx("file", files_enabled=False)
+        assert dispatch_builtin_command(ctx=ctx, command_id="file") is True
+        ctx.task_group.start_soon.assert_called_once()
+
+    def test_file_enabled(self):
+        ctx = _make_cmd_ctx("file", files_enabled=True)
+        assert dispatch_builtin_command(ctx=ctx, command_id="file") is True
+
+    def test_ctx_no_topics(self):
+        ctx = _make_cmd_ctx("ctx")
+        assert dispatch_builtin_command(ctx=ctx, command_id="ctx") is True
+
+    def test_ctx_with_topics_no_thread(self):
+        ctx = _make_cmd_ctx("ctx", topics_enabled=True, topic_store=MagicMock())
+        assert dispatch_builtin_command(ctx=ctx, command_id="ctx") is True
+
+    def test_model(self):
+        ctx = _make_cmd_ctx("model")
+        assert dispatch_builtin_command(ctx=ctx, command_id="model") is True
+
+    def test_agent(self):
+        ctx = _make_cmd_ctx("agent")
+        assert dispatch_builtin_command(ctx=ctx, command_id="agent") is True
+
+    def test_reasoning(self):
+        ctx = _make_cmd_ctx("reasoning")
+        assert dispatch_builtin_command(ctx=ctx, command_id="reasoning") is True
+
+    def test_trigger(self):
+        ctx = _make_cmd_ctx("trigger")
+        assert dispatch_builtin_command(ctx=ctx, command_id="trigger") is True
+
+    def test_unknown(self):
+        ctx = _make_cmd_ctx("unknown")
+        assert dispatch_builtin_command(ctx=ctx, command_id="unknown") is False
+
+    def test_new_with_topics(self):
+        ctx = _make_cmd_ctx("new", topics_enabled=True, topic_store=MagicMock())
+        assert dispatch_builtin_command(ctx=ctx, command_id="new") is True
+
+    def test_topic_with_topics(self):
+        ctx = _make_cmd_ctx("topic", topics_enabled=True, topic_store=MagicMock())
+        assert dispatch_builtin_command(ctx=ctx, command_id="topic") is True
+
+    def test_new_without_topics(self):
+        ctx = _make_cmd_ctx("new", topics_enabled=False)
+        assert dispatch_builtin_command(ctx=ctx, command_id="new") is False
+
+    def test_topic_without_topics_returns_false(self):
+        ctx = _make_cmd_ctx("other", topics_enabled=True, topic_store=MagicMock())
+        assert dispatch_builtin_command(ctx=ctx, command_id="other") is False

@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 from tunapi.config import ProjectConfig, ProjectsConfig
@@ -7,6 +8,8 @@ from tunapi.runners.mock import Return, ScriptRunner
 from tunapi.telegram.trigger_mode import should_trigger_run
 from tunapi.telegram.types import TelegramIncomingMessage
 from tunapi.transport_runtime import TransportRuntime
+from tunapi.core.chat_prefs import ChatPrefsStore
+from tunapi.core.trigger import resolve_trigger_mode
 
 
 def _runtime() -> TransportRuntime:
@@ -136,3 +139,25 @@ def test_should_trigger_run_ignores_unknown_commands() -> None:
         command_ids=set(),
         reserved_chat_commands=set(RESERVED_CHAT_COMMANDS),
     )
+
+
+@pytest.mark.anyio
+class TestResolveTriggerMode:
+    async def test_no_prefs(self):
+        result = await resolve_trigger_mode("ch1", None)
+        assert result == "all"
+
+    async def test_no_prefs_custom_default(self):
+        result = await resolve_trigger_mode("ch1", None, default="mentions")
+        assert result == "mentions"
+
+    async def test_with_prefs(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        await store.set_trigger_mode("ch1", "mentions")
+        result = await resolve_trigger_mode("ch1", store)
+        assert result == "mentions"
+
+    async def test_with_prefs_no_mode(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        result = await resolve_trigger_mode("ch1", store, default="all")
+        assert result == "all"

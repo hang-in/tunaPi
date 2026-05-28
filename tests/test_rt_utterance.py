@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from tunapi.core.rt_participant import (
-    RoundtableParticipant,
     build_participants_from_engines,
 )
 from tunapi.core.rt_utterance import (
-    Utterance,
     transcript_to_utterances,
     utterances_to_transcript,
 )

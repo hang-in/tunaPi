@@ -12,7 +12,7 @@ from tunapi.core.rt_structured import (
     StructuredRoundtableSession,
     StructuredRoundtableStore,
 )
-from tunapi.core.rt_utterance import Utterance, transcript_to_utterances
+from tunapi.core.rt_utterance import Utterance
 
 pytestmark = pytest.mark.anyio
 

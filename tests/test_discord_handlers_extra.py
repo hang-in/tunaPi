@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, PropertyMock
 
 import discord
-import pytest
 
 from tunapi.discord.handlers import (
     _is_admin,
@@ -20,7 +19,10 @@ from tunapi.discord.handlers import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_ctx(*, guild: object | None = MagicMock(), author: object | None = None) -> MagicMock:
+
+def _make_ctx(
+    *, guild: object | None = MagicMock(), author: object | None = None
+) -> MagicMock:
     """Build a minimal mock ApplicationContext."""
     ctx = MagicMock(spec=discord.ApplicationContext)
     ctx.guild = guild
@@ -65,6 +67,7 @@ def _make_bot_user(user_id: int = 12345) -> MagicMock:
 # _is_admin
 # ===========================================================================
 
+
 class TestIsAdmin:
     def test_no_guild_returns_false(self) -> None:
         ctx = _make_ctx(guild=None)
@@ -90,6 +93,7 @@ class TestIsAdmin:
 # ===========================================================================
 # _normalize_branch_name
 # ===========================================================================
+
 
 class TestNormalizeBranchName:
     def test_plain_name(self) -> None:
@@ -128,6 +132,7 @@ class TestNormalizeBranchName:
 # is_bot_mentioned
 # ===========================================================================
 
+
 class TestIsBotMentioned:
     def test_bot_user_none(self) -> None:
         msg = _make_message(content="hello")
@@ -153,6 +158,7 @@ class TestIsBotMentioned:
 # ===========================================================================
 # should_process_message
 # ===========================================================================
+
 
 class TestShouldProcessMessage:
     def test_bot_author_ignored(self) -> None:
@@ -201,6 +207,7 @@ class TestShouldProcessMessage:
 # ===========================================================================
 # extract_prompt_from_message
 # ===========================================================================
+
 
 class TestExtractPromptFromMessage:
     def test_no_bot_user(self) -> None:

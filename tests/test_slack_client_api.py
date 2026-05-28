@@ -1,8 +1,10 @@
 """Tests for the low-level Slack HTTP client."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -27,7 +29,9 @@ from tunapi.slack.client_api import HttpSlackClient, SlackRetryAfter
 # ---------------------------------------------------------------------------
 
 
-def _json_response(data: Any, status: int = 200, headers: dict[str, str] | None = None) -> httpx.Response:
+def _json_response(
+    data: Any, status: int = 200, headers: dict[str, str] | None = None
+) -> httpx.Response:
     return httpx.Response(
         status_code=status,
         json=data,
@@ -62,7 +66,9 @@ def transport() -> FakeTransport:
 
 @pytest.fixture
 def client(transport: FakeTransport) -> HttpSlackClient:
-    real_client = httpx.AsyncClient(transport=transport, base_url="https://slack.com/api/")
+    real_client = httpx.AsyncClient(
+        transport=transport, base_url="https://slack.com/api/"
+    )
     c = HttpSlackClient.__new__(HttpSlackClient)
     c._bot_token = "xoxb-test-token"  # noqa: SLF001
     c._app_token = "xapp-test-token"  # noqa: SLF001
@@ -171,7 +177,9 @@ class TestRequest:
         assert req.headers["Authorization"] == "Bearer xapp-test-token"
 
     async def test_use_app_token_missing_raises(self, transport: FakeTransport):
-        real_client = httpx.AsyncClient(transport=transport, base_url="https://slack.com/api/")
+        real_client = httpx.AsyncClient(
+            transport=transport, base_url="https://slack.com/api/"
+        )
         c = HttpSlackClient.__new__(HttpSlackClient)
         c._bot_token = "xoxb-test"  # noqa: SLF001
         c._app_token = None  # noqa: SLF001
@@ -191,9 +199,7 @@ class TestRequest:
         body = json.loads(req.content)
         assert body == {"key": "val"}
 
-    async def test_params_sent(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_params_sent(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": True}))
         await client._request("GET", "test", params={"user": "U123"})  # noqa: SLF001
         req = transport.requests[-1]
@@ -206,19 +212,19 @@ class TestRequest:
 
 
 class TestAuthTest:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(
-            _json_response({
-                "ok": True,
-                "url": "https://test.slack.com",
-                "team": "Test",
-                "user": "bot",
-                "team_id": "T1",
-                "user_id": "U1",
-                "bot_id": "B1",
-            })
+            _json_response(
+                {
+                    "ok": True,
+                    "url": "https://test.slack.com",
+                    "team": "Test",
+                    "user": "bot",
+                    "team_id": "T1",
+                    "user_id": "U1",
+                    "bot_id": "B1",
+                }
+            )
         )
         result = await client.auth_test()
         assert isinstance(result, AuthTestResponse)
@@ -233,25 +239,25 @@ class TestAuthTest:
 
 
 class TestPostMessage:
-    async def test_simple(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_simple(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(
-            _json_response({
-                "ok": True,
-                "channel": "C1",
-                "ts": "1234.5678",
-            })
+            _json_response(
+                {
+                    "ok": True,
+                    "channel": "C1",
+                    "ts": "1234.5678",
+                }
+            )
         )
         result = await client.post_message("C1", "hello")
         assert isinstance(result, ChatPostMessageResponse)
         assert result.channel == "C1"
         assert result.ts == "1234.5678"
 
-    async def test_with_thread(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
-        transport.enqueue(_json_response({"ok": True, "channel": "C1", "ts": "1234.9999"}))
+    async def test_with_thread(self, client: HttpSlackClient, transport: FakeTransport):
+        transport.enqueue(
+            _json_response({"ok": True, "channel": "C1", "ts": "1234.9999"})
+        )
         result = await client.post_message("C1", "reply", thread_ts="1234.0000")
         assert result.ts == "1234.9999"
         import json
@@ -271,10 +277,10 @@ class TestPostMessage:
 
 
 class TestUpdateMessage:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
-        transport.enqueue(_json_response({"ok": True, "channel": "C1", "ts": "1234.5678"}))
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
+        transport.enqueue(
+            _json_response({"ok": True, "channel": "C1", "ts": "1234.5678"})
+        )
         result = await client.update_message("C1", "1234.5678", "edited")
         assert isinstance(result, ChatPostMessageResponse)
         import json
@@ -285,9 +291,7 @@ class TestUpdateMessage:
 
 
 class TestDeleteMessage:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": True}))
         result = await client.delete_message("C1", "1234.5678")
         assert isinstance(result, SlackResponse)
@@ -300,9 +304,7 @@ class TestDeleteMessage:
 
 
 class TestAddReaction:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": True}))
         result = await client.add_reaction("C1", "1234.5678", "thumbsup")
         assert isinstance(result, ReactionsAddResponse)
@@ -321,46 +323,47 @@ class TestAddReaction:
 
 
 class TestGetUserInfo:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(
-            _json_response({
-                "ok": True,
-                "user": {"id": "U1", "name": "alice", "real_name": "Alice", "is_bot": False},
-            })
+            _json_response(
+                {
+                    "ok": True,
+                    "user": {
+                        "id": "U1",
+                        "name": "alice",
+                        "real_name": "Alice",
+                        "is_bot": False,
+                    },
+                }
+            )
         )
         user = await client.get_user_info("U1")
         assert isinstance(user, SlackUser)
         assert user.id == "U1"
         assert user.name == "alice"
 
-    async def test_not_found(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_not_found(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": False, "error": "user_not_found"}))
         user = await client.get_user_info("U999")
         assert user is None
 
 
 class TestGetChannelInfo:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(
-            _json_response({
-                "ok": True,
-                "channel": {"id": "C1", "name": "general", "is_channel": True},
-            })
+            _json_response(
+                {
+                    "ok": True,
+                    "channel": {"id": "C1", "name": "general", "is_channel": True},
+                }
+            )
         )
         ch = await client.get_channel_info("C1")
         assert isinstance(ch, SlackChannel)
         assert ch.id == "C1"
         assert ch.name == "general"
 
-    async def test_not_found(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_not_found(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": False, "error": "channel_not_found"}))
         ch = await client.get_channel_info("C999")
         assert ch is None
@@ -372,15 +375,15 @@ class TestGetChannelInfo:
 
 
 class TestGetUploadUrl:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(
-            _json_response({
-                "ok": True,
-                "upload_url": "https://files.slack.com/upload/xxx",
-                "file_id": "F1",
-            })
+            _json_response(
+                {
+                    "ok": True,
+                    "upload_url": "https://files.slack.com/upload/xxx",
+                    "file_id": "F1",
+                }
+            )
         )
         result = await client.get_upload_url("test.txt", 100)
         assert isinstance(result, FilesGetUploadURLExternalResponse)
@@ -390,7 +393,9 @@ class TestGetUploadUrl:
     async def test_with_alt_text(
         self, client: HttpSlackClient, transport: FakeTransport
     ):
-        transport.enqueue(_json_response({"ok": True, "upload_url": "https://u", "file_id": "F2"}))
+        transport.enqueue(
+            _json_response({"ok": True, "upload_url": "https://u", "file_id": "F2"})
+        )
         await client.get_upload_url("img.png", 200, alt_text="screenshot")
         req = transport.requests[-1]
         assert b"alt_text=screenshot" in req.url.raw_path
@@ -398,16 +403,16 @@ class TestGetUploadUrl:
     async def test_without_alt_text(
         self, client: HttpSlackClient, transport: FakeTransport
     ):
-        transport.enqueue(_json_response({"ok": True, "upload_url": "https://u", "file_id": "F3"}))
+        transport.enqueue(
+            _json_response({"ok": True, "upload_url": "https://u", "file_id": "F3"})
+        )
         await client.get_upload_url("doc.txt", 50)
         req = transport.requests[-1]
         assert b"alt_text" not in req.url.raw_path
 
 
 class TestCompleteUploadExternal:
-    async def test_minimal(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
+    async def test_minimal(self, client: HttpSlackClient, transport: FakeTransport):
         transport.enqueue(_json_response({"ok": True, "files": []}))
         result = await client.complete_upload_external("F1")
         assert isinstance(result, FilesCompleteUploadExternalResponse)
@@ -436,10 +441,10 @@ class TestCompleteUploadExternal:
 
 
 class TestAppsConnectionsOpen:
-    async def test_success(
-        self, client: HttpSlackClient, transport: FakeTransport
-    ):
-        transport.enqueue(_json_response({"ok": True, "url": "wss://test.slack.com/link"}))
+    async def test_success(self, client: HttpSlackClient, transport: FakeTransport):
+        transport.enqueue(
+            _json_response({"ok": True, "url": "wss://test.slack.com/link"})
+        )
         url = await client.apps_connections_open()
         assert url == "wss://test.slack.com/link"
         # Verify app token was used
@@ -463,3 +468,64 @@ class TestClose:
     async def test_close(self, client: HttpSlackClient):
         await client.close()
         assert client._client.is_closed  # noqa: SLF001
+
+
+def _make_slack_client(transport: FakeTransport) -> HttpSlackClient:
+    real_client = httpx.AsyncClient(
+        transport=transport, base_url="https://slack.com/api/"
+    )
+    c = HttpSlackClient.__new__(HttpSlackClient)
+    c._bot_token = "xoxb-test"  # noqa: SLF001
+    c._app_token = "xapp-test"  # noqa: SLF001
+    c._base_url = "https://slack.com/api/"  # noqa: SLF001
+    c._client = real_client  # noqa: SLF001
+    return c
+
+
+# test_coverage_push.py에서 가져온 추가 테스트들
+class TestUploadContent:
+    async def test_upload(self):
+        posted: list[bytes] = []
+
+        class FakeUploadTransport(httpx.AsyncBaseTransport):
+            async def handle_async_request(
+                self, request: httpx.Request
+            ) -> httpx.Response:
+                body = await request.aread()
+                posted.append(body)
+                return httpx.Response(200, request=request)
+
+        with patch("tunapi.slack.client_api.httpx.AsyncClient") as mock_cls:
+            fake_client = httpx.AsyncClient(transport=FakeUploadTransport())
+            mock_cls.return_value = fake_client
+            # Create the actual client
+            transport = FakeTransport()
+            client = _make_slack_client(transport)
+            await client.upload_content("https://files.slack.com/upload", b"hello data")
+
+
+class TestSlackSocketModeExtra:
+    async def test_apps_connections_open_success(self):
+        transport = FakeTransport()
+        transport.enqueue(
+            _json_response({"ok": True, "url": "wss://test.slack.com/ws"})
+        )
+        client = _make_slack_client(transport)
+        url = await client.apps_connections_open()
+        assert url == "wss://test.slack.com/ws"
+
+    async def test_apps_connections_open_fail(self):
+        transport = FakeTransport()
+        transport.enqueue(_json_response({"ok": False, "error": "invalid"}))
+        client = _make_slack_client(transport)
+        url = await client.apps_connections_open()
+        assert url is None
+
+
+from tunapi.slack.bridge import SlackPresenter
+
+
+class TestSlackPresenter:
+    def test_instantiate(self):
+        p = SlackPresenter()
+        assert p is not None

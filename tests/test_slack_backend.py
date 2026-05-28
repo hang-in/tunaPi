@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -373,7 +372,9 @@ class TestAsyncRun:
         }
 
         # Patch run_main_loop at the import location inside async_run
-        with patch("tunapi.slack.loop.run_main_loop", new_callable=AsyncMock) as mock_loop:
+        with patch(
+            "tunapi.slack.loop.run_main_loop", new_callable=AsyncMock
+        ) as mock_loop:
             await b.async_run()
             mock_loop.assert_awaited_once()
 

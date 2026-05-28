@@ -293,7 +293,9 @@ def _run_auto_router(
             if tid == "telegram":
                 transport_config = settings.transports.telegram
                 if transport_config is None:
-                    raise ConfigError(f"Missing [transports.telegram] in {config_path}.")
+                    raise ConfigError(
+                        f"Missing [transports.telegram] in {config_path}."
+                    )
             else:
                 transport_config = settings.transport_config(
                     tid, config_path=config_path
@@ -310,9 +312,7 @@ def _run_auto_router(
                 transport_config=transport_config,
                 _config_path=config_path,
             )
-            lock_handles.append(
-                acquire_config_lock_fn(config_path, lock_tok, tid)
-            )
+            lock_handles.append(acquire_config_lock_fn(config_path, lock_tok, tid))
             t_backend.build_and_run(
                 final_notify=final_notify,
                 default_engine_override=default_engine_override,
@@ -338,17 +338,13 @@ def _run_auto_router(
                             f"Missing [transports.telegram] in {config_path}."
                         )
                 else:
-                    t_config = settings.transport_config(
-                        tid, config_path=config_path
-                    )
+                    t_config = settings.transport_config(tid, config_path=config_path)
                 t_backend = get_transport_fn(tid, allowlist=allowlist)
                 lock_tok = t_backend.lock_token(
                     transport_config=t_config,
                     _config_path=config_path,
                 )
-                lock_handles.append(
-                    acquire_config_lock_fn(config_path, lock_tok, tid)
-                )
+                lock_handles.append(acquire_config_lock_fn(config_path, lock_tok, tid))
                 # Prepare without starting (skip anyio.run)
                 t_backend._prepare_only = True
                 t_backend.build_and_run(

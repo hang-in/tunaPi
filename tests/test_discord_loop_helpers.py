@@ -1,8 +1,8 @@
 """Tests for helper functions in discord/loop.py (not loop_state.py)."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from unittest.mock import AsyncMock, MagicMock
 
 import anyio
@@ -17,64 +17,10 @@ from tunapi.discord.loop import (
     _wait_for_resume,
     send_with_resume,
 )
-from tunapi.discord.loop_state import ResumeDecision
 from tunapi.model import ResumeToken
 from tunapi.transport import MessageRef, RenderedMessage
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_cfg(
-    *,
-    startup_msg: str = "bot started",
-    transport: AsyncMock | None = None,
-    presenter: MagicMock | None = None,
-    runtime: MagicMock | None = None,
-) -> MagicMock:
-    """Build a minimal DiscordBridgeConfig-like mock."""
-    cfg = MagicMock()
-    cfg.startup_msg = startup_msg
-
-    t = transport or AsyncMock()
-    t.send = AsyncMock(
-        return_value=MessageRef(channel_id=1, message_id=99)
-    )
-    cfg.exec_cfg.transport = t
-
-    p = presenter or MagicMock()
-    p.render_progress = MagicMock(
-        return_value=RenderedMessage(text="queued...", extra={"show_cancel": False})
-    )
-    cfg.exec_cfg.presenter = p
-
-    rt = runtime or MagicMock()
-    rt.format_context_line = MagicMock(return_value=None)
-    cfg.runtime = rt
-
-    return cfg
-
-
-def _make_running_task(
-    *,
-    resume: ResumeToken | None = None,
-    context=None,
-    resume_ready_set: bool = False,
-    done_set: bool = False,
-) -> MagicMock:
-    """Build a minimal RunningTask-like mock with real anyio Events."""
-    task = MagicMock()
-    task.resume = resume
-    task.context = context
-    task.resume_ready = anyio.Event()
-    task.done = anyio.Event()
-    if resume_ready_set:
-        task.resume_ready.set()
-    if done_set:
-        task.done.set()
-    return task
+from .fakes.discord import _make_cfg, _make_running_task
 
 
 # ===========================================================================
@@ -123,7 +69,11 @@ class TestSaveSessionToken:
         )
 
         state_store.set_session.assert_awaited_once_with(
-            10, 42, "claude", "tok-123", author_id=7,
+            10,
+            42,
+            "claude",
+            "tok-123",
+            author_id=7,
         )
 
     @pytest.mark.anyio
@@ -167,7 +117,11 @@ class TestSaveSessionToken:
         )
 
         state_store.set_session.assert_awaited_once_with(
-            5, 100, "codex", "tok-abc", author_id=None,
+            5,
+            100,
+            "codex",
+            "tok-abc",
+            author_id=None,
         )
 
 
@@ -341,7 +295,9 @@ class TestSendWithResume:
         enqueue = AsyncMock()
 
         await send_with_resume(
-            cfg, enqueue, task,
+            cfg,
+            enqueue,
+            task,
             channel_id=10,
             user_msg_id=20,
             thread_id=None,
@@ -351,10 +307,10 @@ class TestSendWithResume:
 
         enqueue.assert_awaited_once()
         args = enqueue.call_args.args
-        assert args[0] == 10       # channel_id
-        assert args[1] == 20       # user_msg_id
+        assert args[0] == 10  # channel_id
+        assert args[1] == 20  # user_msg_id
         assert args[2] == "follow up"  # text
-        assert args[3] is token    # resume
+        assert args[3] is token  # resume
 
     @pytest.mark.anyio
     async def test_sends_plain_reply_when_no_resume(self) -> None:
@@ -363,7 +319,9 @@ class TestSendWithResume:
         enqueue = AsyncMock()
 
         await send_with_resume(
-            cfg, enqueue, task,
+            cfg,
+            enqueue,
+            task,
             channel_id=10,
             user_msg_id=20,
             thread_id=None,
@@ -386,7 +344,9 @@ class TestSendWithResume:
         enqueue = AsyncMock()
 
         await send_with_resume(
-            cfg, enqueue, task,
+            cfg,
+            enqueue,
+            task,
             channel_id=10,
             user_msg_id=20,
             thread_id=None,
@@ -522,3 +482,33 @@ class TestResumeResolver:
         assert decision.resume_token is token
         assert decision.handled_by_running_task is False
         resolver._task_group.start_soon.assert_not_called()
+
+
+# ===========================================================================
+# _extract_engine_id_from_header
+# ===========================================================================
+
+from tunapi.discord.loop_state import _extract_engine_id_from_header
+
+
+class TestExtractEngineIdFromHeader:
+    def test_none(self):
+        assert _extract_engine_id_from_header(None) is None
+
+    def test_empty(self):
+        assert _extract_engine_id_from_header("") is None
+
+    def test_valid(self):
+        assert _extract_engine_id_from_header("done · codex · 10s") == "codex"
+
+    def test_no_separator(self):
+        assert _extract_engine_id_from_header("hello world") is None
+
+    def test_compact_separator(self):
+        assert _extract_engine_id_from_header("done·codex·10s") == "codex"
+
+    def test_single_part(self):
+        assert _extract_engine_id_from_header("done · ") is None
+
+    def test_backtick_wrapped(self):
+        assert _extract_engine_id_from_header("done · `codex` · 10s") == "codex"

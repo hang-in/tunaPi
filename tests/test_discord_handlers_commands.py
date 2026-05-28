@@ -18,6 +18,7 @@ import pytest
 
 from tunapi.discord.overrides import ResolvedOverrides
 from tunapi.discord.types import DiscordChannelContext, DiscordThreadContext
+from .fakes.discord import FakeBot
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,9 @@ def _make_prefs_store(**overrides) -> MagicMock:
 
 class TestRequireAdmin:
     @pytest.mark.anyio
-    async def test_non_admin_responds_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_non_admin_responds_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         ctx = _make_ctx(is_admin=False)
@@ -144,7 +147,9 @@ class TestRequireAdmin:
 
 class TestHandleCtxCommand:
     @pytest.mark.anyio
-    async def test_no_guild_responds_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_no_guild_responds_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         ctx = _make_ctx(guild_id=None)
@@ -204,7 +209,9 @@ class TestHandleCtxCommand:
         state_store.set_context.assert_not_awaited()
 
     @pytest.mark.anyio
-    async def test_set_in_thread_rejects_project(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_in_thread_rejects_project(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -215,14 +222,20 @@ class TestHandleCtxCommand:
         ctx.channel = thread
         state_store = _make_state_store()
         await handlers._handle_ctx_command(
-            ctx, action="set", project="/some-project", branch=None, state_store=state_store
+            ctx,
+            action="set",
+            project="/some-project",
+            branch=None,
+            state_store=state_store,
         )
         msg = ctx.respond.call_args[0][0]
         assert "thread" in msg.lower()
         assert "branch" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_set_in_thread_no_branch_shows_usage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_in_thread_no_branch_shows_usage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -239,7 +252,9 @@ class TestHandleCtxCommand:
         assert "usage" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_set_in_thread_no_base_context_errors(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_in_thread_no_base_context_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -257,7 +272,9 @@ class TestHandleCtxCommand:
         assert "no project" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_set_in_channel_no_existing_no_project_errors(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_in_channel_no_existing_no_project_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -273,7 +290,9 @@ class TestHandleCtxCommand:
         assert "no context" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_set_in_channel_uses_existing_project_when_omitted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_in_channel_uses_existing_project_when_omitted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -297,7 +316,9 @@ class TestHandleCtxCommand:
         assert saved.worktree_base == "dev"
 
     @pytest.mark.anyio
-    async def test_set_empty_branch_treated_as_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_set_empty_branch_treated_as_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers, "_require_admin", AsyncMock(return_value=True))
@@ -335,7 +356,9 @@ class TestHandleCtxCommand:
         assert "no context" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_show_channel_only_no_thread(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_show_channel_only_no_thread(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
@@ -361,7 +384,9 @@ class TestHandleCtxCommand:
         assert "Thread:" not in msg
 
     @pytest.mark.anyio
-    async def test_show_in_thread_with_no_thread_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_show_in_thread_with_no_thread_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """In a thread with channel context but no thread-specific context."""
         import tunapi.discord.handlers as handlers
 
@@ -394,7 +419,9 @@ class TestHandleCtxCommand:
         assert "Thread: _none_" in msg
 
     @pytest.mark.anyio
-    async def test_show_no_channel_context_shows_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_show_no_channel_context_shows_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """In a thread with thread context but no channel context."""
         import tunapi.discord.handlers as handlers
 
@@ -432,7 +459,9 @@ class TestHandleCtxCommand:
 
 class TestHandleEngineCommand:
     @pytest.mark.anyio
-    async def test_no_guild_responds_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_no_guild_responds_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         ctx = _make_ctx(guild_id=None)
@@ -450,12 +479,12 @@ class TestHandleEngineCommand:
         assert "server" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_user_not_allowed_responds_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_user_not_allowed_responds_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
-        monkeypatch.setattr(
-            handlers, "is_user_allowed", lambda allowed, uid: False
-        )
+        monkeypatch.setattr(handlers, "is_user_allowed", lambda allowed, uid: False)
         ctx = _make_ctx()
         ctx.defer = AsyncMock()
         cfg = MagicMock()
@@ -473,7 +502,9 @@ class TestHandleEngineCommand:
         assert "not allowed" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_creates_thread_in_text_channel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_creates_thread_in_text_channel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
@@ -535,7 +566,9 @@ class TestHandleEngineCommand:
         assert saved_ctx.project == "/proj"
 
     @pytest.mark.anyio
-    async def test_thread_creation_fails_runs_in_channel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_thread_creation_fails_runs_in_channel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
@@ -581,7 +614,10 @@ class TestHandleEngineCommand:
 
         # Followup message should note thread creation failed
         followup_msg = ctx.followup.send.call_args[0][0]
-        assert "thread creation failed" in followup_msg.lower() or "channel" in followup_msg.lower()
+        assert (
+            "thread creation failed" in followup_msg.lower()
+            or "channel" in followup_msg.lower()
+        )
 
     @pytest.mark.anyio
     async def test_starter_message_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -735,7 +771,9 @@ class TestHandleEngineCommand:
         assert kwargs["run_options"].reasoning == "high"
 
     @pytest.mark.anyio
-    async def test_chat_session_mode_restores_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_chat_session_mode_restores_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
@@ -783,10 +821,14 @@ class TestHandleEngineCommand:
 
         state_store.get_session.assert_awaited_once_with(1, 555, "claude", author_id=42)
         kwargs = run_engine_mock.call_args.kwargs
-        assert kwargs["resume_token"] == ResumeToken(engine="claude", value="resume-tok")
+        assert kwargs["resume_token"] == ResumeToken(
+            engine="claude", value="resume-tok"
+        )
 
     @pytest.mark.anyio
-    async def test_non_chat_session_mode_no_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_non_chat_session_mode_no_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
@@ -834,14 +876,15 @@ class TestHandleEngineCommand:
         assert kwargs["resume_token"] is None
 
     @pytest.mark.anyio
-    async def test_author_id_not_int_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_author_id_not_int_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When author.id is not an int, author_id should be None."""
         import tunapi.discord.handlers as handlers
 
         monkeypatch.setattr(handlers.discord, "Thread", DummyThread)
         monkeypatch.setattr(handlers, "is_user_allowed", lambda a, u: True)
 
-        thread = DummyThread(parent_id=200, id=555)
         ctx = _make_ctx(channel_id=555, author_id=None)
         # Make author.id return a non-int
         ctx.author = MagicMock()
@@ -882,7 +925,9 @@ class TestHandleEngineCommand:
             await asyncio.sleep(0)
 
         # author_id should be None since "not-an-int" is not int
-        state_store.get_session.assert_awaited_once_with(1, 555, "claude", author_id=None)
+        state_store.get_session.assert_awaited_once_with(
+            1, 555, "claude", author_id=None
+        )
 
 
 # ===========================================================================
@@ -981,16 +1026,8 @@ class TestRegisterSlashCommands:
 
         captured = {}
 
-        class FakeBot:
-            def slash_command(self, **kwargs):
-                name = kwargs["name"]
-                def decorator(func):
-                    captured[name] = func
-                    return func
-                return decorator
-
         bot = MagicMock()
-        bot.bot = FakeBot()
+        bot.bot = FakeBot(captured)
 
         handlers.register_slash_commands(
             bot,
@@ -1006,7 +1043,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_status_no_guild(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         cmds = self._register_and_capture(monkeypatch)
         ctx = _make_ctx(guild_id=None)
         await cmds["status"](ctx)
@@ -1015,7 +1054,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_status_no_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         state_store = _make_state_store()
         cmds = self._register_and_capture(monkeypatch, state_store=state_store)
         ctx = _make_ctx()
@@ -1024,8 +1065,12 @@ class TestRegisterSlashCommands:
         assert "no context" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_status_with_channel_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_status_with_channel_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         channel_ctx = DiscordChannelContext(
@@ -1043,8 +1088,12 @@ class TestRegisterSlashCommands:
         assert "idle" in msg
 
     @pytest.mark.anyio
-    async def test_status_with_thread_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_status_with_thread_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         thread_ctx = DiscordThreadContext(
@@ -1061,8 +1110,12 @@ class TestRegisterSlashCommands:
         assert "`feat`" in msg
 
     @pytest.mark.anyio
-    async def test_status_with_running_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_status_with_running_task(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
 
         channel_ctx = DiscordChannelContext(project="/proj", worktree_base="main")
         state_store = _make_state_store()
@@ -1072,16 +1125,8 @@ class TestRegisterSlashCommands:
 
         captured = {}
 
-        class FakeBot:
-            def slash_command(self, **kwargs):
-                name = kwargs["name"]
-                def decorator(func):
-                    captured[name] = func
-                    return func
-                return decorator
-
         bot = MagicMock()
-        bot.bot = FakeBot()
+        bot.bot = FakeBot(captured)
 
         handlers.register_slash_commands(
             bot,
@@ -1100,38 +1145,62 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_bind_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         state_store = _make_state_store()
         cmds = self._register_and_capture(monkeypatch, state_store=state_store)
         ctx = _make_ctx()
-        await cmds["bind"](ctx, project="~/dev/proj", worktrees_dir=".wt", default_engine="claude", worktree_base="main")
+        await cmds["bind"](
+            ctx,
+            project="~/dev/proj",
+            worktrees_dir=".wt",
+            default_engine="claude",
+            worktree_base="main",
+        )
         state_store.set_context.assert_awaited_once()
         msg = ctx.respond.call_args[0][0]
         assert "~/dev/proj" in msg
 
     @pytest.mark.anyio
     async def test_bind_no_guild(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         cmds = self._register_and_capture(monkeypatch)
         ctx = _make_ctx(guild_id=None)
-        await cmds["bind"](ctx, project="~/proj", worktrees_dir=".wt", default_engine="claude", worktree_base="main")
+        await cmds["bind"](
+            ctx,
+            project="~/proj",
+            worktrees_dir=".wt",
+            default_engine="claude",
+            worktree_base="main",
+        )
         msg = ctx.respond.call_args[0][0]
         assert "server" in msg.lower()
 
     @pytest.mark.anyio
     async def test_unbind_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         state_store = _make_state_store()
         prefs_store = _make_prefs_store()
-        cmds = self._register_and_capture(monkeypatch, state_store=state_store, prefs_store=prefs_store)
+        cmds = self._register_and_capture(
+            monkeypatch, state_store=state_store, prefs_store=prefs_store
+        )
         ctx = _make_ctx()
         await cmds["unbind"](ctx)
         state_store.clear_channel.assert_awaited_once()
         prefs_store.clear_channel.assert_awaited_once()
 
     @pytest.mark.anyio
-    async def test_cancel_no_running_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_cancel_no_running_task(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         cmds = self._register_and_capture(monkeypatch)
         ctx = _make_ctx()
         await cmds["cancel"](ctx)
@@ -1139,24 +1208,20 @@ class TestRegisterSlashCommands:
         assert "no task" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_cancel_with_running_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_cancel_with_running_task(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
 
         import tunapi.discord.handlers as handlers
 
         captured = {}
         cancel_mock = AsyncMock()
 
-        class FakeBot:
-            def slash_command(self, **kwargs):
-                name = kwargs["name"]
-                def decorator(func):
-                    captured[name] = func
-                    return func
-                return decorator
-
         bot = MagicMock()
-        bot.bot = FakeBot()
+        bot.bot = FakeBot(captured)
 
         handlers.register_slash_commands(
             bot,
@@ -1175,7 +1240,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_new_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         state_store = _make_state_store()
         cmds = self._register_and_capture(monkeypatch, state_store=state_store)
         ctx = _make_ctx(author_id=42)
@@ -1184,16 +1251,24 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_user_not_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: False)
-        cmds = self._register_and_capture(monkeypatch, allowed_user_ids=frozenset({999}))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: False
+        )
+        cmds = self._register_and_capture(
+            monkeypatch, allowed_user_ids=frozenset({999})
+        )
         ctx = _make_ctx(author_id=1)
         await cmds["status"](ctx)
         msg = ctx.respond.call_args[0][0]
         assert "not allowed" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_agent_command_show_no_runtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_agent_command_show_no_runtime(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         cmds = self._register_and_capture(monkeypatch, runtime=None)
         ctx = _make_ctx()
         await cmds["agent"](ctx, action=None, engine=None)
@@ -1202,13 +1277,19 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_agent_command_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
 
         runtime = MagicMock()
         runtime.engine_ids = ["claude", "codex"]
         prefs_store = _make_prefs_store()
-        cmds = self._register_and_capture(monkeypatch, runtime=runtime, prefs_store=prefs_store)
+        cmds = self._register_and_capture(
+            monkeypatch, runtime=runtime, prefs_store=prefs_store
+        )
 
         ctx = _make_ctx()
         await cmds["agent"](ctx, action="set", engine="codex")
@@ -1217,9 +1298,15 @@ class TestRegisterSlashCommands:
         assert "codex" in msg
 
     @pytest.mark.anyio
-    async def test_agent_command_set_unknown_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_agent_command_set_unknown_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
 
         runtime = MagicMock()
         runtime.engine_ids = ["claude", "codex"]
@@ -1231,9 +1318,15 @@ class TestRegisterSlashCommands:
         assert "unknown engine" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_agent_command_set_no_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_agent_command_set_no_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
 
         runtime = MagicMock()
         runtime.engine_ids = ["claude"]
@@ -1246,13 +1339,19 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_agent_command_clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
 
         runtime = MagicMock()
         runtime.engine_ids = ["claude"]
         prefs_store = _make_prefs_store()
-        cmds = self._register_and_capture(monkeypatch, runtime=runtime, prefs_store=prefs_store)
+        cmds = self._register_and_capture(
+            monkeypatch, runtime=runtime, prefs_store=prefs_store
+        )
 
         ctx = _make_ctx()
         await cmds["agent"](ctx, action="clear", engine=None)
@@ -1262,7 +1361,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_agent_command_show(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr(
             "tunapi.discord.handlers.resolve_effective_default_engine",
             AsyncMock(return_value=("claude", "config")),
@@ -1279,7 +1380,10 @@ class TestRegisterSlashCommands:
         state_store = _make_state_store()
         prefs_store = _make_prefs_store()
         cmds = self._register_and_capture(
-            monkeypatch, runtime=runtime, state_store=state_store, prefs_store=prefs_store
+            monkeypatch,
+            runtime=runtime,
+            state_store=state_store,
+            prefs_store=prefs_store,
         )
 
         ctx = _make_ctx()
@@ -1289,8 +1393,12 @@ class TestRegisterSlashCommands:
         assert "`claude`" in msg
 
     @pytest.mark.anyio
-    async def test_agent_command_show_no_engines(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_agent_command_show_no_engines(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         runtime = MagicMock()
@@ -1303,8 +1411,12 @@ class TestRegisterSlashCommands:
         assert "no engines" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_agent_command_show_with_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_agent_command_show_with_overrides(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr(
             "tunapi.discord.handlers.resolve_effective_default_engine",
             AsyncMock(return_value=("claude", "channel_override")),
@@ -1313,7 +1425,10 @@ class TestRegisterSlashCommands:
             "tunapi.discord.handlers.resolve_overrides",
             AsyncMock(
                 return_value=ResolvedOverrides(
-                    model="gpt-4", source_model="channel", reasoning="high", source_reasoning="thread"
+                    model="gpt-4",
+                    source_model="channel",
+                    reasoning="high",
+                    source_reasoning="thread",
                 )
             ),
         )
@@ -1325,7 +1440,10 @@ class TestRegisterSlashCommands:
         state_store = _make_state_store()
         prefs_store = _make_prefs_store()
         cmds = self._register_and_capture(
-            monkeypatch, runtime=runtime, state_store=state_store, prefs_store=prefs_store
+            monkeypatch,
+            runtime=runtime,
+            state_store=state_store,
+            prefs_store=prefs_store,
         )
 
         ctx = _make_ctx()
@@ -1336,8 +1454,12 @@ class TestRegisterSlashCommands:
         assert "`high`" in msg
 
     @pytest.mark.anyio
-    async def test_model_command_show_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_model_command_show_all(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1353,8 +1475,12 @@ class TestRegisterSlashCommands:
         assert "`claude`" in msg
 
     @pytest.mark.anyio
-    async def test_model_command_show_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_model_command_show_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1368,8 +1494,12 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_model_command_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1381,8 +1511,12 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_model_command_clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1393,8 +1527,12 @@ class TestRegisterSlashCommands:
         prefs_store.set_model_override.assert_awaited_once_with(1, 100, "claude", None)
 
     @pytest.mark.anyio
-    async def test_model_command_show_specific_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_model_command_show_specific_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1407,8 +1545,12 @@ class TestRegisterSlashCommands:
         assert "gpt-4" in msg
 
     @pytest.mark.anyio
-    async def test_model_command_show_specific_engine_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_model_command_show_specific_engine_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1421,8 +1563,12 @@ class TestRegisterSlashCommands:
         assert "no model override" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_reasoning_command_show_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_reasoning_command_show_all(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1438,8 +1584,12 @@ class TestRegisterSlashCommands:
         assert "`high`" in msg
 
     @pytest.mark.anyio
-    async def test_reasoning_command_show_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_reasoning_command_show_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1452,26 +1602,46 @@ class TestRegisterSlashCommands:
         assert "no reasoning" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_reasoning_command_set_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_reasoning_command_set_valid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
-        monkeypatch.setattr("tunapi.discord.handlers.is_valid_reasoning_level", lambda l: True)
-        monkeypatch.setattr("tunapi.discord.handlers.supports_reasoning", lambda e: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.supports_reasoning", lambda e: True
+        )
 
         prefs_store = _make_prefs_store()
         cmds = self._register_and_capture(monkeypatch, prefs_store=prefs_store)
 
         ctx = _make_ctx()
         await cmds["reasoning"](ctx, engine="codex", level="High")
-        prefs_store.set_reasoning_override.assert_awaited_once_with(1, 100, "codex", "high")
+        prefs_store.set_reasoning_override.assert_awaited_once_with(
+            1, 100, "codex", "high"
+        )
 
     @pytest.mark.anyio
-    async def test_reasoning_command_set_invalid_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_reasoning_command_set_invalid_level(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
-        monkeypatch.setattr("tunapi.discord.handlers.is_valid_reasoning_level", lambda l: False)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: False
+        )
 
         cmds = self._register_and_capture(monkeypatch)
 
@@ -1481,12 +1651,22 @@ class TestRegisterSlashCommands:
         assert "invalid" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_reasoning_command_unsupported_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_reasoning_command_unsupported_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
-        monkeypatch.setattr("tunapi.discord.handlers.is_valid_reasoning_level", lambda l: True)
-        monkeypatch.setattr("tunapi.discord.handlers.supports_reasoning", lambda e: False)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.supports_reasoning", lambda e: False
+        )
 
         cmds = self._register_and_capture(monkeypatch)
 
@@ -1496,9 +1676,15 @@ class TestRegisterSlashCommands:
         assert "does not support" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_reasoning_command_clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_reasoning_command_clear(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1506,11 +1692,17 @@ class TestRegisterSlashCommands:
 
         ctx = _make_ctx()
         await cmds["reasoning"](ctx, engine="codex", level="clear")
-        prefs_store.set_reasoning_override.assert_awaited_once_with(1, 100, "codex", None)
+        prefs_store.set_reasoning_override.assert_awaited_once_with(
+            1, 100, "codex", None
+        )
 
     @pytest.mark.anyio
-    async def test_reasoning_command_show_specific(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_reasoning_command_show_specific(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1523,8 +1715,12 @@ class TestRegisterSlashCommands:
         assert "medium" in msg
 
     @pytest.mark.anyio
-    async def test_reasoning_command_show_specific_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_reasoning_command_show_specific_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1538,7 +1734,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_trigger_command_show(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
             "tunapi.discord.handlers.resolve_trigger_mode",
@@ -1556,8 +1754,12 @@ class TestRegisterSlashCommands:
         assert "set on this" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_trigger_command_show_inherited(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+    async def test_trigger_command_show_inherited(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
             "tunapi.discord.handlers.resolve_trigger_mode",
@@ -1574,9 +1776,15 @@ class TestRegisterSlashCommands:
         assert "inherited" in msg.lower()
 
     @pytest.mark.anyio
-    async def test_trigger_command_set_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_trigger_command_set_all(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1589,9 +1797,15 @@ class TestRegisterSlashCommands:
         assert "all messages" in msg.lower() or "`all`" in msg
 
     @pytest.mark.anyio
-    async def test_trigger_command_set_mentions(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+    async def test_trigger_command_set_mentions(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1605,8 +1819,12 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_trigger_command_clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1618,7 +1836,9 @@ class TestRegisterSlashCommands:
 
     @pytest.mark.anyio
     async def test_ctx_command_delegates(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
 
         handle_ctx = AsyncMock()
         monkeypatch.setattr("tunapi.discord.handlers._handle_ctx_command", handle_ctx)
@@ -1631,10 +1851,16 @@ class TestRegisterSlashCommands:
         handle_ctx.assert_awaited_once()
 
     @pytest.mark.anyio
-    async def test_model_command_in_thread(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_model_command_in_thread(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Model override stored on thread_id when in thread."""
-        monkeypatch.setattr("tunapi.discord.handlers.is_user_allowed", lambda a, u: True)
-        monkeypatch.setattr("tunapi.discord.handlers._require_admin", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
+        )
+        monkeypatch.setattr(
+            "tunapi.discord.handlers._require_admin", AsyncMock(return_value=True)
+        )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
 
         prefs_store = _make_prefs_store()
@@ -1644,4 +1870,6 @@ class TestRegisterSlashCommands:
         ctx.channel = DummyThread(parent_id=200, id=10)
         await cmds["model"](ctx, engine="claude", model="gpt-4")
         # Should store on thread_id=10
-        prefs_store.set_model_override.assert_awaited_once_with(1, 10, "claude", "gpt-4")
+        prefs_store.set_model_override.assert_awaited_once_with(
+            1, 10, "claude", "gpt-4"
+        )

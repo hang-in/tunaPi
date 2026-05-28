@@ -1,19 +1,15 @@
 """Extra tests for tunapi.cli.doctor — MM/Slack file/voice checks, run_doctor paths."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 import typer
-from typer.testing import CliRunner
 
 import importlib
 
-from tunapi import cli
 
 doctor_mod = importlib.import_module("tunapi.cli.doctor")
 
@@ -29,9 +25,7 @@ from tunapi.cli.doctor import (
 )
 from tunapi.config import ConfigError
 from tunapi.settings import (
-    MattermostFilesSettings,
     MattermostTransportSettings,
-    MattermostVoiceSettings,
     TelegramTransportSettings,
     TunapiSettings,
 )
@@ -299,7 +293,9 @@ def _mm_settings() -> TunapiSettings:
 def test_run_doctor_mattermost_ok(monkeypatch) -> None:
     settings = _mm_settings()
     monkeypatch.setattr(doctor_mod, "resolve_plugins_allowlist", lambda _s: None)
-    monkeypatch.setattr(doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"])
+    monkeypatch.setattr(
+        doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"]
+    )
 
     async def _fake_mm(*_args, **_kwargs):
         return [DoctorCheck("mattermost token", "ok", "@bot")]
@@ -319,7 +315,9 @@ def test_run_doctor_mattermost_missing_config(monkeypatch) -> None:
         {"transport": "mattermost", "transports": {}}
     )
     monkeypatch.setattr(doctor_mod, "resolve_plugins_allowlist", lambda _s: None)
-    monkeypatch.setattr(doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"])
+    monkeypatch.setattr(
+        doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"]
+    )
 
     with pytest.raises(typer.Exit) as exc_info:
         run_doctor(
@@ -352,7 +350,9 @@ def _slack_settings() -> TunapiSettings:
 def test_run_doctor_slack_ok(monkeypatch) -> None:
     settings = _slack_settings()
     monkeypatch.setattr(doctor_mod, "resolve_plugins_allowlist", lambda _s: None)
-    monkeypatch.setattr(doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"])
+    monkeypatch.setattr(
+        doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"]
+    )
 
     async def _fake_slack(*_args, **_kwargs):
         return [DoctorCheck("slack bot token", "ok", "@bot")]
@@ -367,11 +367,11 @@ def test_run_doctor_slack_ok(monkeypatch) -> None:
 
 
 def test_run_doctor_slack_missing_config(monkeypatch) -> None:
-    settings = TunapiSettings.model_validate(
-        {"transport": "slack", "transports": {}}
-    )
+    settings = TunapiSettings.model_validate({"transport": "slack", "transports": {}})
     monkeypatch.setattr(doctor_mod, "resolve_plugins_allowlist", lambda _s: None)
-    monkeypatch.setattr(doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"])
+    monkeypatch.setattr(
+        doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"]
+    )
 
     with pytest.raises(typer.Exit) as exc_info:
         run_doctor(
@@ -391,7 +391,9 @@ def test_run_doctor_unsupported_transport(monkeypatch) -> None:
         {"transport": "tunadish", "transports": {}}
     )
     monkeypatch.setattr(doctor_mod, "resolve_plugins_allowlist", lambda _s: None)
-    monkeypatch.setattr(doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"])
+    monkeypatch.setattr(
+        doctor_mod, "list_backend_ids", lambda allowlist=None: ["claude"]
+    )
 
     with pytest.raises(typer.Exit) as exc_info:
         run_doctor(
@@ -429,9 +431,11 @@ def test_resolve_cli_attr_returns_none_for_missing() -> None:
 
 def test_resolve_cli_attr_returns_value(monkeypatch) -> None:
     import tunapi.cli as cli_mod
+
     monkeypatch.setattr(cli_mod, "_test_sentinel", "found", raising=False)
     # Ensure module is in sys.modules
     import sys
+
     assert "tunapi.cli" in sys.modules
     result = _resolve_cli_attr("_test_sentinel")
     assert result == "found"

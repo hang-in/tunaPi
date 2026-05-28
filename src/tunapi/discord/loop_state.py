@@ -12,9 +12,41 @@ import discord
 from tunapi.model import ResumeToken
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from tunapi.context import RunContext
+    from tunapi.runner_bridge import RunningTasks
+    from tunapi.scheduler import ThreadScheduler
+    from .bridge import DiscordBridgeConfig
+    from .prefs import DiscordPrefsStore
+    from .state import DiscordStateStore
+    from .voice_messages import WhisperAttachmentTranscriber
+
+    # For roundtable
+    from tunapi.core.roundtable import RoundtableStore
+
+    # For ResumeResolver
+
+
+@dataclass(slots=True)
+class DiscordLoopContext:
+    cfg: DiscordBridgeConfig
+    running_tasks: RunningTasks
+    state_store: DiscordStateStore | None
+    prefs_store: DiscordPrefsStore | None
+    roundtable_store: RoundtableStore | None
+    scheduler: ThreadScheduler | None = None
+    resume_resolver: Any = None  # Avoid circular import at runtime
+    media_buffer: MediaGroupBuffer | None = None
+    voice_manager: Any = None
+    voice_attachment_transcriber: WhisperAttachmentTranscriber | None = None
+    default_engine_override: str | None = None
+    startup_cutoff: datetime | None = None
+
 
 __all__ = [
+    "MediaGroupBuffer",
+    "ResumeDecision",
+    "DiscordLoopContext",
     "MediaGroupBuffer",
     "ResumeDecision",
     "_MediaGroupState",

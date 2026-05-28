@@ -44,6 +44,14 @@ CLEAR_MARKUP = {"inline_keyboard": []}
 
 
 class TelegramPresenter:
+    """Presenter for rendering messages to Telegram format.
+
+    [Architecture Note]
+    Telegram은 인라인 키보드 취소 버튼 렌더링, 특수한 엔티티 마크업 파싱 및
+    메시지 분할(split)/후속(followup) 전송 방식의 고유성으로 인해
+    공통 ChatPresenter를 상속하지 않고 별도의 독자 Presenter 구현을 유지합니다.
+    """
+
     def __init__(
         self,
         *,

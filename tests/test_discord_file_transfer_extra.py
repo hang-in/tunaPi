@@ -28,26 +28,13 @@ from tunapi.discord.file_transfer import (
 # FakeAttachment — mimics discord.Attachment
 # ---------------------------------------------------------------------------
 
-class FakeAttachment:
-    def __init__(self, *, filename: str, payload: bytes, size: int | None = None) -> None:
-        self.filename = filename
-        self._payload = payload
-        self.size = size if size is not None else len(payload)
-
-    async def read(self) -> bytes:
-        return self._payload
-
-
-class FakeAttachmentOSError(FakeAttachment):
-    """Attachment whose read() raises OSError."""
-
-    async def read(self) -> bytes:
-        raise OSError("simulated read error")
+from .fakes.discord import FakeAttachment
 
 
 # ===========================================================================
 # format_bytes
 # ===========================================================================
+
 
 class TestFormatBytes:
     def test_zero(self) -> None:
@@ -69,14 +56,14 @@ class TestFormatBytes:
         assert format_bytes(1024 * 1024) == "1.0 mb"
 
     def test_gigabytes(self) -> None:
-        assert format_bytes(1024 ** 3) == "1.0 gb"
+        assert format_bytes(1024**3) == "1.0 gb"
 
     def test_terabytes(self) -> None:
-        assert format_bytes(1024 ** 4) == "1.0 tb"
+        assert format_bytes(1024**4) == "1.0 tb"
 
     def test_beyond_terabytes(self) -> None:
         # 2 TB — should still format as tb (last unit)
-        result = format_bytes(2 * 1024 ** 4)
+        result = format_bytes(2 * 1024**4)
         assert "tb" in result
 
     def test_fractional_kb(self) -> None:
@@ -93,6 +80,7 @@ class TestFormatBytes:
 # ===========================================================================
 # deny_reason — extra edge cases
 # ===========================================================================
+
 
 class TestDenyReasonExtra:
     def test_credentials_file_denied(self) -> None:
@@ -125,6 +113,7 @@ class TestDenyReasonExtra:
 # ===========================================================================
 # normalize_relative_path — edge cases
 # ===========================================================================
+
 
 class TestNormalizeRelativePath:
     def test_empty_string(self) -> None:
@@ -165,6 +154,7 @@ class TestNormalizeRelativePath:
 # resolve_path_within_root
 # ===========================================================================
 
+
 class TestResolvePathWithinRoot:
     def test_valid_path(self, tmp_path: Path) -> None:
         result = resolve_path_within_root(tmp_path, Path("sub/file.txt"))
@@ -180,6 +170,7 @@ class TestResolvePathWithinRoot:
 # split_command_args
 # ===========================================================================
 
+
 class TestSplitCommandArgs:
     def test_empty(self) -> None:
         assert split_command_args("") == ()
@@ -191,7 +182,10 @@ class TestSplitCommandArgs:
         assert split_command_args("get file.txt") == ("get", "file.txt")
 
     def test_quoted(self) -> None:
-        assert split_command_args('put "path with spaces.txt"') == ("put", "path with spaces.txt")
+        assert split_command_args('put "path with spaces.txt"') == (
+            "put",
+            "path with spaces.txt",
+        )
 
     def test_bad_quotes_fallback(self) -> None:
         # Unmatched quote — falls back to str.split
@@ -202,6 +196,7 @@ class TestSplitCommandArgs:
 # ===========================================================================
 # parse_file_command
 # ===========================================================================
+
 
 class TestParseFileCommand:
     def test_empty(self) -> None:
@@ -236,6 +231,7 @@ class TestParseFileCommand:
 # write_bytes_atomic
 # ===========================================================================
 
+
 class TestWriteBytesAtomic:
     def test_creates_parent_dirs(self, tmp_path: Path) -> None:
         target = tmp_path / "a" / "b" / "c.txt"
@@ -253,6 +249,7 @@ class TestWriteBytesAtomic:
 # default_upload_name — additional
 # ===========================================================================
 
+
 class TestDefaultUploadNameExtra:
     def test_dotfile(self) -> None:
         assert default_upload_name(".hidden") == ".hidden"
@@ -261,6 +258,7 @@ class TestDefaultUploadNameExtra:
 # ===========================================================================
 # zip_directory
 # ===========================================================================
+
 
 class TestZipDirectory:
     def test_basic_zip(self, tmp_path: Path) -> None:
@@ -272,7 +270,9 @@ class TestZipDirectory:
         assert len(payload) > 0
 
     def test_deny_globs_excluded(self, tmp_path: Path) -> None:
-        import zipfile, io
+        import zipfile
+        import io
+
         root = tmp_path / "project"
         sub = root / "src"
         sub.mkdir(parents=True)
@@ -293,7 +293,9 @@ class TestZipDirectory:
             zip_directory(root, Path("data"), (), max_bytes=10)
 
     def test_symlinks_skipped(self, tmp_path: Path) -> None:
-        import zipfile, io
+        import zipfile
+        import io
+
         root = tmp_path / "project"
         sub = root / "src"
         sub.mkdir(parents=True)
@@ -310,6 +312,7 @@ class TestZipDirectory:
 # save_attachment (async)
 # ===========================================================================
 
+
 class TestSaveAttachment:
     @pytest.mark.anyio
     async def test_success(self, tmp_path: Path) -> None:
@@ -324,7 +327,9 @@ class TestSaveAttachment:
     @pytest.mark.anyio
     async def test_too_large(self, tmp_path: Path) -> None:
         att = FakeAttachment(filename="big.bin", payload=b"x", size=100)
-        result = await save_attachment(att, tmp_path, "incoming", DEFAULT_DENY_GLOBS, max_bytes=50)
+        result = await save_attachment(
+            att, tmp_path, "incoming", DEFAULT_DENY_GLOBS, max_bytes=50
+        )
         assert result.error is not None
         assert "too large" in result.error
 
@@ -354,13 +359,17 @@ class TestSaveAttachment:
         assert result.rel_path.name == "upload.bin"
 
     @pytest.mark.anyio
-    async def test_os_error_during_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_os_error_during_write(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         att = FakeAttachment(filename="ok.txt", payload=b"data")
 
         def bad_write(path: Path, payload: bytes) -> None:
             raise OSError("disk full")
 
-        monkeypatch.setattr("tunapi.discord.file_transfer.write_bytes_atomic", bad_write)
+        monkeypatch.setattr(
+            "tunapi.discord.file_transfer.write_bytes_atomic", bad_write
+        )
         result = await save_attachment(att, tmp_path, "incoming", ())
         assert result.error is not None
         assert "failed to save" in result.error
@@ -369,6 +378,7 @@ class TestSaveAttachment:
 # ===========================================================================
 # save_attachment_to_path — extra edge cases
 # ===========================================================================
+
 
 class TestSaveAttachmentToPathExtra:
     @pytest.mark.anyio
@@ -393,22 +403,24 @@ class TestSaveAttachmentToPathExtra:
     @pytest.mark.anyio
     async def test_new_file_success(self, tmp_path: Path) -> None:
         att = FakeAttachment(filename="new.py", payload=b"print(1)")
-        result = await save_attachment_to_path(
-            att, tmp_path, Path("src/new.py"), ()
-        )
+        result = await save_attachment_to_path(att, tmp_path, Path("src/new.py"), ())
         assert result.error is None
         assert result.overwritten is False
         assert result.size == 8
         assert (tmp_path / "src" / "new.py").read_bytes() == b"print(1)"
 
     @pytest.mark.anyio
-    async def test_os_error_during_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_os_error_during_write(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         att = FakeAttachment(filename="ok.txt", payload=b"data")
 
         def bad_write(path: Path, payload: bytes) -> None:
             raise OSError("disk full")
 
-        monkeypatch.setattr("tunapi.discord.file_transfer.write_bytes_atomic", bad_write)
+        monkeypatch.setattr(
+            "tunapi.discord.file_transfer.write_bytes_atomic", bad_write
+        )
         result = await save_attachment_to_path(att, tmp_path, Path("ok.txt"), ())
         assert result.error is not None
         assert "failed to save" in result.error
@@ -417,6 +429,7 @@ class TestSaveAttachmentToPathExtra:
 # ===========================================================================
 # PutAttachmentResult
 # ===========================================================================
+
 
 class TestPutAttachmentResult:
     def test_defaults(self) -> None:

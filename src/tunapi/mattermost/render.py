@@ -7,7 +7,6 @@ Telegram renderer which must convert to entities arrays.
 from __future__ import annotations
 
 from ..markdown import (
-    MarkdownFormatter,
     MarkdownParts,
     assemble_markdown_parts,
 )

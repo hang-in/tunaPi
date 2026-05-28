@@ -4,7 +4,13 @@ from ..transport import RenderedMessage
 
 
 class TunadishPresenter(Presenter):
-    """ProgressState를 Markdown으로 변환."""
+    """ProgressState를 Markdown으로 변환.
+
+    [Architecture Note]
+    TunadishPresenter는 웹 클라이언트(Tuna Dish GUI) 화면 구성에 특화된
+    초소형 JSON-RPC 응답 전용 Markdown 포맷을 사용하므로,
+    공통 ChatPresenter와 렌더링 규격이 완전히 달라 아키텍처 상 통합하지 않습니다.
+    """
 
     def render_progress(
         self,

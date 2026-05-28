@@ -1,6 +1,25 @@
 import re
+from unittest.mock import MagicMock
+
 
 from tunapi.telegram.render import render_markdown, split_markdown_body
+from tunapi.telegram.onboarding import (
+    append_dialogue,
+    render_workspace_preview,
+    render_assistant_preview,
+    render_handoff_preview,
+    render_persona_tabs,
+    render_botfather_instructions,
+    render_private_chat_instructions,
+    render_topics_group_instructions,
+    render_generic_capture_prompt,
+    render_topics_validation_warning,
+    render_config_malformed_warning,
+    render_backup_failed_warning,
+    format_bool,
+    render_engine_table,
+    render_persona_preview,
+)
 
 
 def test_render_markdown_basic_entities() -> None:
@@ -74,3 +93,68 @@ def test_split_markdown_body_closes_and_reopens_fence() -> None:
     assert len(chunks) > 1
     assert chunks[0].rstrip().endswith("```")
     assert chunks[1].startswith("```py\n")
+
+
+class TestRenderHelpers:
+    def test_append_dialogue(self):
+        from rich.text import Text
+
+        t = Text()
+        append_dialogue(t, "bot", "hi", speaker_style="bold")
+        assert "bot" in t.plain
+        assert "hi" in t.plain
+
+    def test_render_previews(self):
+        """Smoke test: all render functions produce non-empty Text."""
+        assert render_workspace_preview().plain
+        assert render_assistant_preview().plain
+        assert render_handoff_preview().plain
+        assert render_persona_tabs() is not None
+        assert render_botfather_instructions().plain
+        assert render_private_chat_instructions("@bot").plain
+        assert render_topics_group_instructions("@bot").plain
+        assert render_generic_capture_prompt("@bot").plain
+
+    def test_render_warnings(self):
+        from tunapi.config import ConfigError
+
+        w = render_topics_validation_warning(ConfigError("oops"))
+        assert "oops" in w.plain
+        w2 = render_config_malformed_warning(ConfigError("bad"))
+        assert "bad" in w2.plain
+        w3 = render_backup_failed_warning(OSError("disk"))
+        assert "disk" in w3.plain
+
+
+class TestFormatBool:
+    def test_none(self):
+        assert format_bool(None) == "n/a"
+
+    def test_true(self):
+        assert format_bool(True) == "yes"
+
+    def test_false(self):
+        assert format_bool(False) == "no"
+
+
+class TestRenderEngineTable:
+    def test_renders(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        rows = [("claude", True, None), ("codex", False, "npm i codex")]
+        render_engine_table(ui, rows)
+        ui.print.assert_called_once()
+
+    def test_empty(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        render_engine_table(ui, [])
+        ui.print.assert_called_once()
+
+
+class TestRenderPersonaPreview:
+    def test_renders(self):
+        ui = MagicMock()
+        ui.print = MagicMock()
+        render_persona_preview(ui)
+        ui.print.assert_called()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,8 +16,12 @@ from tunapi.discord.onboarding import (
     check_setup,
     config_issue,
     mask_token,
+    _render_engine_table,
+    interactive_setup,
 )
 from tunapi.transports import SetupResult
+
+pytestmark = pytest.mark.anyio
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +87,9 @@ class TestResolveDefaultConfigPath:
             result = _resolve_default_config_path()
             assert result == tmp_path / "home_tunapi.toml"
 
-    def test_no_config_returns_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_no_config_returns_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.chdir(tmp_path)
         with patch(
             "tunapi.discord.onboarding.HOME_CONFIG_PATH",
@@ -219,7 +225,10 @@ class TestCheckSetup:
         settings.transports = transports
 
         with (
-            patch("tunapi.discord.onboarding.load_settings", return_value=(settings, Path("/cfg.toml"))),
+            patch(
+                "tunapi.discord.onboarding.load_settings",
+                return_value=(settings, Path("/cfg.toml")),
+            ),
             patch("shutil.which", return_value="/usr/bin/claude"),
         ):
             result = check_setup(_make_backend())
@@ -236,14 +245,19 @@ class TestCheckSetup:
         settings.transports = transports
 
         with (
-            patch("tunapi.discord.onboarding.load_settings", return_value=(settings, Path("/cfg.toml"))),
+            patch(
+                "tunapi.discord.onboarding.load_settings",
+                return_value=(settings, Path("/cfg.toml")),
+            ),
             patch("shutil.which", return_value=None),
         ):
             result = check_setup(_make_backend())
         assert not result.ok
         assert any("install" in issue.title.lower() or True for issue in result.issues)
 
-    def test_config_error_no_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_config_error_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """load_settings raises ConfigError, config file does not exist."""
         fake_path = tmp_path / "tunapi.toml"
         with (
@@ -263,7 +277,9 @@ class TestCheckSetup:
         titles = [i.title for i in result.issues]
         assert "create a config" in titles
 
-    def test_config_error_file_exists(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_config_error_file_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """load_settings raises ConfigError, config file exists."""
         fake_path = tmp_path / "tunapi.toml"
         fake_path.touch()
@@ -292,7 +308,10 @@ class TestCheckSetup:
         settings.transports = transports
 
         with (
-            patch("tunapi.discord.onboarding.load_settings", return_value=(settings, Path("/cfg.toml"))),
+            patch(
+                "tunapi.discord.onboarding.load_settings",
+                return_value=(settings, Path("/cfg.toml")),
+            ),
             patch("shutil.which", return_value="/usr/bin/claude"),
         ):
             result = check_setup(_make_backend())
@@ -309,9 +328,94 @@ class TestCheckSetup:
         settings.model_copy.return_value = settings
 
         with (
-            patch("tunapi.discord.onboarding.load_settings", return_value=(settings, Path("/cfg.toml"))),
+            patch(
+                "tunapi.discord.onboarding.load_settings",
+                return_value=(settings, Path("/cfg.toml")),
+            ),
             patch("shutil.which", return_value="/usr/bin/claude"),
         ):
             result = check_setup(_make_backend(), transport_override="discord")
         settings.model_copy.assert_called_once_with(update={"transport": "discord"})
         assert result.ok
+
+
+# ---------------------------------------------------------------------------
+# Migrated from test_coverage_push.py
+# ---------------------------------------------------------------------------
+
+
+class TestDiscordRequireDiscordModelExtra:
+    def test_model_extra_none(self):
+        transports = MagicMock(spec=["model_extra"])
+        transports.discord = None
+        transports.model_extra = None
+        settings = MagicMock()
+        settings.transports = transports
+        with pytest.raises(ConfigError, match="not configured"):
+            _require_discord(settings, Path("cfg.toml"))
+
+
+class TestDiscordRenderEngineTable:
+    def test_renders(self):
+        from rich.console import Console
+
+        console = Console(file=MagicMock())
+        with patch("tunapi.discord.onboarding.list_backends") as mock_backends:
+            be1 = MagicMock()
+            be1.id = "claude"
+            be1.cli_cmd = "claude"
+            be1.install_cmd = "npm i claude"
+            be2 = MagicMock()
+            be2.id = "codex"
+            be2.cli_cmd = "codex"
+            be2.install_cmd = None
+            mock_backends.return_value = [be1, be2]
+            with patch("shutil.which", side_effect=["/usr/bin/claude", None]):
+                rows = _render_engine_table(console)
+        assert len(rows) == 2
+        assert rows[0] == ("claude", True, "npm i claude")
+        assert rows[1] == ("codex", False, None)
+
+
+class TestDiscordInteractiveSetup:
+    async def test_config_exists_no_force(self, tmp_path: Path):
+        cfg_path = tmp_path / "tunapi.toml"
+        cfg_path.touch()
+        with patch("tunapi.discord.onboarding.HOME_CONFIG_PATH", cfg_path):
+            result = await interactive_setup(force=False)
+        assert result is True
+
+    async def test_config_exists_force_declined(self, tmp_path: Path):
+        cfg_path = tmp_path / "tunapi.toml"
+        cfg_path.touch()
+        with (
+            patch("tunapi.discord.onboarding.HOME_CONFIG_PATH", cfg_path),
+            patch("tunapi.discord.onboarding._confirm", AsyncMock(return_value=False)),
+        ):
+            result = await interactive_setup(force=True)
+        assert result is False
+
+
+class TestDiscordCheckSetupEdgeCases:
+    def _make_backend(self):
+        return MagicMock(
+            id="claude",
+            cli_cmd="claude",
+            install_cmd="npm i claude",
+        )
+
+    def test_engine_installed_discord_missing(self, monkeypatch):
+        transports = MagicMock(spec=["model_extra"])
+        transports.discord = None
+        transports.model_extra = {}
+        settings = MagicMock()
+        settings.transports = transports
+        with (
+            patch(
+                "tunapi.discord.onboarding.load_settings",
+                return_value=(settings, Path("/c.toml")),
+            ),
+            patch("shutil.which", return_value="/usr/bin/claude"),
+        ):
+            result = check_setup(self._make_backend())
+        assert not result.ok

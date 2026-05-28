@@ -123,9 +123,11 @@ def _file_sink(
         exc = file_dict.get("exc_info")
         if exc is True:
             import sys
+
             exc = sys.exc_info()
         if exc and exc is not True:
             import traceback as tb_mod
+
             if isinstance(exc, BaseException):
                 file_dict["exc_info"] = "".join(
                     tb_mod.format_exception(type(exc), exc, exc.__traceback__)

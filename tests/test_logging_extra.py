@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import errno
 import io
-import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -176,9 +175,8 @@ def test_drop_below_level_passes_error() -> None:
 
 
 def test_suppress_logs_raises_drop_for_info() -> None:
-    with suppress_logs("warning"):
-        with pytest.raises(structlog.DropEvent):
-            _drop_below_level(None, "info", {})
+    with suppress_logs("warning"), pytest.raises(structlog.DropEvent):
+        _drop_below_level(None, "info", {})
 
 
 def test_suppress_logs_passes_warning() -> None:

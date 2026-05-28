@@ -1,4 +1,5 @@
 """Extra tests for tunapi.cli.run and tunapi.cli.doctor — covers uncovered branches."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -7,8 +8,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import typer
@@ -33,13 +33,8 @@ from tunapi.cli.doctor import (
 )
 from tunapi.cli.run import (
     _default_engine_for_setup,
-    _load_settings_optional,
-    _resolve_setup_engine,
-    _resolve_transport_id,
-    _run_auto_router,
     _setup_needs_config,
     _version_callback,
-    acquire_config_lock,
     make_engine_cmd,
 )
 
@@ -104,10 +99,15 @@ def _settings(**overrides) -> TunapiSettings:
 
 class TestDefaultEngineForSetup:
     def test_override_takes_precedence(self):
-        assert _default_engine_for_setup("gemini", settings=None, config_path=None) == "gemini"
+        assert (
+            _default_engine_for_setup("gemini", settings=None, config_path=None)
+            == "gemini"
+        )
 
     def test_no_settings_returns_codex(self):
-        assert _default_engine_for_setup(None, settings=None, config_path=None) == "codex"
+        assert (
+            _default_engine_for_setup(None, settings=None, config_path=None) == "codex"
+        )
 
     def test_settings_default_engine(self):
         s = _settings()
@@ -255,7 +255,6 @@ def test_run_auto_router_debug_sets_env(monkeypatch, tmp_path):
     setup = SetupResult(issues=[], config_path=tmp_path / "tunapi.toml")
     transport = _FakeTransport(setup)
     config_path = tmp_path / "tunapi.toml"
-
     monkeypatch.setattr(
         cli,
         "_resolve_setup_engine",
@@ -363,7 +362,6 @@ def test_run_auto_router_keyboard_interrupt(monkeypatch, tmp_path):
     """KeyboardInterrupt exits with code 130."""
     setup = SetupResult(issues=[], config_path=tmp_path / "tunapi.toml")
     transport = _FakeTransport(setup)
-    config_path = tmp_path / "tunapi.toml"
 
     monkeypatch.setattr(
         cli,
@@ -643,9 +641,7 @@ async def test_slack_checks_invalid_token(monkeypatch) -> None:
     client = _FakeSlackClient(auth=auth)
 
     # Patch the import target used by _doctor_slack_checks
-    monkeypatch.setattr(
-        "tunapi.slack.client.SlackClient", lambda _bt, _at: client
-    )
+    monkeypatch.setattr("tunapi.slack.client.SlackClient", lambda _bt, _at: client)
 
     checks = await _doctor_slack_checks("xoxb-bad", "xapp-bad", "C123")
     token_checks = [c for c in checks if c.label == "slack bot token"]
@@ -660,9 +656,7 @@ async def test_slack_checks_channel_unreachable(monkeypatch) -> None:
     auth = _FakeSlackAuth(ok=True)
     client = _FakeSlackClient(auth=auth, channel=None)
 
-    monkeypatch.setattr(
-        "tunapi.slack.client.SlackClient", lambda _bt, _at: client
-    )
+    monkeypatch.setattr("tunapi.slack.client.SlackClient", lambda _bt, _at: client)
 
     checks = await _doctor_slack_checks("xoxb-ok", "xapp-ok", "C123")
     channel_checks = [c for c in checks if c.label == "channel_id"]
@@ -677,9 +671,7 @@ async def test_slack_checks_no_channel_with_allowed(monkeypatch) -> None:
     auth = _FakeSlackAuth(ok=True)
     client = _FakeSlackClient(auth=auth)
 
-    monkeypatch.setattr(
-        "tunapi.slack.client.SlackClient", lambda _bt, _at: client
-    )
+    monkeypatch.setattr("tunapi.slack.client.SlackClient", lambda _bt, _at: client)
 
     checks = await _doctor_slack_checks("xoxb-ok", "xapp-ok", "", ("C1",))
     channel_checks = [c for c in checks if c.label == "channel_id"]
@@ -693,9 +685,7 @@ async def test_slack_checks_no_channel_no_allowed(monkeypatch) -> None:
     auth = _FakeSlackAuth(ok=True)
     client = _FakeSlackClient(auth=auth)
 
-    monkeypatch.setattr(
-        "tunapi.slack.client.SlackClient", lambda _bt, _at: client
-    )
+    monkeypatch.setattr("tunapi.slack.client.SlackClient", lambda _bt, _at: client)
 
     checks = await _doctor_slack_checks("xoxb-ok", "xapp-ok", "")
     channel_checks = [c for c in checks if c.label == "channel_id"]

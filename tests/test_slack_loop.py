@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import anyio
 import pytest
 
 from tunapi.core.chat_prefs import Persona
 from tunapi.core.roundtable import RoundtableSession, RoundtableStore
 from tunapi.runner_bridge import RunningTask
-from tunapi.slack.bridge import CANCEL_EMOJI
+from tunapi.slack.bridge import CANCEL_EMOJI, SlackPresenter
 from tunapi.slack.loop import (
     _PERSONA_PREFIX_RE,
     _ResolvedPrompt,
     _handle_cancel_reaction,
     _resolve_persona_prefix,
 )
-from tunapi.slack.parsing import SlackMessageEvent, SlackReactionEvent
+from tunapi.slack.parsing import SlackReactionEvent
 from tunapi.transport import MessageRef
 
 
@@ -229,3 +227,9 @@ class TestHandleCancelReaction:
         )
         await _handle_cancel_reaction(reaction, {})
         # No error, nothing to cancel
+
+
+class TestSlackPresenterPush:
+    def test_instantiate(self):
+        p = SlackPresenter()
+        assert p is not None

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import pytest
 from pathlib import Path
 
@@ -51,7 +50,9 @@ class TestConversationContextStoreSettings:
     @pytest.mark.anyio
     async def test_update_conv_settings(self, store: ConversationContextStore):
         await store.set_context("conv1", RunContext(project="proj"))
-        updated = await store.update_conv_settings("conv1", engine="gemini", model="flash-2")
+        updated = await store.update_conv_settings(
+            "conv1", engine="gemini", model="flash-2"
+        )
         assert updated.engine == "gemini"
         assert updated.model == "flash-2"
         assert updated.persona is None
@@ -102,7 +103,9 @@ class TestConversationContextStoreSettings:
         assert s.model is None
 
     @pytest.mark.anyio
-    async def test_settings_in_list_conversations(self, store: ConversationContextStore):
+    async def test_settings_in_list_conversations(
+        self, store: ConversationContextStore
+    ):
         await store.set_context("c1", RunContext(project="p"))
         await store.update_conv_settings("c1", engine="claude")
         # list_conversations는 settings를 포함하지 않음 (별도 API)

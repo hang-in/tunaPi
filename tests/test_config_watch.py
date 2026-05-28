@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import anyio
 import pytest
@@ -114,3 +115,14 @@ async def test_watch_config_applies_runtime(
         tg.cancel_scope.cancel()
 
     assert runtime.default_engine == "pi"
+
+
+class TestConfigReloadPush:
+    def test_attrs(self):
+        settings = MagicMock()
+        reload = ConfigReload(
+            settings=settings,
+            runtime_spec=MagicMock(),
+            config_path=Path("/c.toml"),
+        )
+        assert reload.settings is settings

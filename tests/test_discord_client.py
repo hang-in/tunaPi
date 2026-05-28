@@ -21,25 +21,7 @@ from tunapi.discord.client import (
 # ---------------------------------------------------------------------------
 
 
-class FakeClock:
-    def __init__(self, start: float = 0.0):
-        self._now = start
-
-    def __call__(self) -> float:
-        return self._now
-
-    def advance(self, seconds: float) -> None:
-        self._now += seconds
-
-
-class FakeSleep:
-    def __init__(self, clock: FakeClock):
-        self.clock = clock
-        self.calls: list[float] = []
-
-    async def __call__(self, seconds: float) -> None:
-        self.calls.append(seconds)
-        self.clock.advance(seconds)
+from .fakes.discord import FakeClock, FakeSleep
 
 
 def _make_client(

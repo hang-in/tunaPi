@@ -1,4 +1,5 @@
 """Tests for the low-level Mattermost HTTP client."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -95,7 +96,9 @@ class TestGetMe:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({"id": "bot1", "username": "tunapi-bot", "roles": "system_user"})
+            _json_response(
+                {"id": "bot1", "username": "tunapi-bot", "roles": "system_user"}
+            )
         )
         user = await client.get_me()
         assert isinstance(user, User)
@@ -137,7 +140,9 @@ class TestCreatePost:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({"id": "p2", "channel_id": "c1", "root_id": "p1", "message": "reply"})
+            _json_response(
+                {"id": "p2", "channel_id": "c1", "root_id": "p1", "message": "reply"}
+            )
         )
         post = await client.create_post("c1", "reply", root_id="p1")
         assert isinstance(post, Post)
@@ -147,7 +152,9 @@ class TestCreatePost:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({"id": "p3", "channel_id": "c1", "message": "hi", "props": {"k": "v"}})
+            _json_response(
+                {"id": "p3", "channel_id": "c1", "message": "hi", "props": {"k": "v"}}
+            )
         )
         post = await client.create_post("c1", "hi", props={"k": "v"})
         assert isinstance(post, Post)
@@ -197,13 +204,15 @@ class TestGetChannel:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({
-                "id": "ch1",
-                "type": "O",
-                "display_name": "General",
-                "name": "general",
-                "team_id": "t1",
-            })
+            _json_response(
+                {
+                    "id": "ch1",
+                    "type": "O",
+                    "display_name": "General",
+                    "name": "general",
+                    "team_id": "t1",
+                }
+            )
         )
         ch = await client.get_channel("ch1")
         assert isinstance(ch, Channel)
@@ -220,15 +229,19 @@ class TestUploadFile:
         self, client: HttpMattermostClient, transport: FakeTransport
     ):
         transport.enqueue(
-            _json_response({
-                "file_infos": [{
-                    "id": "f1",
-                    "name": "test.txt",
-                    "size": 100,
-                    "mime_type": "text/plain",
-                    "extension": "txt",
-                }]
-            })
+            _json_response(
+                {
+                    "file_infos": [
+                        {
+                            "id": "f1",
+                            "name": "test.txt",
+                            "size": 100,
+                            "mime_type": "text/plain",
+                            "extension": "txt",
+                        }
+                    ]
+                }
+            )
         )
         fi = await client.upload_file("c1", "test.txt", b"hello")
         assert isinstance(fi, FileInfo)

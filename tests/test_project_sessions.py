@@ -113,3 +113,56 @@ async def test_cross_transport_shared(tmp_path: Path) -> None:
     slack_store = ProjectSessionStore(path)
     result = await slack_store.get("proj")
     assert result == ResumeToken(engine="claude", value="shared-tok")
+
+
+@pytest.mark.anyio
+class TestProjectSessionStorePush:
+    async def test_set_and_get(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        await store.set("proj", ResumeToken(engine="claude", value="tok"))
+        got = await store.get("proj")
+        assert got is not None
+        assert got.value == "tok"
+
+    async def test_get_missing(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        assert await store.get("missing") is None
+
+    async def test_clear(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        await store.set("proj", ResumeToken(engine="claude", value="tok"))
+        await store.clear("proj")
+        assert await store.get("proj") is None
+
+    async def test_clear_nonexistent(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        await store.clear("nope")  # no-op
+
+    async def test_get_engine(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        await store.set("proj", ResumeToken(engine="codex", value="tok"))
+        assert await store.get_engine("proj") == "codex"
+
+    async def test_get_engine_missing(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        assert await store.get_engine("missing") is None
+
+    async def test_has_active(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        assert not await store.has_active("proj")
+        await store.set("proj", ResumeToken(engine="claude", value="tok"))
+        assert await store.has_active("proj")
+
+    async def test_case_insensitive(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        await store.set("MyProject", ResumeToken(engine="claude", value="tok"))
+        got = await store.get("myproject")
+        assert got is not None
+
+    async def test_cwd_tracking(self, tmp_path: Path):
+        store = ProjectSessionStore(tmp_path / "proj.json")
+        cwd = tmp_path / "work"
+        cwd.mkdir()
+        await store.set("proj", ResumeToken(engine="claude", value="tok"), cwd=cwd)
+        got = await store.get("proj", cwd=cwd)
+        assert got is not None

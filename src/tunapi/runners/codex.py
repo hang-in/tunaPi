@@ -14,7 +14,12 @@ from ..config import ConfigError
 from ..events import EventFactory
 from ..logging import get_logger
 from ..model import ActionPhase, EngineId, ResumeToken, TunapiEvent
-from ..runner import JsonlSubprocessRunner, MsgspecJsonlRunnerMixin, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    MsgspecJsonlRunnerMixin,
+    ResumeTokenMixin,
+    Runner,
+)
 from .codex_events import (  # noqa: F401  — re-exported for backward compat
     _format_change_summary,
     _normalize_change_list,
@@ -347,7 +352,12 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         extra_args.extend(["--profile", profile_value])
         title = profile_value
 
-    return CodexRunner(codex_cmd=codex_cmd, codex_script=codex_script, extra_args=extra_args, title=title)
+    return CodexRunner(
+        codex_cmd=codex_cmd,
+        codex_script=codex_script,
+        extra_args=extra_args,
+        title=title,
+    )
 
 
 BACKEND = EngineBackend(

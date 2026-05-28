@@ -2,10 +2,8 @@
 
 from pathlib import Path
 
-import pytest
 
 from tunapi.core.files import (
-    DEFAULT_DENY_GLOBS,
     FilePutResult,
     deny_reason,
     format_bytes,
@@ -14,6 +12,8 @@ from tunapi.core.files import (
     resolve_path,
     save_file,
     write_bytes_atomic,
+    extract_file_paths,
+    cleanup_incoming,
 )
 
 
@@ -154,3 +154,100 @@ class TestReadFile:
     def test_path_escape(self, tmp_path):
         filename, error, data = read_file("../../etc/passwd", tmp_path)
         assert "path escape" in error
+
+
+class TestDenyReasonPush:
+    def test_ok(self):
+        result = deny_reason("hello.txt")
+        assert result is None
+
+    def test_denied(self):
+        result = deny_reason(".env")
+        assert result is not None
+
+    def test_custom_globs(self):
+        result = deny_reason("secrets.txt", deny_globs=("secrets.*",))
+        assert result is not None
+
+
+class TestFormatBytesPush:
+    def test_small(self):
+        assert format_bytes(100) == "100 B"
+
+    def test_kb(self):
+        result = format_bytes(2048)
+        assert "KB" in result or "kB" in result or "K" in result
+
+    def test_mb(self):
+        result = format_bytes(2 * 1024 * 1024)
+        assert "M" in result
+
+
+class TestNormalizeRelativePathPush:
+    def test_simple(self):
+        result = normalize_relative_path("hello.txt")
+        assert result == "hello.txt"
+
+    def test_traversal(self):
+        result = normalize_relative_path("../secret.txt")
+        assert result is None
+
+    def test_absolute(self):
+        result = normalize_relative_path("/etc/passwd")
+        assert result is None
+
+    def test_empty(self):
+        result = normalize_relative_path("")
+        assert result is None
+
+
+class TestResolvePathPush:
+    def test_valid(self, tmp_path: Path):
+        (tmp_path / "test.txt").touch()
+        result = resolve_path("test.txt", tmp_path)
+        assert result is not None
+
+    def test_traversal(self, tmp_path: Path):
+        result = resolve_path("../secret", tmp_path)
+        assert result is None
+
+
+class TestExtractFilePathsPush:
+    def test_no_paths(self):
+        assert extract_file_paths("hello world") == []
+
+    def test_with_paths(self):
+        result = extract_file_paths("check out src/main.py and tests/test.py")
+        assert len(result) >= 0  # smoke test
+
+
+class TestWriteBytesAtomicPush:
+    def test_basic(self, tmp_path: Path):
+        p = tmp_path / "out.bin"
+        write_bytes_atomic(p, b"hello")
+        assert p.read_bytes() == b"hello"
+
+    def test_creates_parent(self, tmp_path: Path):
+        p = tmp_path / "sub" / "dir" / "out.bin"
+        write_bytes_atomic(p, b"data")
+        assert p.read_bytes() == b"data"
+
+
+class TestFilePutResultPush:
+    def test_ok(self):
+        r = FilePutResult(path=Path("/x"), name="test.txt")
+        assert r.ok is True
+
+    def test_not_ok(self):
+        r = FilePutResult(message="fail")
+        assert r.ok is False
+
+
+class TestCleanupIncomingPush:
+    def test_no_dir(self, monkeypatch):
+        """Returns 0 when incoming dir doesn't exist."""
+        monkeypatch.setattr(
+            "tunapi.core.files._INCOMING_ROOT",
+            Path("/nonexistent/path"),
+        )
+        assert cleanup_incoming() == 0

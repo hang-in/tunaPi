@@ -1,6 +1,6 @@
 """Tests for the transport module."""
 
-from tunapi.transport import MessageRef
+from tunapi.transport import MessageRef, RenderedMessage
 
 
 def test_message_ref_sender_id_field() -> None:
@@ -37,3 +37,24 @@ def test_message_ref_all_fields() -> None:
     assert ref.raw == raw_data
     assert ref.thread_id == 100
     assert ref.sender_id == 789
+
+
+class TestMessageRefPush:
+    def test_attrs(self):
+        ref = MessageRef(channel_id=1, message_id=2)
+        assert ref.channel_id == 1
+        assert ref.message_id == 2
+
+    def test_thread_id(self):
+        ref = MessageRef(channel_id=1, message_id=2, thread_id=3)
+        assert ref.thread_id == 3
+
+
+class TestRenderedMessagePush:
+    def test_basic(self):
+        msg = RenderedMessage(text="hello")
+        assert msg.text == "hello"
+
+    def test_with_extra(self):
+        msg = RenderedMessage(text="hello", extra={"key": "val"})
+        assert msg.extra["key"] == "val"

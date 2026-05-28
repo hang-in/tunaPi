@@ -11,7 +11,12 @@ from ..backends import EngineBackend, EngineConfig
 from ..events import EventFactory
 from ..logging import get_logger
 from ..model import Action, ActionKind, EngineId, ResumeToken, TunapiEvent
-from ..runner import JsonlSubprocessRunner, MsgspecJsonlRunnerMixin, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    MsgspecJsonlRunnerMixin,
+    ResumeTokenMixin,
+    Runner,
+)
 from .run_options import get_run_options
 from ..schemas import claude as claude_schema
 from .tool_actions import tool_input_path, tool_kind_and_title
@@ -440,7 +445,9 @@ class ClaudeRunner(MsgspecJsonlRunnerMixin, ResumeTokenMixin, JsonlSubprocessRun
 
 
 def build_runner(config: EngineConfig, _config_path: Path) -> Runner:
-    claude_cmd = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude.exe")
+    claude_cmd = shutil.which("claude") or str(
+        Path.home() / ".local" / "bin" / "claude.exe"
+    )
 
     model = config.get("model")
     if "allowed_tools" in config:

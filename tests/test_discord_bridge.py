@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,7 +17,7 @@ from tunapi.discord.bridge import (
     _is_cancelled_label,
 )
 from tunapi.discord.client import SentMessage
-from tunapi.markdown import MarkdownFormatter, MarkdownParts
+from tunapi.markdown import MarkdownFormatter
 from tunapi.progress import ProgressState
 from tunapi.transport import MessageRef, RenderedMessage, SendOptions
 
@@ -25,6 +25,7 @@ from tunapi.transport import MessageRef, RenderedMessage, SendOptions
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_state(engine: str = "claude") -> ProgressState:
     return ProgressState(
@@ -46,13 +47,16 @@ def _make_bot() -> MagicMock:
     return bot
 
 
-def _sent(msg_id: int = 100, channel_id: int = 1, thread_id: int | None = None) -> SentMessage:
+def _sent(
+    msg_id: int = 100, channel_id: int = 1, thread_id: int | None = None
+) -> SentMessage:
     return SentMessage(message_id=msg_id, channel_id=channel_id, thread_id=thread_id)
 
 
 # ===========================================================================
 # _is_cancelled_label
 # ===========================================================================
+
 
 class TestIsCancelledLabel:
     def test_plain_cancelled(self) -> None:
@@ -83,6 +87,7 @@ class TestIsCancelledLabel:
 # ===========================================================================
 # DiscordPresenter
 # ===========================================================================
+
 
 class TestDiscordPresenter:
     def test_render_progress_basic(self) -> None:
@@ -161,6 +166,7 @@ class TestDiscordPresenter:
 # ===========================================================================
 # DiscordTransport
 # ===========================================================================
+
 
 class TestDiscordTransportSend:
     @pytest.mark.anyio
@@ -548,6 +554,7 @@ class TestExtractFollowups:
 # Dataclass configs
 # ===========================================================================
 
+
 class TestDiscordFilesSettings:
     def test_defaults(self) -> None:
         s = DiscordFilesSettings()
@@ -647,8 +654,11 @@ class TestDiscordBridgeConfig:
         runtime = MagicMock()
         exec_cfg = MagicMock()
         cfg = DiscordBridgeConfig(
-            bot=bot, runtime=runtime, guild_id=None,
-            startup_msg="x", exec_cfg=exec_cfg,
+            bot=bot,
+            runtime=runtime,
+            guild_id=None,
+            startup_msg="x",
+            exec_cfg=exec_cfg,
         )
         with pytest.raises(AttributeError):
             cfg.session_mode = "chat"  # type: ignore[misc]

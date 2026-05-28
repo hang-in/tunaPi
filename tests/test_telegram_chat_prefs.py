@@ -1,6 +1,7 @@
 import pytest
-
+from pathlib import Path
 from tunapi.core.chat_prefs import ChatPrefsStore
+from tunapi.context import RunContext
 from tunapi.telegram.engine_overrides import (
     EngineOverrides,
     get_telegram_engine_override,
@@ -71,3 +72,71 @@ async def test_telegram_prefs_migration(tmp_path) -> None:
     assert override2 is not None
     assert override2.model == "gpt-3.5"
     assert override2.reasoning == "low"
+
+
+@pytest.mark.anyio
+class TestChatPrefsStore:
+    async def test_default_engine(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert await store.get_default_engine("ch1") is None
+        await store.set_default_engine("ch1", "claude")
+        assert await store.get_default_engine("ch1") == "claude"
+
+    async def test_engine_locked(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert not await store.is_engine_locked("ch1")
+        await store.lock_engine("ch1")
+        assert await store.is_engine_locked("ch1")
+
+    async def test_set_engine_with_lock(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        await store.set_default_engine("ch1", "claude", lock=True)
+        assert await store.is_engine_locked("ch1")
+
+    async def test_trigger_mode(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert await store.get_trigger_mode("ch1") is None
+        await store.set_trigger_mode("ch1", "mentions")
+        assert await store.get_trigger_mode("ch1") == "mentions"
+
+    async def test_context(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert await store.get_context("ch1") is None
+        await store.set_context("ch1", RunContext(project="proj", branch="main"))
+        ctx = await store.get_context("ch1")
+        assert ctx is not None
+        assert ctx.project == "proj"
+        assert ctx.branch == "main"
+
+    async def test_engine_model(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert await store.get_engine_model("ch1", "claude") is None
+        await store.set_engine_model("ch1", "claude", "opus")
+        assert await store.get_engine_model("ch1", "claude") == "opus"
+        await store.clear_engine_model("ch1", "claude")
+        assert await store.get_engine_model("ch1", "claude") is None
+
+    async def test_clear_engine_model_nonexistent(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        await store.clear_engine_model("ch1", "claude")  # no-op
+
+    async def test_get_all_engine_models(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        await store.set_engine_model("ch1", "claude", "opus")
+        await store.set_engine_model("ch1", "codex", "gpt4")
+        models = await store.get_all_engine_models("ch1")
+        assert models == {"claude": "opus", "codex": "gpt4"}
+
+    async def test_persona_crud(self, tmp_path: Path):
+        store = ChatPrefsStore(tmp_path / "prefs.json")
+        assert await store.get_persona("reviewer") is None
+        assert await store.list_personas() == {}
+        await store.add_persona("reviewer", "You are a code reviewer")
+        p = await store.get_persona("reviewer")
+        assert p is not None
+        assert p.prompt == "You are a code reviewer"
+        all_p = await store.list_personas()
+        assert "reviewer" in all_p
+        assert await store.remove_persona("reviewer") is True
+        assert await store.remove_persona("reviewer") is False
+        assert await store.get_persona("reviewer") is None

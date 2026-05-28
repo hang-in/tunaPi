@@ -29,6 +29,7 @@ class RoundtableConfig:
     max_rounds: int = 3
     parallel_first_round: bool = False
 
+
 type ContextSource = Literal[
     "reply_ctx",
     "directives",

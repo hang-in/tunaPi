@@ -10,7 +10,6 @@ MAX_RECOMMENDED_LINES = 800
 # entries from this set, but new oversized files should not be introduced.
 ALLOWED_OVERSIZED_FILES = {
     "src/tunapi/discord/handlers.py",
-    "src/tunapi/discord/loop.py",
     "src/tunapi/mattermost/commands.py",
     "src/tunapi/mattermost/loop.py",
     "src/tunapi/runner_bridge.py",
@@ -18,7 +17,6 @@ ALLOWED_OVERSIZED_FILES = {
     "src/tunapi/slack/loop.py",
     "src/tunapi/telegram/loop_dispatch.py",
     "src/tunapi/telegram/onboarding.py",
-    "src/tunapi/tunadish/backend.py",
     "src/tunapi/tunadish/commands.py",
 }
 

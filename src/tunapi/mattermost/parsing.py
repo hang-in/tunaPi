@@ -6,7 +6,7 @@ import json
 from collections.abc import Iterable
 
 from ..logging import get_logger
-from .api_models import Post, Reaction, WebSocketEvent, decode_post
+from .api_models import Reaction, WebSocketEvent, decode_post
 from .types import (
     MattermostIncomingMessage,
     MattermostIncomingUpdate,

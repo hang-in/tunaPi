@@ -18,8 +18,8 @@ _DEFAULT_TOP = 5
 _DEFAULT_TOKEN_BUDGET = 2000
 _DEFAULT_THRESHOLD = 0.5
 _DEFAULT_CONTEXT_LINES = 3
-_SEARCH_TIMEOUT = 30   # search/map 타임아웃 (첫 실행 시 모델 로드 포함)
-_INDEX_TIMEOUT = 300    # index build 타임아웃 (대형 프로젝트 대응)
+_SEARCH_TIMEOUT = 30  # search/map 타임아웃 (첫 실행 시 모델 로드 포함)
+_INDEX_TIMEOUT = 300  # index build 타임아웃 (대형 프로젝트 대응)
 
 # 기본 제외 패턴 — 빌드 산출물, 의존성 디렉토리
 _DEFAULT_EXCLUDE = [
@@ -105,7 +105,7 @@ async def check_index(project_path: str | Path) -> dict[str, Any] | None:
         )
         if result.returncode == 0:
             return json.loads(result.stdout)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("rawq index status failed: %s", e)
     return None
 
@@ -125,7 +125,7 @@ async def build_index(
         return False
 
     cmd = [_get_rawq(), "index", "build", str(project_path)]
-    for pattern in (exclude or _DEFAULT_EXCLUDE):
+    for pattern in exclude or _DEFAULT_EXCLUDE:
         cmd.extend(["-x", pattern])
 
     try:
@@ -135,7 +135,7 @@ async def build_index(
     except TimeoutError:
         logger.warning("rawq index build timed out after %ds", _INDEX_TIMEOUT)
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("rawq index build failed: %s", e)
         return False
 
@@ -160,16 +160,23 @@ async def search(
         return None
 
     cmd = [
-        _get_rawq(), "search", query, str(project_path),
-        "--top", str(top),
-        "--token-budget", str(token_budget),
-        "--threshold", str(threshold),
-        "--context", str(context_lines),
+        _get_rawq(),
+        "search",
+        query,
+        str(project_path),
+        "--top",
+        str(top),
+        "--token-budget",
+        str(token_budget),
+        "--threshold",
+        str(threshold),
+        "--context",
+        str(context_lines),
         "--json",
     ]
     if lang_filter:
         cmd.extend(["--lang", lang_filter])
-    for pattern in (exclude or []):
+    for pattern in exclude or []:
         cmd.extend(["--exclude", pattern])
 
     try:
@@ -179,7 +186,7 @@ async def search(
             return json.loads(result.stdout)
     except TimeoutError:
         logger.warning("rawq search timed out after %ds", _SEARCH_TIMEOUT)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("rawq search failed: %s", e)
     return None
 
@@ -209,7 +216,7 @@ async def get_map(
             return json.loads(result.stdout)
     except TimeoutError:
         logger.warning("rawq map timed out after %ds", _SEARCH_TIMEOUT)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("rawq map failed: %s", e)
     return None
 
@@ -274,12 +281,15 @@ def format_map_block(map_result: dict[str, Any]) -> str:
             lines.append(f"  {path}")
             continue
         sym_names = [s.get("name", "") for s in symbols if s.get("name")]
-        lines.append(f"  {path} ({', '.join(sym_names[:8])}{'...' if len(sym_names) > 8 else ''})")
+        lines.append(
+            f"  {path} ({', '.join(sym_names[:8])}{'...' if len(sym_names) > 8 else ''})"
+        )
     lines.append("</project_structure>")
     return "\n".join(lines)
 
 
 # ── 버전 확인 & 업데이트 체크 ──
+
 
 async def get_version() -> str | None:
     """로컬 rawq 바이너리의 버전을 반환."""
@@ -293,7 +303,7 @@ async def get_version() -> str | None:
         if result.returncode == 0:
             # "rawq 0.1.1" → "0.1.1"
             return result.stdout.decode().strip().split()[-1]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("rawq version check failed: %s", e)
     return None
 
@@ -338,7 +348,14 @@ async def check_for_update() -> dict[str, Any] | None:
         commits: list[str] = []
         if has_update:
             log_result = await anyio.run_process(
-                ["git", "-C", str(rawq_dir), "log", "--oneline", f"{current}..{latest}"],
+                [
+                    "git",
+                    "-C",
+                    str(rawq_dir),
+                    "log",
+                    "--oneline",
+                    f"{current}..{latest}",
+                ],
                 check=False,
             )
             if log_result.returncode == 0:
@@ -352,6 +369,6 @@ async def check_for_update() -> dict[str, Any] | None:
         }
     except TimeoutError:
         logger.debug("rawq update check: git fetch timed out")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("rawq update check failed: %s", e)
     return None

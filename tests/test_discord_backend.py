@@ -19,6 +19,7 @@ from tunapi.discord.bridge import DiscordBridgeConfig
 from tunapi.router import AutoRouter, RunnerEntry
 from tunapi.runners.mock import Return, ScriptRunner
 from tunapi.transport_runtime import TransportRuntime
+from .fakes.discord import FakeBotClient
 
 
 # ---------------------------------------------------------------------------
@@ -225,14 +226,11 @@ class TestBuildAndRunConfigParsing:
             captured["cfg"] = cfg
             captured["kwargs"] = kwargs
 
-        class FakeBot:
-            def __init__(self, token: str, *, guild_id: int | None = None) -> None:
-                self.token = token
-                self.guild_id = guild_id
-
         monkeypatch.setattr(discord_backend, "run_main_loop", fake_run_main_loop)
-        monkeypatch.setattr(discord_backend, "DiscordBotClient", FakeBot)
-        monkeypatch.setattr(discord_backend, "DiscordTransport", lambda bot: MagicMock())
+        monkeypatch.setattr(discord_backend, "DiscordBotClient", FakeBotClient)
+        monkeypatch.setattr(
+            discord_backend, "DiscordTransport", lambda bot: MagicMock()
+        )
         monkeypatch.setattr(
             discord_backend,
             "DiscordPresenter",
@@ -259,9 +257,7 @@ class TestBuildAndRunConfigParsing:
 
     # --- trigger_mode_default validation ---
 
-    def test_trigger_mode_default_all(
-        self, _patch_loop: dict, tmp_path: Path
-    ) -> None:
+    def test_trigger_mode_default_all(self, _patch_loop: dict, tmp_path: Path) -> None:
         self._run({"bot_token": "t", "trigger_mode_default": "all"}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].trigger_mode_default == "all"
 
@@ -292,9 +288,7 @@ class TestBuildAndRunConfigParsing:
     def test_trigger_mode_default_non_string_falls_back(
         self, _patch_loop: dict, tmp_path: Path
     ) -> None:
-        self._run(
-            {"bot_token": "t", "trigger_mode_default": 999}, tmp_path=tmp_path
-        )
+        self._run({"bot_token": "t", "trigger_mode_default": 999}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].trigger_mode_default == "all"
 
     # --- allowed_user_ids normalization ---
@@ -302,14 +296,10 @@ class TestBuildAndRunConfigParsing:
     def test_allowed_user_ids_list_of_ints(
         self, _patch_loop: dict, tmp_path: Path
     ) -> None:
-        self._run(
-            {"bot_token": "t", "allowed_user_ids": [100, 200]}, tmp_path=tmp_path
-        )
+        self._run({"bot_token": "t", "allowed_user_ids": [100, 200]}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].allowed_user_ids == frozenset({100, 200})
 
-    def test_allowed_user_ids_none(
-        self, _patch_loop: dict, tmp_path: Path
-    ) -> None:
+    def test_allowed_user_ids_none(self, _patch_loop: dict, tmp_path: Path) -> None:
         self._run({"bot_token": "t"}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].allowed_user_ids is None
 
@@ -402,12 +392,8 @@ class TestBuildAndRunConfigParsing:
 
     # --- message_overflow ---
 
-    def test_message_overflow_trim(
-        self, _patch_loop: dict, tmp_path: Path
-    ) -> None:
-        self._run(
-            {"bot_token": "t", "message_overflow": "trim"}, tmp_path=tmp_path
-        )
+    def test_message_overflow_trim(self, _patch_loop: dict, tmp_path: Path) -> None:
+        self._run({"bot_token": "t", "message_overflow": "trim"}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].message_overflow == "trim"
 
     # --- media_group_debounce_s ---
@@ -421,9 +407,7 @@ class TestBuildAndRunConfigParsing:
     def test_media_group_debounce_custom(
         self, _patch_loop: dict, tmp_path: Path
     ) -> None:
-        self._run(
-            {"bot_token": "t", "media_group_debounce_s": 1.5}, tmp_path=tmp_path
-        )
+        self._run({"bot_token": "t", "media_group_debounce_s": 1.5}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].media_group_debounce_s == 1.5
 
     def test_media_group_debounce_invalid_string_falls_back(
@@ -437,24 +421,16 @@ class TestBuildAndRunConfigParsing:
     def test_media_group_debounce_negative_falls_back(
         self, _patch_loop: dict, tmp_path: Path
     ) -> None:
-        self._run(
-            {"bot_token": "t", "media_group_debounce_s": -1.0}, tmp_path=tmp_path
-        )
+        self._run({"bot_token": "t", "media_group_debounce_s": -1.0}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].media_group_debounce_s == 0.75
 
     # --- guild_id ---
 
-    def test_guild_id_passed_through(
-        self, _patch_loop: dict, tmp_path: Path
-    ) -> None:
-        self._run(
-            {"bot_token": "t", "guild_id": 12345}, tmp_path=tmp_path
-        )
+    def test_guild_id_passed_through(self, _patch_loop: dict, tmp_path: Path) -> None:
+        self._run({"bot_token": "t", "guild_id": 12345}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].guild_id == 12345
 
-    def test_guild_id_default_none(
-        self, _patch_loop: dict, tmp_path: Path
-    ) -> None:
+    def test_guild_id_default_none(self, _patch_loop: dict, tmp_path: Path) -> None:
         self._run({"bot_token": "t"}, tmp_path=tmp_path)
         assert _patch_loop["cfg"].guild_id is None
 
