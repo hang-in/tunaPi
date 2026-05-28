@@ -58,11 +58,14 @@ async def _handle_ctx_command(
 
     guild_id = ctx.guild.id
     channel_id = ctx.channel_id
-    thread_id = None
+    if channel_id is None:
+        await ctx.respond("This command requires a channel.", ephemeral=True)
+        return
+    thread_id: int | None = None
 
     if isinstance(ctx.channel, discord.Thread):
-        thread_id = ctx.channel_id
-        channel_id = ctx.channel.parent_id or ctx.channel_id
+        thread_id = channel_id
+        channel_id = ctx.channel.parent_id or channel_id
 
     channel_context: DiscordChannelContext | None = None
     thread_context: DiscordThreadContext | None = None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 
@@ -88,16 +88,25 @@ def register_file_command(
     @pycord_bot.slash_command(name="file", description="Upload or download files")
     async def file_command(
         ctx: discord.ApplicationContext,
-        action: str = discord.Option(
-            description="Action: get (download) or put (upload)",
-            choices=["get", "put"],
+        action: str = cast(
+            str,
+            discord.Option(
+                description="Action: get (download) or put (upload)",
+                choices=["get", "put"],
+            ),
         ),
-        path: str = discord.Option(
-            description="File path relative to project directory",
+        path: str = cast(
+            str,
+            discord.Option(
+                description="File path relative to project directory",
+            ),
         ),
-        force: bool = discord.Option(
-            default=False,
-            description="Overwrite existing files (put only)",
+        force: bool = cast(
+            bool,
+            discord.Option(
+                default=False,
+                description="Overwrite existing files (put only)",
+            ),
         ),
     ) -> None:
         if ctx.guild is None:
@@ -208,8 +217,11 @@ def register_file_command(
                     ref_id = ctx.message.reference.message_id
 
             if not attachments and ref_id is not None:
+                fetch_message = getattr(ctx.channel, "fetch_message", None)
                 try:
-                    ref_msg = await ctx.channel.fetch_message(ref_id)
+                    ref_msg = (
+                        await fetch_message(ref_id) if callable(fetch_message) else None
+                    )
                 except (discord_module.NotFound, discord_module.HTTPException):
                     ref_msg = None
                 if ref_msg is not None:

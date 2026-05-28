@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 
@@ -85,7 +85,10 @@ def register_plugin_commands(
             @pycord_bot.slash_command(name=cmd_id, description=desc)
             async def plugin_command(
                 ctx: discord.ApplicationContext,
-                args: str = discord.Option(default="", description="Command arguments"),
+                args: str = cast(
+                    str,
+                    discord.Option(default="", description="Command arguments"),
+                ),
             ) -> None:
                 await _handle_plugin_command(
                     ctx,
@@ -139,10 +142,13 @@ async def _handle_plugin_command(
     if not isinstance(author_id, int):
         author_id = None
     channel_id = ctx.channel_id
-    thread_id = None
+    if channel_id is None:
+        await ctx.followup.send("This command requires a channel.", ephemeral=True)
+        return
+    thread_id: int | None = None
 
     if isinstance(ctx.channel, discord.Thread):
-        thread_id = ctx.channel_id
+        thread_id = channel_id
         if ctx.channel.parent_id:
             channel_id = ctx.channel.parent_id
 

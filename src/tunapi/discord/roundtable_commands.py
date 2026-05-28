@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
@@ -40,12 +40,18 @@ def register_roundtable_command(
     )
     async def rt_command(
         ctx: discord.ApplicationContext,
-        topic: str = discord.Option(
-            description='Topic for discussion (e.g., "best approach to caching")',
+        topic: str = cast(
+            str,
+            discord.Option(
+                description='Topic for discussion (e.g., "best approach to caching")',
+            ),
         ),
-        rounds: int = discord.Option(
-            default=1,
-            description="Number of discussion rounds (default: 1)",
+        rounds: int = cast(
+            int,
+            discord.Option(
+                default=1,
+                description="Number of discussion rounds (default: 1)",
+            ),
         ),
     ) -> None:
         if ctx.guild is None:
@@ -79,11 +85,14 @@ def register_roundtable_command(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        thread_id = None
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
+        thread_id: int | None = None
 
         if isinstance(ctx.channel, discord_module.Thread):
-            thread_id = ctx.channel_id
-            channel_id = ctx.channel.parent_id or ctx.channel_id
+            thread_id = channel_id
+            channel_id = ctx.channel.parent_id or channel_id
 
         run_context: RunContext | None = None
         if thread_id:
