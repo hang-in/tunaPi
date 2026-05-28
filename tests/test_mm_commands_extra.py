@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import anyio
 import pytest
 
 from tunapi.context import RunContext
+from tunapi.core.chat_command_handlers import _register_project_in_config, _resolve_id
 from tunapi.mattermost.commands import (
-    _register_project_in_config,
-    _resolve_id,
     handle_branch,
     handle_memory,
     handle_model,
@@ -290,7 +288,8 @@ class TestHandleProjectExtra:
 
 def test_register_project_in_config(tmp_path):
     """Test _register_project_in_config writes to config and calls runtime."""
-    import tomli_w, tomllib
+    import tomli_w
+    import tomllib
 
     config_path = tmp_path / "tunapi.toml"
     config_path.write_text(tomli_w.dumps({"projects": {}}))
@@ -499,9 +498,7 @@ class FakeConvBranches:
     def __init__(self):
         self._branches: list[_FakeBranch] = []
 
-    async def list(
-        self, project: str, status: str | None = None
-    ) -> list[_FakeBranch]:
+    async def list(self, project: str, status: str | None = None) -> list[_FakeBranch]:
         if status:
             return [b for b in self._branches if b.status == status]
         return list(self._branches)
@@ -511,18 +508,14 @@ class FakeConvBranches:
         self._branches.append(b)
         return b
 
-    async def merge(
-        self, project: str, branch_id: str
-    ) -> _FakeBranch | None:
+    async def merge(self, project: str, branch_id: str) -> _FakeBranch | None:
         for b in self._branches:
             if b.branch_id == branch_id:
                 b.status = "merged"
                 return b
         return None
 
-    async def discard(
-        self, project: str, branch_id: str
-    ) -> _FakeBranch | None:
+    async def discard(self, project: str, branch_id: str) -> _FakeBranch | None:
         for b in self._branches:
             if b.branch_id == branch_id:
                 b.status = "discarded"
@@ -647,9 +640,7 @@ class FakeReviews:
     def __init__(self):
         self._reviews: list[_FakeReview] = []
 
-    async def list(
-        self, project: str, status: str | None = None
-    ) -> list[_FakeReview]:
+    async def list(self, project: str, status: str | None = None) -> list[_FakeReview]:
         if status:
             return [r for r in self._reviews if r.status == status]
         return list(self._reviews)

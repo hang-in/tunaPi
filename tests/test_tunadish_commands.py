@@ -10,9 +10,8 @@ import pytest
 
 from tunapi.context import RunContext
 from tunapi.transport import RenderedMessage
+from tunapi.core.chat_command_handlers import _MIN_PREFIX_LEN, _resolve_id
 from tunapi.tunadish.commands import (
-    _MIN_PREFIX_LEN,
-    _resolve_id,
     dispatch_command,
     handle_branch,
     handle_context,
@@ -71,7 +70,9 @@ def _make_chat_prefs(**overrides: Any) -> AsyncMock:
     prefs.get_default_engine = AsyncMock(return_value=overrides.get("engine"))
     prefs.get_trigger_mode = AsyncMock(return_value=overrides.get("trigger"))
     prefs.get_engine_model = AsyncMock(return_value=overrides.get("model"))
-    prefs.get_all_engine_models = AsyncMock(return_value=overrides.get("all_models", {}))
+    prefs.get_all_engine_models = AsyncMock(
+        return_value=overrides.get("all_models", {})
+    )
     prefs.get_context = AsyncMock(return_value=overrides.get("context"))
     return prefs
 
@@ -143,7 +144,9 @@ class TestHandleModel:
         send = _make_send()
         runtime = _make_runtime()
         prefs = _make_chat_prefs(engine="claude")
-        await handle_model("", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_model(
+            "", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         text = _sent_text(send)
         assert "Current engine" in text
         assert "`claude`" in text
@@ -152,21 +155,27 @@ class TestHandleModel:
         send = _make_send()
         runtime = _make_runtime()
         prefs = _make_chat_prefs(engine="claude", model="claude-opus-4-20250514")
-        await handle_model("", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_model(
+            "", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         text = _sent_text(send)
         assert "Model:" in text
 
     async def test_no_args_no_prefs(self):
         send = _make_send()
         runtime = _make_runtime(default_engine="codex")
-        await handle_model("", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_model(
+            "", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "`codex`" in text
 
     async def test_unknown_engine(self):
         send = _make_send()
         runtime = _make_runtime(engines=["claude"])
-        await handle_model("nope", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_model(
+            "nope", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "Unknown engine" in text
         assert "`nope`" in text
@@ -175,7 +184,9 @@ class TestHandleModel:
         send = _make_send()
         runtime = _make_runtime()
         prefs = _make_chat_prefs()
-        await handle_model("claude", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_model(
+            "claude", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         prefs.set_default_engine.assert_awaited_once_with("ch1", "claude")
         text = _sent_text(send)
         assert "Default engine set to `claude`" in text
@@ -184,7 +195,9 @@ class TestHandleModel:
         send = _make_send()
         runtime = _make_runtime(engines=["Claude"])
         prefs = _make_chat_prefs()
-        await handle_model("claude", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_model(
+            "claude", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         prefs.set_default_engine.assert_awaited_once_with("ch1", "Claude")
 
     async def test_set_model(self):
@@ -192,10 +205,15 @@ class TestHandleModel:
         runtime = _make_runtime()
         prefs = _make_chat_prefs()
         await handle_model(
-            "claude claude-opus-4-20250514", channel_id="ch1",
-            runtime=runtime, chat_prefs=prefs, send=send,
+            "claude claude-opus-4-20250514",
+            channel_id="ch1",
+            runtime=runtime,
+            chat_prefs=prefs,
+            send=send,
         )
-        prefs.set_engine_model.assert_awaited_once_with("ch1", "claude", "claude-opus-4-20250514")
+        prefs.set_engine_model.assert_awaited_once_with(
+            "ch1", "claude", "claude-opus-4-20250514"
+        )
         text = _sent_text(send)
         assert "claude-opus-4-20250514" in text
 
@@ -203,7 +221,13 @@ class TestHandleModel:
         send = _make_send()
         runtime = _make_runtime()
         prefs = _make_chat_prefs()
-        await handle_model("claude clear", channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_model(
+            "claude clear",
+            channel_id="ch1",
+            runtime=runtime,
+            chat_prefs=prefs,
+            send=send,
+        )
         prefs.clear_engine_model.assert_awaited_once_with("ch1", "claude")
         text = _sent_text(send)
         assert "cleared" in text
@@ -218,21 +242,27 @@ class TestHandleModels:
     async def test_lists_all_engines(self):
         send = _make_send()
         runtime = _make_runtime(engines=["claude", "codex"])
-        await handle_models("", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_models(
+            "", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "Available Models" in text
 
     async def test_unknown_engine(self):
         send = _make_send()
         runtime = _make_runtime(engines=["claude"])
-        await handle_models("nope", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_models(
+            "nope", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "Unknown engine" in text
 
     async def test_specific_engine(self):
         send = _make_send()
         runtime = _make_runtime(engines=["claude", "codex"])
-        await handle_models("claude", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_models(
+            "claude", channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "claude" in text
 
@@ -288,7 +318,9 @@ class TestHandleStatus:
         send = _make_send()
         runtime = _make_runtime(default_engine="claude")
         prefs = _make_chat_prefs(engine="codex", trigger="all")
-        await handle_status(channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_status(
+            channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         text = _sent_text(send)
         assert "Session status" in text
         assert "`codex`" in text
@@ -298,7 +330,9 @@ class TestHandleStatus:
     async def test_status_no_prefs(self):
         send = _make_send()
         runtime = _make_runtime(default_engine="claude")
-        await handle_status(channel_id="ch1", runtime=runtime, chat_prefs=None, send=send)
+        await handle_status(
+            channel_id="ch1", runtime=runtime, chat_prefs=None, send=send
+        )
         text = _sent_text(send)
         assert "`claude`" in text
 
@@ -307,7 +341,9 @@ class TestHandleStatus:
         runtime = _make_runtime()
         ctx = RunContext(project="myproj", branch="feat-x")
         prefs = _make_chat_prefs(context=ctx)
-        await handle_status(channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send)
+        await handle_status(
+            channel_id="ch1", runtime=runtime, chat_prefs=prefs, send=send
+        )
         text = _sent_text(send)
         assert "`myproj`" in text
         assert "feat-x" in text
@@ -321,15 +357,15 @@ class TestHandleStatus:
 class TestHandleProject:
     async def _call(self, args: str, **kwargs: Any) -> str:
         send = _make_send()
-        defaults = dict(
-            channel_id="ch1",
-            runtime=_make_runtime(),
-            chat_prefs=None,
-            context_store=None,
-            projects_root=None,
-            config_path=None,
-            send=send,
-        )
+        defaults = {
+            "channel_id": "ch1",
+            "runtime": _make_runtime(),
+            "chat_prefs": None,
+            "context_store": None,
+            "projects_root": None,
+            "config_path": None,
+            "send": send,
+        }
         defaults.update(kwargs)
         await handle_project(args, **defaults)
         return _sent_text(send)
@@ -361,7 +397,9 @@ class TestHandleProject:
         runtime.normalize_project_key.return_value = "myproj"
         ctx_store = AsyncMock()
         text = await self._call(
-            "set myproj", runtime=runtime, context_store=ctx_store,
+            "set myproj",
+            runtime=runtime,
+            context_store=ctx_store,
         )
         assert "Project set to `myproj`" in text
         ctx_store.set_context.assert_awaited_once()
@@ -371,7 +409,9 @@ class TestHandleProject:
         runtime.normalize_project_key.return_value = "myproj"
         ctx_store = AsyncMock()
         text = await self._call(
-            "set myproj", runtime=runtime, context_store=ctx_store,
+            "set myproj",
+            runtime=runtime,
+            context_store=ctx_store,
             channel_id="__rpc__",
         )
         assert "Project set to `myproj`" in text
@@ -435,10 +475,12 @@ class TestHandlePersona:
 
     async def test_list_with_personas(self):
         prefs = AsyncMock()
-        prefs.list_personas = AsyncMock(return_value={
-            "critic": FakePersona("critic", "Be very critical"),
-            "helper": FakePersona("helper", "Be helpful and kind"),
-        })
+        prefs.list_personas = AsyncMock(
+            return_value={
+                "critic": FakePersona("critic", "Be very critical"),
+                "helper": FakePersona("helper", "Be helpful and kind"),
+            }
+        )
         text = await self._call("list", prefs=prefs)
         assert "**critic**" in text
         assert "**helper**" in text
@@ -446,9 +488,11 @@ class TestHandlePersona:
     async def test_list_truncates_long_prompt(self):
         prefs = AsyncMock()
         long_prompt = "x" * 100
-        prefs.list_personas = AsyncMock(return_value={
-            "verbose": FakePersona("verbose", long_prompt),
-        })
+        prefs.list_personas = AsyncMock(
+            return_value={
+                "verbose": FakePersona("verbose", long_prompt),
+            }
+        )
         text = await self._call("list", prefs=prefs)
         assert "..." in text
 
@@ -495,12 +539,19 @@ class TestHandlePersona:
 
 class TestHandleMemory:
     async def _call(
-        self, args: str, project: str | None = "proj", facade: Any = None, engine: str | None = None,
+        self,
+        args: str,
+        project: str | None = "proj",
+        facade: Any = None,
+        engine: str | None = None,
     ) -> str:
         send = _make_send()
         await handle_memory(
-            args, project=project, facade=facade,
-            current_engine=engine, send=send,
+            args,
+            project=project,
+            facade=facade,
+            current_engine=engine,
+            send=send,
         )
         return _sent_text(send)
 
@@ -526,9 +577,11 @@ class TestHandleMemory:
 
     async def test_list_entries(self):
         facade = MagicMock()
-        facade.memory.list_entries = AsyncMock(return_value=[
-            FakeEntry(id="abc123def456ghij", type="decision", title="Use pytest"),
-        ])
+        facade.memory.list_entries = AsyncMock(
+            return_value=[
+                FakeEntry(id="abc123def456ghij", type="decision", title="Use pytest"),
+            ]
+        )
         text = await self._call("list", facade=facade)
         assert "Memory — proj" in text
         assert "decision" in text
@@ -557,20 +610,30 @@ class TestHandleMemory:
 
     async def test_add_success(self):
         facade = MagicMock()
-        facade.memory.add_entry = AsyncMock(return_value=FakeEntry(
-            id="newid12345678", type="decision", title="Use ruff",
-        ))
-        text = await self._call("add decision Use-ruff Because-it-is-fast", facade=facade, engine="claude")
+        facade.memory.add_entry = AsyncMock(
+            return_value=FakeEntry(
+                id="newid12345678",
+                type="decision",
+                title="Use ruff",
+            )
+        )
+        text = await self._call(
+            "add decision Use-ruff Because-it-is-fast", facade=facade, engine="claude"
+        )
         assert "Entry added" in text
         assert "decision" in text
         facade.memory.add_entry.assert_awaited_once()
 
     async def test_add_uses_default_source(self):
         facade = MagicMock()
-        facade.memory.add_entry = AsyncMock(return_value=FakeEntry(
-            id="newid12345678", type="idea", title="Test",
-        ))
-        text = await self._call("add idea Test Content", facade=facade, engine=None)
+        facade.memory.add_entry = AsyncMock(
+            return_value=FakeEntry(
+                id="newid12345678",
+                type="idea",
+                title="Test",
+            )
+        )
+        await self._call("add idea Test Content", facade=facade, engine=None)
         call_kwargs = facade.memory.add_entry.call_args.kwargs
         assert call_kwargs["source"] == "user"
 
@@ -587,9 +650,11 @@ class TestHandleMemory:
 
     async def test_search_with_results(self):
         facade = MagicMock()
-        facade.memory.search = AsyncMock(return_value=[
-            FakeEntry(id="abc123def456ghij", type="idea", title="Cool idea"),
-        ])
+        facade.memory.search = AsyncMock(
+            return_value=[
+                FakeEntry(id="abc123def456ghij", type="idea", title="Cool idea"),
+            ]
+        )
         text = await self._call("search cool", facade=facade)
         assert "Search results" in text
         assert "Cool idea" in text
@@ -617,7 +682,10 @@ class TestHandleMemory:
 
 class TestHandleBranch:
     async def _call(
-        self, args: str, project: str | None = "proj", facade: Any = None,
+        self,
+        args: str,
+        project: str | None = "proj",
+        facade: Any = None,
     ) -> str:
         send = _make_send()
         await handle_branch(args, project=project, facade=facade, send=send)
@@ -639,9 +707,11 @@ class TestHandleBranch:
 
     async def test_active_branches(self):
         facade = MagicMock()
-        facade.conv_branches.list = AsyncMock(return_value=[
-            FakeBranch(branch_id="br12345678901234", label="experiment"),
-        ])
+        facade.conv_branches.list = AsyncMock(
+            return_value=[
+                FakeBranch(branch_id="br12345678901234", label="experiment"),
+            ]
+        )
         text = await self._call("", facade=facade)
         assert "Active branches" in text
         assert "experiment" in text
@@ -694,7 +764,10 @@ class TestHandleBranch:
 
 class TestHandleReview:
     async def _call(
-        self, args: str, project: str | None = "proj", facade: Any = None,
+        self,
+        args: str,
+        project: str | None = "proj",
+        facade: Any = None,
     ) -> str:
         send = _make_send()
         await handle_review(args, project=project, facade=facade, send=send)
@@ -716,9 +789,13 @@ class TestHandleReview:
 
     async def test_pending_reviews(self):
         facade = MagicMock()
-        facade.reviews.list = AsyncMock(return_value=[
-            FakeReview(review_id="rev1234567890abcd", artifact_id="art1234567890abcd"),
-        ])
+        facade.reviews.list = AsyncMock(
+            return_value=[
+                FakeReview(
+                    review_id="rev1234567890abcd", artifact_id="art1234567890abcd"
+                ),
+            ]
+        )
         text = await self._call("", facade=facade)
         assert "Pending reviews" in text
 
@@ -876,19 +953,19 @@ class TestResolveId:
 
 class TestDispatchCommand:
     def _defaults(self, **overrides: Any) -> dict[str, Any]:
-        d = dict(
-            channel_id="ch1",
-            runtime=_make_runtime(),
-            chat_prefs=None,
-            facade=None,
-            journal=None,
-            context_store=None,
-            conv_sessions=None,
-            running_tasks={},
-            projects_root=None,
-            config_path=None,
-            send=_make_send(),
-        )
+        d = {
+            "channel_id": "ch1",
+            "runtime": _make_runtime(),
+            "chat_prefs": None,
+            "facade": None,
+            "journal": None,
+            "context_store": None,
+            "conv_sessions": None,
+            "running_tasks": {},
+            "projects_root": None,
+            "config_path": None,
+            "send": _make_send(),
+        }
         d.update(overrides)
         return d
 
