@@ -91,8 +91,8 @@ def split_mrkdwn_body(body: str, max_chars: int) -> list[str]:
 def prepare_slack(parts: MarkdownParts) -> str:
     """Assemble markdown parts and convert to Slack mrkdwn."""
     header = markdown_to_mrkdwn(parts.header)
-    body = markdown_to_mrkdwn(trim_body(parts.body))
-    footer = markdown_to_mrkdwn(parts.footer)
+    body = markdown_to_mrkdwn(trim_body(parts.body) or "")
+    footer = markdown_to_mrkdwn(parts.footer or "")
 
     return assemble_markdown_parts(
         MarkdownParts(header=header, body=body, footer=footer)
@@ -114,7 +114,7 @@ def prepare_slack_multi(
 
     mrkdwn_body = markdown_to_mrkdwn(body)
     header = markdown_to_mrkdwn(parts.header)
-    footer = markdown_to_mrkdwn(parts.footer)
+    footer = markdown_to_mrkdwn(parts.footer or "")
 
     chunks = split_mrkdwn_body(mrkdwn_body, max_body_chars)
     if len(chunks) == 1:

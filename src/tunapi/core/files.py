@@ -131,11 +131,12 @@ def resolve_path(rel_path: str, root: Path) -> Path | None:
 
 
 def format_bytes(n: int) -> str:
+    value = float(n)
     for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024:
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} TB"
+        if value < 1024:
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:

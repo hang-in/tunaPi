@@ -314,7 +314,7 @@ class TransportRuntime:
         """Return all chat_ids (from any transport) mapped to *project*."""
         return self._projects.chat_ids_for_project(project)
 
-    def project_chat_ids(self) -> tuple[int, ...]:
+    def project_chat_ids(self) -> tuple[int | str, ...]:
         return self._projects.project_chat_ids()
 
     def resolve_runner(
