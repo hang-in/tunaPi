@@ -16,6 +16,12 @@ from .overrides import (
     resolve_trigger_mode,
     supports_reasoning,
 )
+from .message_utils import (
+    extract_prompt_from_message as extract_prompt_from_message,
+    is_bot_mentioned as is_bot_mentioned,
+    parse_branch_prefix as parse_branch_prefix,
+    should_process_message as should_process_message,
+)
 
 if TYPE_CHECKING:
     from tunapi.runner_bridge import RunningTasks
@@ -1605,9 +1611,7 @@ def register_roundtable_command(
         rt_engines = list(rt_config.engines) or list(runtime.available_engine_ids())
 
         if not rt_engines:
-            await ctx.respond(
-                "No engines available for roundtable.", ephemeral=True
-            )
+            await ctx.respond("No engines available for roundtable.", ephemeral=True)
             return
 
         if rounds < 1:
@@ -1668,84 +1672,3 @@ def register_roundtable_command(
             ),
             name=f"tunapi-discord:roundtable:{target_channel}",
         )
-
-
-def is_bot_mentioned(message: discord.Message, bot_user: discord.User | None) -> bool:
-    """Check if the bot is mentioned in the message."""
-    if bot_user is None:
-        return False
-    return bot_user in message.mentions
-
-
-def should_process_message(
-    message: discord.Message,
-    bot_user: discord.User | None,
-    *,
-    require_mention: bool = False,
-) -> bool:
-    """Determine if a message should be processed by the bot.
-
-    Args:
-        message: The Discord message
-        bot_user: The bot's user object
-        require_mention: If True, only process messages that mention the bot
-    """
-    # Ignore bot messages
-    if message.author.bot:
-        return False
-
-    # Ignore empty messages (but allow if there are attachments for auto_put)
-    if not message.content.strip() and not message.attachments:
-        return False
-
-    # In threads, always process
-    if isinstance(message.channel, discord.Thread):
-        return True
-
-    # In channels, check if mention is required
-    if require_mention:
-        return is_bot_mentioned(message, bot_user)
-
-    return True
-
-
-def extract_prompt_from_message(
-    message: discord.Message,
-    bot_user: discord.User | None,
-) -> str:
-    """Extract the prompt text from a message, removing bot mentions."""
-    content = message.content
-
-    # Remove bot mention if present
-    if bot_user is not None:
-        content = content.replace(f"<@{bot_user.id}>", "").strip()
-        content = content.replace(f"<@!{bot_user.id}>", "").strip()
-
-    return content
-
-
-def parse_branch_prefix(content: str) -> tuple[str | None, str]:
-    """Parse @branch prefix from message content.
-
-    Returns (branch, remaining_prompt).
-
-    Examples:
-        "@chore/hello fix the bug" -> ("chore/hello", "fix the bug")
-        "@feat-login" -> ("feat-login", "")
-        "hello world" -> (None, "hello world")
-    """
-    content = content.strip()
-    if not content.startswith("@"):
-        return None, content
-
-    # Find the end of the branch token (first whitespace or end of string)
-    parts = content[1:].split(None, 1)  # Split on whitespace, max 2 parts
-    if not parts:
-        return None, content
-
-    branch = parts[0]
-    if not branch:
-        return None, content
-
-    remaining = parts[1] if len(parts) > 1 else ""
-    return branch, remaining.strip()
