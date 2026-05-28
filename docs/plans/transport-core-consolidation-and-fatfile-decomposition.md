@@ -1,7 +1,7 @@
 ---
 name: transport-core-consolidation-and-fatfile-decomposition
 title: Transport Core 통합 및 비대 파일 분해 리팩토링
-status: draft
+status: done
 priority: P1
 created: 2026-05-28
 owner: unassigned

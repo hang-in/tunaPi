@@ -149,4 +149,4 @@ Dynamic model discovery per engine with fallback registry. `!models` command for
 
 - Fakes: `tests/telegram_fakes.py`, event factories: `tests/factories.py`
 - Coverage threshold: 71% (pytest-cov) — target: 85%
-- Python 3.14+ required
+- Python 3.12+ required (`requires-python = ">=3.12"`; dev env runs 3.13)
