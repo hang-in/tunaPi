@@ -544,6 +544,206 @@ async def handle_prompt_upload(
 # ---------------------------------------------------------------------------
 
 
+async def _route_new_command(
+    ctx: TelegramLoopContext,
+    msg: TelegramIncomingMessage,
+    mctx: TelegramMsgContext,
+    forward_key: object,
+) -> bool:
+    """Handle the ``/new`` command. Returns True when it was handled."""
+    cfg = ctx.cfg
+    state = ctx.state
+    tg = ctx.tg
+    ctx.forward_coalescer.cancel(forward_key)
+    if state.topic_store is not None and mctx.topic_key is not None:
+        tg.start_soon(
+            partial(
+                handle_new_command,
+                cfg,
+                msg,
+                state.topic_store,
+                resolved_scope=state.resolved_topics_scope,
+                scope_chat_ids=state.topics_chat_ids,
+            )
+        )
+        return True
+    if state.chat_session_store is not None:
+        tg.start_soon(
+            handle_chat_new_command,
+            cfg,
+            msg,
+            state.chat_session_store,
+            mctx.chat_session_key,
+        )
+        return True
+    if state.topic_store is not None:
+        tg.start_soon(
+            partial(
+                handle_new_command,
+                cfg,
+                msg,
+                state.topic_store,
+                resolved_scope=state.resolved_topics_scope,
+                scope_chat_ids=state.topics_chat_ids,
+            )
+        )
+        return True
+    return False
+
+
+def _route_rt_command(
+    ctx: TelegramLoopContext,
+    msg: TelegramIncomingMessage,
+    reply: Callable[..., Awaitable[Any]],
+    args_text: str,
+) -> None:
+    """Handle the ``/rt`` roundtable command (always handled)."""
+    if ctx.state.roundtable_store is None:
+        ctx.tg.start_soon(partial(reply, text="Roundtable store not initialised."))
+    else:
+        ctx.tg.start_soon(_dispatch_rt_command, ctx, msg, args_text)
+
+
+def _route_document(
+    ctx: TelegramLoopContext,
+    msg: TelegramIncomingMessage,
+    reply: Callable[..., Awaitable[Any]],
+    text: str,
+    mctx: TelegramMsgContext,
+) -> None:
+    """Handle an incoming document upload (always handled)."""
+    cfg = ctx.cfg
+    tg = ctx.tg
+    if cfg.files.enabled and cfg.files.auto_put:
+        caption_text = text.strip()
+        if cfg.files.auto_put_mode == "prompt" and caption_text:
+            tg.start_soon(
+                handle_prompt_upload,
+                ctx,
+                msg,
+                caption_text,
+                mctx.ambient_context,
+                ctx.state.topic_store,
+            )
+        elif not caption_text:
+            _loop_mod = _importlib.import_module("tunapi.telegram.loop")
+            tg.start_soon(
+                _loop_mod._handle_file_put_default,
+                cfg,
+                msg,
+                mctx.ambient_context,
+                ctx.state.topic_store,
+            )
+        else:
+            tg.start_soon(partial(reply, text=FILE_PUT_USAGE))
+    elif cfg.files.enabled:
+        tg.start_soon(partial(reply, text=FILE_PUT_USAGE))
+
+
+async def _route_engine_command(
+    ctx: TelegramLoopContext,
+    msg: TelegramIncomingMessage,
+    text: str,
+    command_id: str,
+    args_text: str,
+    mctx: TelegramMsgContext,
+) -> bool:
+    """Dispatch an engine command (e.g. ``/claude``). Returns True if dispatched."""
+    cfg = ctx.cfg
+    state = ctx.state
+    tg = ctx.tg
+    scheduler = ctx.scheduler
+    if command_id in state.reserved_commands:
+        return False
+    if command_id not in state.command_ids:
+        _loop_mod = _importlib.import_module("tunapi.telegram.loop")
+        allowlist = cfg.runtime.allowlist
+        state.command_ids = {
+            cid.lower() for cid in _loop_mod.list_command_ids(allowlist=allowlist)
+        }
+        state.reserved_commands = get_reserved_commands(cfg.runtime)
+    if command_id not in state.command_ids:
+        return False
+    engine_resolution = await resolve_engine_defaults(
+        ctx,
+        explicit_engine=None,
+        context=mctx.ambient_context,
+        chat_id=mctx.chat_id,
+        topic_key=mctx.topic_key,
+    )
+    default_engine_override = (
+        engine_resolution.engine
+        if engine_resolution.source in {"directive", "topic_default", "chat_default"}
+        else None
+    )
+    overrides_thread_id = mctx.topic_key[1] if mctx.topic_key is not None else None
+    engine_overrides_resolver = partial(
+        _resolve_engine_run_options,
+        mctx.chat_id,
+        overrides_thread_id,
+        chat_prefs=state.chat_prefs,
+        topic_store=state.topic_store,
+    )
+    tg.start_soon(
+        dispatch_command,
+        cfg,
+        msg,
+        text,
+        command_id,
+        args_text,
+        state.running_tasks,
+        scheduler,
+        wrap_on_thread_known(
+            ctx,
+            scheduler.note_thread_known,
+            mctx.topic_key,
+            mctx.chat_session_key,
+        ),
+        mctx.stateful_mode,
+        default_engine_override,
+        engine_overrides_resolver,
+    )
+    return True
+
+
+async def _route_pending_prompt(
+    ctx: TelegramLoopContext,
+    msg: TelegramIncomingMessage,
+    text: str,
+    is_voice_transcribed: bool,
+    mctx: TelegramMsgContext,
+) -> None:
+    """Build the pending prompt and dispatch or hand it to the coalescer."""
+    state = ctx.state
+    tg = ctx.tg
+    pending = _PendingPrompt(
+        msg=msg,
+        text=text,
+        ambient_context=mctx.ambient_context,
+        chat_project=mctx.chat_project,
+        topic_key=mctx.topic_key,
+        chat_session_key=mctx.chat_session_key,
+        reply_ref=mctx.reply_ref,
+        reply_id=mctx.reply_id,
+        is_voice_transcribed=is_voice_transcribed,
+        forwards=[],
+    )
+    if mctx.reply_id is not None and state.running_tasks.get(
+        MessageRef(channel_id=mctx.chat_id, message_id=mctx.reply_id)
+    ):
+        logger.debug(
+            "forward.prompt.bypass",
+            chat_id=mctx.chat_id,
+            thread_id=msg.thread_id,
+            sender_id=msg.sender_id,
+            message_id=msg.message_id,
+            reason="reply_resume",
+        )
+        tg.start_soon(_dispatch_pending_prompt, ctx, pending)
+        return
+    ctx.forward_coalescer.schedule(pending)
+
+
 async def route_message(
     ctx: TelegramLoopContext,
     msg: TelegramIncomingMessage,
@@ -568,14 +768,6 @@ async def route_message(
         return
 
     mctx = await build_message_context(ctx, msg)
-    chat_id = mctx.chat_id
-    reply_id = mctx.reply_id
-    reply_ref = mctx.reply_ref
-    topic_key = mctx.topic_key
-    chat_session_key = mctx.chat_session_key
-    stateful_mode = mctx.stateful_mode
-    chat_project = mctx.chat_project
-    ambient_context = mctx.ambient_context
 
     if classification.is_cancel:
         tg.start_soon(handle_cancel, cfg, msg, state.running_tasks, scheduler)
@@ -584,47 +776,11 @@ async def route_message(
     command_id = classification.command_id
     args_text = classification.args_text
 
-    if command_id == "new":
-        ctx.forward_coalescer.cancel(forward_key)
-        if state.topic_store is not None and topic_key is not None:
-            tg.start_soon(
-                partial(
-                    handle_new_command,
-                    cfg,
-                    msg,
-                    state.topic_store,
-                    resolved_scope=state.resolved_topics_scope,
-                    scope_chat_ids=state.topics_chat_ids,
-                )
-            )
-            return
-        if state.chat_session_store is not None:
-            tg.start_soon(
-                handle_chat_new_command,
-                cfg,
-                msg,
-                state.chat_session_store,
-                chat_session_key,
-            )
-            return
-        if state.topic_store is not None:
-            tg.start_soon(
-                partial(
-                    handle_new_command,
-                    cfg,
-                    msg,
-                    state.topic_store,
-                    resolved_scope=state.resolved_topics_scope,
-                    scope_chat_ids=state.topics_chat_ids,
-                )
-            )
-            return
+    if command_id == "new" and await _route_new_command(ctx, msg, mctx, forward_key):
+        return
 
     if command_id == "rt":
-        if state.roundtable_store is None:
-            tg.start_soon(partial(reply, text="Roundtable store not initialised."))
-        else:
-            tg.start_soon(_dispatch_rt_command, ctx, msg, args_text)
+        _route_rt_command(ctx, msg, reply, args_text)
         return
 
     if command_id is not None and _dispatch_builtin_command(
@@ -632,7 +788,7 @@ async def route_message(
             cfg=cfg,
             msg=msg,
             args_text=args_text,
-            ambient_context=ambient_context,
+            ambient_context=mctx.ambient_context,
             topic_store=state.topic_store,
             chat_prefs=state.chat_prefs,
             resolved_scope=state.resolved_topics_scope,
@@ -645,7 +801,7 @@ async def route_message(
         return
 
     trigger_mode = await resolve_trigger_mode(
-        chat_id=chat_id,
+        chat_id=mctx.chat_id,
         thread_id=msg.thread_id,
         chat_prefs=state.chat_prefs,
         topic_store=state.topic_store,
@@ -677,109 +833,15 @@ async def route_message(
         is_voice_transcribed = True
 
     if msg.document is not None:
-        if cfg.files.enabled and cfg.files.auto_put:
-            caption_text = text.strip()
-            if cfg.files.auto_put_mode == "prompt" and caption_text:
-                tg.start_soon(
-                    handle_prompt_upload,
-                    ctx,
-                    msg,
-                    caption_text,
-                    ambient_context,
-                    state.topic_store,
-                )
-            elif not caption_text:
-                _loop_mod = _importlib.import_module("tunapi.telegram.loop")
-                tg.start_soon(
-                    _loop_mod._handle_file_put_default,
-                    cfg,
-                    msg,
-                    ambient_context,
-                    state.topic_store,
-                )
-            else:
-                tg.start_soon(partial(reply, text=FILE_PUT_USAGE))
-        elif cfg.files.enabled:
-            tg.start_soon(partial(reply, text=FILE_PUT_USAGE))
+        _route_document(ctx, msg, reply, text, mctx)
         return
 
-    if command_id is not None and command_id not in state.reserved_commands:
-        if command_id not in state.command_ids:
-            _loop_mod = _importlib.import_module("tunapi.telegram.loop")
-            allowlist = cfg.runtime.allowlist
-            state.command_ids = {
-                cid.lower() for cid in _loop_mod.list_command_ids(allowlist=allowlist)
-            }
-            state.reserved_commands = get_reserved_commands(cfg.runtime)
-        if command_id in state.command_ids:
-            engine_resolution = await resolve_engine_defaults(
-                ctx,
-                explicit_engine=None,
-                context=ambient_context,
-                chat_id=chat_id,
-                topic_key=topic_key,
-            )
-            default_engine_override = (
-                engine_resolution.engine
-                if engine_resolution.source
-                in {"directive", "topic_default", "chat_default"}
-                else None
-            )
-            overrides_thread_id = topic_key[1] if topic_key is not None else None
-            engine_overrides_resolver = partial(
-                _resolve_engine_run_options,
-                chat_id,
-                overrides_thread_id,
-                chat_prefs=state.chat_prefs,
-                topic_store=state.topic_store,
-            )
-            tg.start_soon(
-                dispatch_command,
-                cfg,
-                msg,
-                text,
-                command_id,
-                args_text,
-                state.running_tasks,
-                scheduler,
-                wrap_on_thread_known(
-                    ctx,
-                    scheduler.note_thread_known,
-                    topic_key,
-                    chat_session_key,
-                ),
-                stateful_mode,
-                default_engine_override,
-                engine_overrides_resolver,
-            )
-            return
-
-    pending = _PendingPrompt(
-        msg=msg,
-        text=text,
-        ambient_context=ambient_context,
-        chat_project=chat_project,
-        topic_key=topic_key,
-        chat_session_key=chat_session_key,
-        reply_ref=reply_ref,
-        reply_id=reply_id,
-        is_voice_transcribed=is_voice_transcribed,
-        forwards=[],
-    )
-    if reply_id is not None and state.running_tasks.get(
-        MessageRef(channel_id=chat_id, message_id=reply_id)
+    if command_id is not None and await _route_engine_command(
+        ctx, msg, text, command_id, args_text, mctx
     ):
-        logger.debug(
-            "forward.prompt.bypass",
-            chat_id=chat_id,
-            thread_id=msg.thread_id,
-            sender_id=msg.sender_id,
-            message_id=msg.message_id,
-            reason="reply_resume",
-        )
-        tg.start_soon(_dispatch_pending_prompt, ctx, pending)
         return
-    ctx.forward_coalescer.schedule(pending)
+
+    await _route_pending_prompt(ctx, msg, text, is_voice_transcribed, mctx)
 
 
 async def route_update(

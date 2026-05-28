@@ -17,9 +17,17 @@ from tunapi.model import ResumeToken
 from tunapi.telegram.loop_dispatch import (
     _build_upload_prompt,
     ensure_topic_context,
+    handle_prompt_upload,
     resolve_topic_key,
+    route_message,
     route_update,
     wrap_on_thread_known,
+)
+from tunapi.telegram.builtin_commands import dispatch_rt_command
+from tunapi.telegram.commands.cancel import handle_cancel
+from tunapi.telegram.commands.handlers import (
+    dispatch_command,
+    handle_chat_new_command,
 )
 from tunapi.telegram.loop_state import (
     TelegramLoopContext,
@@ -332,3 +340,150 @@ class TestEnsureTopicContext:
         assert ok is False
         reply.assert_called_once()
         assert "bound" in reply.call_args[1]["text"]
+
+
+# ---------------------------------------------------------------------------
+# route_message — characterization tests
+#
+# route_message is a long sequential dispatcher. These tests pin the
+# observable behaviour of each branch (which work gets scheduled via
+# tg.start_soon / forward_coalescer / media_group_buffer) so the function
+# can be decomposed safely. They assert on the *callable handed to
+# start_soon*, not on its execution (start_soon is a MagicMock).
+# ---------------------------------------------------------------------------
+
+
+def _scheduled_fns(ctx) -> list[object]:
+    """First positional arg of each tg.start_soon call (the spawned fn)."""
+    return [call.args[0] for call in ctx.tg.start_soon.call_args_list if call.args]
+
+
+class TestRouteMessage:
+    async def test_media_group_document_buffered(self):
+        ctx = _make_ctx(cfg=_make_cfg(files=_make_cfg().files))
+        ctx.cfg.files.enabled = True
+        msg = _make_msg(text="", document={"file_id": "d1"}, media_group_id="mg1")
+        await route_message(ctx, msg)
+        ctx.media_group_buffer.add.assert_called_once_with(msg)
+        ctx.tg.start_soon.assert_not_called()
+
+    async def test_cancel_command_spawns_handle_cancel(self):
+        ctx = _make_ctx()
+        msg = _make_msg(text="/cancel")
+        await route_message(ctx, msg)
+        ctx.forward_coalescer.schedule.assert_not_called()
+        assert handle_cancel in _scheduled_fns(ctx)
+
+    async def test_new_command_uses_chat_session_store(self):
+        ctx = _make_ctx(
+            state=_make_state(topic_store=None, chat_session_store=AsyncMock())
+        )
+        msg = _make_msg(text="/new")
+        await route_message(ctx, msg)
+        assert handle_chat_new_command in _scheduled_fns(ctx)
+
+    async def test_rt_command_without_store_replies(self):
+        ctx = _make_ctx(state=_make_state(roundtable_store=None))
+        msg = _make_msg(text="/rt hello")
+        await route_message(ctx, msg)
+        scheduled = ctx.tg.start_soon.call_args_list
+        assert len(scheduled) == 1
+        spawned = scheduled[0].args[0]
+        # partial(reply, text="Roundtable store not initialised.")
+        assert spawned.keywords["text"] == "Roundtable store not initialised."
+
+    async def test_rt_command_with_store_dispatches(self):
+        ctx = _make_ctx(state=_make_state(roundtable_store=MagicMock()))
+        msg = _make_msg(text="/rt hello")
+        await route_message(ctx, msg)
+        assert dispatch_rt_command in _scheduled_fns(ctx)
+
+    async def test_builtin_command_short_circuits(self, monkeypatch):
+        import tunapi.telegram.loop_dispatch as ld
+
+        monkeypatch.setattr(ld, "_dispatch_builtin_command", lambda **kw: True)
+        ctx = _make_ctx()
+        msg = _make_msg(text="/help")
+        await route_message(ctx, msg)
+        # Handled by builtin dispatcher → nothing else scheduled/queued.
+        ctx.tg.start_soon.assert_not_called()
+        ctx.forward_coalescer.schedule.assert_not_called()
+
+    async def test_trigger_mentions_skips_when_not_triggered(self, monkeypatch):
+        import tunapi.telegram.loop_dispatch as ld
+
+        monkeypatch.setattr(
+            ld, "resolve_trigger_mode", AsyncMock(return_value="mentions")
+        )
+        monkeypatch.setattr(ld, "should_trigger_run", lambda *a, **k: False)
+        ctx = _make_ctx()
+        msg = _make_msg(text="just chatting")
+        await route_message(ctx, msg)
+        ctx.forward_coalescer.schedule.assert_not_called()
+        ctx.tg.start_soon.assert_not_called()
+
+    async def test_voice_transcription_flows_into_prompt(self, monkeypatch):
+        import tunapi.telegram.loop as loop_mod
+
+        monkeypatch.setattr(
+            loop_mod, "transcribe_voice", AsyncMock(return_value="hello from voice")
+        )
+        ctx = _make_ctx()
+        msg = _make_msg(text="", voice={"file_id": "v1"})
+        await route_message(ctx, msg)
+        ctx.forward_coalescer.schedule.assert_called_once()
+        pending = ctx.forward_coalescer.schedule.call_args.args[0]
+        assert pending.text == "hello from voice"
+        assert pending.is_voice_transcribed is True
+
+    async def test_voice_transcription_failure_returns(self, monkeypatch):
+        import tunapi.telegram.loop as loop_mod
+
+        monkeypatch.setattr(
+            loop_mod, "transcribe_voice", AsyncMock(return_value=None)
+        )
+        ctx = _make_ctx()
+        msg = _make_msg(text="", voice={"file_id": "v1"})
+        await route_message(ctx, msg)
+        ctx.forward_coalescer.schedule.assert_not_called()
+
+    async def test_document_prompt_upload(self):
+        ctx = _make_ctx()
+        ctx.cfg.files.enabled = True
+        ctx.cfg.files.auto_put = True
+        ctx.cfg.files.auto_put_mode = "prompt"
+        msg = _make_msg(text="please ingest", document={"file_id": "d1"})
+        await route_message(ctx, msg)
+        assert handle_prompt_upload in _scheduled_fns(ctx)
+
+    async def test_engine_command_dispatch(self, monkeypatch):
+        import tunapi.telegram.loop_dispatch as ld
+
+        resolution = MagicMock(engine="claude", source="directive")
+        monkeypatch.setattr(
+            ld, "resolve_engine_defaults", AsyncMock(return_value=resolution)
+        )
+        ctx = _make_ctx(state=_make_state(command_ids={"claude"}))
+        msg = _make_msg(text="/claude do a thing")
+        await route_message(ctx, msg)
+        assert dispatch_command in _scheduled_fns(ctx)
+
+    async def test_plain_prompt_scheduled_via_coalescer(self):
+        ctx = _make_ctx()
+        msg = _make_msg(text="just a normal prompt")
+        await route_message(ctx, msg)
+        ctx.forward_coalescer.schedule.assert_called_once()
+        pending = ctx.forward_coalescer.schedule.call_args.args[0]
+        assert pending.text == "just a normal prompt"
+        assert pending.is_voice_transcribed is False
+
+    async def test_reply_resume_dispatches_pending(self):
+        from tunapi.transport import MessageRef
+
+        running = {MessageRef(channel_id=100, message_id=55): object()}
+        ctx = _make_ctx(state=_make_state(running_tasks=running))
+        msg = _make_msg(text="continue", reply_to_message_id=55)
+        await route_message(ctx, msg)
+        # reply targets a running task → bypass coalescer, dispatch directly.
+        ctx.forward_coalescer.schedule.assert_not_called()
+        ctx.tg.start_soon.assert_called_once()
