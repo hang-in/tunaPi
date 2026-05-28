@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import contextlib
-import time
 import re
+import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,14 @@ from .voice import is_audio_file, transcribe_audio
 logger = get_logger(__name__)
 
 _PERSONA_PREFIX_RE = re.compile(r"^@(\w+)\s+", re.UNICODE)
+
+
+@dataclass(slots=True)
+class ResolvedPrompt:
+    """Result of prompt resolution before engine dispatch."""
+
+    text: str
+    file_context: str
 
 
 def render_file_put_results(results: list[Any]) -> str:
@@ -351,6 +360,50 @@ async def handle_voice_attachments(
             return text
 
     return None
+
+
+async def resolve_chat_prompt(
+    *,
+    text: str,
+    channel_id: str,
+    chat_prefs: Any | None,
+    files_enabled: bool,
+    has_attachments: Callable[[], bool],
+    put_files: Callable[[], Awaitable[list[Any]]],
+    handle_voice: Callable[[], Awaitable[str | None]],
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    resolve_trigger: Callable[[str, Any | None], Awaitable[Any]],
+    should_trigger_prompt: Callable[[Any], bool],
+    strip_mention_from_prompt: Callable[[str], str],
+) -> ResolvedPrompt | None:
+    """Resolve files, voice, trigger mode, and mention stripping for chat prompts."""
+    stripped_text = text.strip()
+    if has_attachments() and not stripped_text and files_enabled:
+        results = await put_files()
+        await send(RenderedMessage(text=render_file_put_results(results)))
+        return None
+
+    file_context = ""
+    if has_attachments() and stripped_text and files_enabled:
+        results = await put_files()
+        file_context = render_saved_file_context(results)
+
+    voice_text = await handle_voice()
+    prompt_text = voice_text or text
+    if file_context:
+        prompt_text = f"{prompt_text}\n{file_context}"
+    if not prompt_text:
+        return None
+
+    trigger_mode = await resolve_trigger(channel_id, chat_prefs)
+    if not should_trigger_prompt(trigger_mode):
+        return None
+
+    prompt_text = strip_mention_from_prompt(prompt_text)
+    if not prompt_text:
+        return None
+
+    return ResolvedPrompt(text=prompt_text, file_context=file_context)
 
 
 async def start_roundtable_thread(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -19,9 +18,9 @@ from ..core.chat_loop_helpers import (
     handle_cancel_reaction_by_message_id,
     handle_file_command,
     handle_voice_attachments,
-    render_file_put_results,
-    render_saved_file_context,
+    resolve_chat_prompt,
     resolve_persona_prefix,
+    ResolvedPrompt as _ResolvedPrompt,
     resolve_upload_dir,
     send_to_channel,
     start_roundtable_thread,
@@ -278,14 +277,6 @@ async def _start_roundtable(
     )
 
 
-@dataclass(slots=True)
-class _ResolvedPrompt:
-    """Result of prompt resolution before engine dispatch."""
-
-    text: str
-    file_context: str  # empty string if no files
-
-
 async def _archive_roundtable(
     session: RoundtableSession,
     journal: Journal | None,
@@ -529,42 +520,26 @@ async def _resolve_prompt(
     trigger mode check, and @mention stripping.
     Returns None if the message should not be dispatched to an engine.
     """
-    # -- Auto file put: attachment with no text → save to project --
-    if msg.file_ids and not msg.text.strip() and cfg.files_enabled:
-        results = await _put_files(cfg, msg.channel_id, list(msg.file_ids))
-        text = render_file_put_results(results)
-        await send(RenderedMessage(text=text))
-        return None
-
-    # -- File + text: save files, add absolute paths to prompt --
-    file_context = ""
-    if msg.file_ids and msg.text.strip() and cfg.files_enabled:
-        results = await _put_files(cfg, msg.channel_id, list(msg.file_ids))
-        file_context = render_saved_file_context(results)
-
-    # -- Voice transcription --
-    voice_text = await _handle_voice(msg, cfg)
-    prompt_text = voice_text or msg.text
-    if file_context:
-        prompt_text = f"{prompt_text}\n{file_context}"
-    if not prompt_text:
-        return None
-
-    # -- Trigger mode check --
-    trigger_mode = await resolve_trigger_mode(
-        msg.channel_id,
-        chat_prefs,
+    return await resolve_chat_prompt(
+        text=msg.text,
+        channel_id=msg.channel_id,
+        chat_prefs=chat_prefs,
+        files_enabled=cfg.files_enabled,
+        has_attachments=lambda: bool(msg.file_ids),
+        put_files=lambda: _put_files(cfg, msg.channel_id, list(msg.file_ids)),
+        handle_voice=lambda: _handle_voice(msg, cfg),
+        send=send,
+        resolve_trigger=resolve_trigger_mode,
+        should_trigger_prompt=lambda trigger_mode: should_trigger(
+            msg,
+            bot_username=cfg.bot_username,
+            trigger_mode=trigger_mode,
+        ),
+        strip_mention_from_prompt=lambda prompt_text: strip_mention(
+            prompt_text,
+            cfg.bot_username,
+        ),
     )
-    if not should_trigger(
-        msg, bot_username=cfg.bot_username, trigger_mode=trigger_mode
-    ):
-        return None
-    # Strip @mention from text
-    prompt_text = strip_mention(prompt_text, cfg.bot_username)
-    if not prompt_text:
-        return None
-
-    return _ResolvedPrompt(text=prompt_text, file_context=file_context)
 
 
 async def _run_engine(
