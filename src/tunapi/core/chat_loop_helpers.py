@@ -136,6 +136,84 @@ async def archive_roundtable_thread(
     await send(RenderedMessage(text=close_message))
 
 
+async def dispatch_roundtable_command(
+    args: str,
+    *,
+    runtime: Any,
+    channel_id: str,
+    thread_id: str | None,
+    chat_prefs: Any | None,
+    roundtables: RoundtableStore | None,
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    start_roundtable: Callable[[str, int, list[str]], Awaitable[None]],
+    handle_rt_command: Callable[..., Awaitable[None]],
+    continue_roundtable_session: Callable[
+        [RoundtableSession, str, list[str] | None, Any | None], Awaitable[None]
+    ],
+    archive_roundtable_session: Callable[
+        [RoundtableSession, str | None, str | None], Awaitable[None]
+    ],
+) -> None:
+    """Prepare shared !rt callbacks and dispatch to the transport command handler."""
+    continue_rt = None
+    close_rt = None
+
+    ambient_context = await chat_prefs.get_context(channel_id) if chat_prefs else None
+    project = ambient_context.project if ambient_context else None
+    branch = ambient_context.branch if ambient_context else None
+
+    if thread_id and roundtables:
+        completed_session = roundtables.get_completed(thread_id)
+        if completed_session:
+
+            async def continue_rt(
+                topic: str,
+                engines_filter: list[str] | None,
+                *,
+                _session: RoundtableSession = completed_session,
+                _context: Any | None = ambient_context,
+            ) -> None:
+                await continue_roundtable_session(
+                    _session,
+                    topic,
+                    engines_filter,
+                    _context,
+                )
+
+            async def close_rt(
+                *,
+                _thread_id: str = thread_id,
+                _roundtables: RoundtableStore = roundtables,
+                _session: RoundtableSession = completed_session,
+            ) -> None:
+                await archive_roundtable_session(_session, project, branch)
+                _roundtables.remove(_thread_id)
+
+        active_session = roundtables.get(thread_id)
+        if active_session and not active_session.completed and close_rt is None:
+
+            async def close_rt(
+                *,
+                _thread_id: str = thread_id,
+                _roundtables: RoundtableStore = roundtables,
+            ) -> None:
+                session = _roundtables.get(_thread_id)
+                if session:
+                    session.cancel_event.set()
+                    await archive_roundtable_session(session, project, branch)
+                _roundtables.remove(_thread_id)
+
+    await handle_rt_command(
+        args,
+        runtime=runtime,
+        send=send,
+        start_roundtable=start_roundtable,
+        continue_roundtable=continue_rt,
+        close_roundtable=close_rt,
+        thread_id=thread_id,
+    )
+
+
 async def start_roundtable_thread(
     channel_id: str,
     topic: str,

@@ -14,6 +14,7 @@ from ..core import lifecycle
 from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
     archive_roundtable_thread,
+    dispatch_roundtable_command,
     handle_cancel_reaction_by_message_id,
     render_file_put_results,
     render_saved_file_context,
@@ -359,76 +360,43 @@ async def _dispatch_rt_command(
     facade: ProjectMemoryFacade | None = None,
 ) -> None:
     """Handle the !rt / /rt command, including follow-up and close."""
-    continue_rt = None
-    close_rt = None
 
-    # Resolve project/branch for project-memory archive
-    _ambient_ctx = await chat_prefs.get_context(msg.channel_id) if chat_prefs else None
-    _pm_project = _ambient_ctx.project if _ambient_ctx else None
-    _pm_branch = _ambient_ctx.branch if _ambient_ctx else None
+    async def _continue_roundtable_session(
+        session: RoundtableSession,
+        topic: str,
+        engines_filter: list[str] | None,
+        ambient_context: Any | None,
+    ) -> None:
+        await run_followup_round(
+            session,
+            topic,
+            engines_filter,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            ambient_context=ambient_context,
+        )
 
-    if msg.root_id and roundtables:
-        # Check for completed session (follow-up / close)
-        completed_session = roundtables.get_completed(msg.root_id)
-        if completed_session:
+    async def _archive_roundtable_session(
+        session: RoundtableSession,
+        project: str | None,
+        branch: str | None,
+    ) -> None:
+        await _archive_roundtable(
+            session,
+            journal,
+            send,
+            facade=facade,
+            project=project,
+            branch=branch,
+        )
 
-            async def continue_rt(
-                topic: str,
-                engines_filter: list[str] | None,
-                *,
-                _s: Any = completed_session,
-                _ctx: Any = _ambient_ctx,
-            ) -> None:
-                await run_followup_round(
-                    _s,
-                    topic,
-                    engines_filter,
-                    cfg=cfg,
-                    running_tasks=running_tasks,
-                    ambient_context=_ctx,
-                )
-
-            async def close_rt(
-                *,
-                _tid: str = msg.root_id,
-                _rt: RoundtableStore = roundtables,
-                _s: RoundtableSession = completed_session,
-            ) -> None:
-                await _archive_roundtable(
-                    _s,
-                    journal,
-                    send,
-                    facade=facade,
-                    project=_pm_project,
-                    branch=_pm_branch,
-                )
-                _rt.remove(_tid)
-
-        # Also allow close on active (non-completed) sessions
-        active_session = roundtables.get(msg.root_id)
-        if active_session and not active_session.completed and close_rt is None:
-
-            async def close_rt(
-                *,
-                _tid: str = msg.root_id,
-                _rt: RoundtableStore = roundtables,
-            ) -> None:
-                session = _rt.get(_tid)
-                if session:
-                    session.cancel_event.set()
-                    await _archive_roundtable(
-                        session,
-                        journal,
-                        send,
-                        facade=facade,
-                        project=_pm_project,
-                        branch=_pm_branch,
-                    )
-                _rt.remove(_tid)
-
-    await handle_rt(
+    await dispatch_roundtable_command(
         args,
         runtime=cfg.runtime,
+        channel_id=msg.channel_id,
+        thread_id=msg.root_id,
+        chat_prefs=chat_prefs,
+        roundtables=roundtables,
         send=send,
         start_roundtable=lambda topic, rounds, engines: _start_roundtable(
             msg.channel_id,
@@ -440,9 +408,9 @@ async def _dispatch_rt_command(
             chat_prefs=chat_prefs,
             roundtables=roundtables,
         ),
-        continue_roundtable=continue_rt,
-        close_roundtable=close_rt,
-        thread_id=msg.root_id,
+        handle_rt_command=handle_rt,
+        continue_roundtable_session=_continue_roundtable_session,
+        archive_roundtable_session=_archive_roundtable_session,
     )
 
 
