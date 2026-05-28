@@ -18,6 +18,7 @@ from ..core.chat_loop_helpers import (
     dispatch_roundtable_command,
     handle_cancel_reaction_by_message_id,
     handle_file_command,
+    handle_voice_attachments,
     render_file_put_results,
     render_saved_file_context,
     resolve_persona_prefix,
@@ -31,7 +32,6 @@ from ..core.roundtable import (
     RoundtableStore,
     run_followup_round,
 )
-from ..core.voice import is_audio_file, transcribe_audio
 from ..journal import (
     Journal,
     PendingRunLedger,
@@ -118,44 +118,31 @@ async def _handle_voice(
     if not cfg.voice_enabled or not msg.files:
         return None
 
-    for file_info in msg.files:
-        mime = file_info.get("mimetype", "")
-        if not is_audio_file(mime):
-            continue
-        size = file_info.get("size", 0)
-        if size > cfg.voice_max_bytes:
-            logger.warning("voice.too_large", size=size, max=cfg.voice_max_bytes)
-            continue
-
+    async def _download_audio(file_info: dict[str, Any]) -> bytes | None:
         url = file_info.get("url_private_download")
         if not url:
-            continue
+            return None
 
         from .files import _download_slack_file
 
-        audio_data = await _download_slack_file(
+        return await _download_slack_file(
             url,
             cfg.bot._client._bot_token,
             max_bytes=cfg.voice_max_bytes,
         )
-        if audio_data is None:
-            continue
 
-        filename = file_info.get("name", "audio.ogg")
-        text = await transcribe_audio(
-            audio_data,
-            filename,
-            model=cfg.voice_model,
-            base_url=cfg.voice_base_url,
-            api_key=cfg.voice_api_key,
-        )
-        if text:
-            logger.info(
-                "voice.transcribed", channel_id=msg.channel_id, length=len(text)
-            )
-            return text
-
-    return None
+    return await handle_voice_attachments(
+        msg.files,
+        channel_id=msg.channel_id,
+        voice_max_bytes=cfg.voice_max_bytes,
+        voice_model=cfg.voice_model,
+        voice_base_url=cfg.voice_base_url,
+        voice_api_key=cfg.voice_api_key,
+        get_mime_type=lambda file_info: file_info.get("mimetype", ""),
+        get_size=lambda file_info: file_info.get("size", 0),
+        get_filename=lambda file_info: file_info.get("name", "audio.ogg"),
+        get_audio_data=_download_audio,
+    )
 
 
 # ---------------------------------------------------------------------------

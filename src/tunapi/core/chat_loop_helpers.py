@@ -12,6 +12,7 @@ from ..logging import get_logger
 from ..transport import RenderedMessage
 from . import files
 from .roundtable import RoundtableSession, RoundtableStore, run_roundtable
+from .voice import is_audio_file, transcribe_audio
 
 logger = get_logger(__name__)
 
@@ -308,6 +309,48 @@ async def handle_file_command(
 
     await send(RenderedMessage(text=unknown_usage))
     return True
+
+
+async def handle_voice_attachments(
+    attachments: list[Any],
+    *,
+    channel_id: str,
+    voice_max_bytes: int,
+    voice_model: str,
+    voice_base_url: str | None,
+    voice_api_key: str | None,
+    get_mime_type: Callable[[Any], str],
+    get_size: Callable[[Any], int],
+    get_filename: Callable[[Any], str],
+    get_audio_data: Callable[[Any], Awaitable[bytes | None]],
+) -> str | None:
+    """Transcribe the first valid audio attachment."""
+    for attachment in attachments:
+        mime = get_mime_type(attachment)
+        if not is_audio_file(mime):
+            continue
+
+        size = get_size(attachment)
+        if size > voice_max_bytes:
+            logger.warning("voice.too_large", size=size, max=voice_max_bytes)
+            continue
+
+        audio_data = await get_audio_data(attachment)
+        if audio_data is None:
+            continue
+
+        text = await transcribe_audio(
+            audio_data,
+            get_filename(attachment),
+            model=voice_model,
+            base_url=voice_base_url,
+            api_key=voice_api_key,
+        )
+        if text:
+            logger.info("voice.transcribed", channel_id=channel_id, length=len(text))
+            return text
+
+    return None
 
 
 async def start_roundtable_thread(

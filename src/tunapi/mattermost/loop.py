@@ -18,6 +18,7 @@ from ..core.chat_loop_helpers import (
     dispatch_roundtable_command,
     handle_cancel_reaction_by_message_id,
     handle_file_command,
+    handle_voice_attachments,
     render_file_put_results,
     render_saved_file_context,
     resolve_persona_prefix,
@@ -67,7 +68,6 @@ from .files import handle_file_get, handle_file_put
 from .parsing import parse_ws_event
 from .trigger_mode import resolve_trigger_mode, should_trigger, strip_mention
 from .types import MattermostIncomingMessage, MattermostReactionEvent
-from .voice import is_audio_file, transcribe_audio
 
 if TYPE_CHECKING:
     from ..runner_bridge import RunningTasks
@@ -167,34 +167,27 @@ async def _handle_voice(
     if not cfg.voice_enabled or not msg.file_ids:
         return None
 
-    for file_id in msg.file_ids:
+    async def _get_file_info(file_id: str) -> Any | None:
         info = await cfg.bot._client.get_file_info(file_id)
-        if info is None:
-            continue
-        if not is_audio_file(info.mime_type):
-            continue
-        if info.size > cfg.voice_max_bytes:
-            logger.warning("voice.too_large", size=info.size, max=cfg.voice_max_bytes)
-            continue
+        return (file_id, info) if info is not None else None
 
-        audio_data = await cfg.bot.get_file(file_id)
-        if audio_data is None:
-            continue
-
-        text = await transcribe_audio(
-            audio_data,
-            info.name,
-            model=cfg.voice_model,
-            base_url=cfg.voice_base_url,
-            api_key=cfg.voice_api_key,
-        )
-        if text:
-            logger.info(
-                "voice.transcribed", channel_id=msg.channel_id, length=len(text)
-            )
-            return text
-
-    return None
+    attachments = [
+        attachment
+        for attachment in [await _get_file_info(file_id) for file_id in msg.file_ids]
+        if attachment is not None
+    ]
+    return await handle_voice_attachments(
+        attachments,
+        channel_id=msg.channel_id,
+        voice_max_bytes=cfg.voice_max_bytes,
+        voice_model=cfg.voice_model,
+        voice_base_url=cfg.voice_base_url,
+        voice_api_key=cfg.voice_api_key,
+        get_mime_type=lambda attachment: attachment[1].mime_type,
+        get_size=lambda attachment: attachment[1].size,
+        get_filename=lambda attachment: attachment[1].name,
+        get_audio_data=lambda attachment: cfg.bot.get_file(attachment[0]),
+    )
 
 
 async def _handle_file_command(
