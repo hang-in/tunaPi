@@ -124,10 +124,11 @@ async def rawq_enrich_message(
     context_block = rawq_bridge.format_context_block(result) if result else ""
 
     if context_block:
+        result_count = len(result.get("results", [])) if result is not None else 0
         logger.info(
             "rawq.enrich",
             project=project_name,
-            results=len(result.get("results", [])),
+            results=result_count,
             token_budget=token_budget,
         )
         return f"{context_block}\n\n---\n\n{text}"

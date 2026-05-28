@@ -233,7 +233,7 @@ async def _start_roundtable(
     thread_id = str(ref.message_id)
     session = RoundtableSession(
         thread_id=thread_id,
-        channel_id=chat_id,
+        channel_id=str(chat_id),
         topic=topic,
         engines=engines,
         total_rounds=rounds,

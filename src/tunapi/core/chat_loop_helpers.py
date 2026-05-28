@@ -6,7 +6,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..journal import JournalEntry
 from ..model import ResumeToken
@@ -249,6 +249,7 @@ async def dispatch_roundtable_command_flow(
     facade: Any | None = None,
 ) -> None:
     """Handle the roundtable command, coordinating start, continue, and archive flow."""
+    roundtable_store = cast(RoundtableStore, roundtables)
 
     async def _start_rt(topic: str, rounds: int, engines: list[str]) -> None:
         await start_roundtable_thread(
@@ -259,7 +260,7 @@ async def dispatch_roundtable_command_flow(
             cfg=cfg,
             running_tasks=running_tasks,
             chat_prefs=chat_prefs,
-            roundtables=roundtables,
+            roundtables=roundtable_store,
             render_header=render_header,
         )
 
