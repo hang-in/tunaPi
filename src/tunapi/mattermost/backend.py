@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 
@@ -37,8 +38,9 @@ class MattermostBackend(TransportBackend):
 
     def lock_token(self, *, transport_config: object, _config_path: Path) -> str | None:
         if isinstance(transport_config, dict):
-            return transport_config.get("token")
-        return getattr(transport_config, "token", None)
+            cfg = cast(dict[str, Any], transport_config)
+            return cast(str | None, cfg.get("token"))
+        return cast(str | None, getattr(transport_config, "token", None))
 
     def build_and_run(
         self,
@@ -52,18 +54,23 @@ class MattermostBackend(TransportBackend):
         if not isinstance(transport_config, dict):
             raise TypeError("transport_config must be a dict for Mattermost")
 
-        url = transport_config.get("url", "")
-        token = transport_config.get("token", "")
-        channel_id = transport_config.get("channel_id", "")
-        session_mode = transport_config.get("session_mode", "stateless")
-        show_resume_line = transport_config.get("show_resume_line", True)
-        message_overflow = transport_config.get("message_overflow", "trim")
-        allowed_channel_ids = tuple(transport_config.get("allowed_channel_ids", []))
-        allowed_user_ids = tuple(transport_config.get("allowed_user_ids", []))
-        trigger_mode = transport_config.get("trigger_mode", "all")
+        cfg = cast(dict[str, Any], transport_config)
+        url = cast(str, cfg.get("url", ""))
+        token = cast(str, cfg.get("token", ""))
+        channel_id = cast(str, cfg.get("channel_id", ""))
+        session_mode = cast(str, cfg.get("session_mode", "stateless"))
+        show_resume_line = cast(bool, cfg.get("show_resume_line", True))
+        message_overflow = cast(str, cfg.get("message_overflow", "trim"))
+        allowed_channel_ids = tuple(cast(list[str], cfg.get("allowed_channel_ids", [])))
+        allowed_user_ids = tuple(cast(list[str], cfg.get("allowed_user_ids", [])))
+        trigger_mode = cast(str, cfg.get("trigger_mode", "all"))
 
-        files_cfg = transport_config.get("files", {})
-        voice_cfg = transport_config.get("voice", {})
+        files_cfg = cfg.get("files", {})
+        voice_cfg = cfg.get("voice", {})
+        if not isinstance(files_cfg, dict):
+            files_cfg = {}
+        if not isinstance(voice_cfg, dict):
+            voice_cfg = {}
 
         startup_msg = build_startup_message(
             runtime,
@@ -99,7 +106,7 @@ class MattermostBackend(TransportBackend):
             "trigger_mode": trigger_mode,
             "files_cfg": files_cfg,
             "voice_cfg": voice_cfg,
-            "transport_config": transport_config,
+            "transport_config": cfg,
             "default_engine_override": default_engine_override,
         }
         self._prepared = True
@@ -108,6 +115,7 @@ class MattermostBackend(TransportBackend):
 
     _prepared: bool = False
     _prepare_only: bool = False
+    _pending_run: dict[str, Any] = {}
 
     async def async_run(self) -> None:
         """Async entry point — can be called from a shared task group."""

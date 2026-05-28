@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 
@@ -39,8 +40,9 @@ class SlackBackend(TransportBackend):
 
     def lock_token(self, *, transport_config: object, _config_path: Path) -> str | None:
         if isinstance(transport_config, dict):
-            return transport_config.get("bot_token")
-        return getattr(transport_config, "bot_token", None)
+            cfg = cast(dict[str, Any], transport_config)
+            return cast(str | None, cfg.get("bot_token"))
+        return cast(str | None, getattr(transport_config, "bot_token", None))
 
     def build_and_run(
         self,
@@ -54,18 +56,19 @@ class SlackBackend(TransportBackend):
         if not isinstance(transport_config, dict):
             raise TypeError("transport_config must be a dict for Slack")
 
-        bot_token = transport_config.get("bot_token", "")
-        app_token = transport_config.get("app_token", "")
-        channel_id = transport_config.get("channel_id") or None
-        session_mode = transport_config.get("session_mode", "stateless")
-        show_resume_line = transport_config.get("show_resume_line", True)
-        message_overflow = transport_config.get("message_overflow", "trim")
-        allowed_channel_ids = tuple(transport_config.get("allowed_channel_ids", []))
-        allowed_user_ids = tuple(transport_config.get("allowed_user_ids", []))
-        trigger_mode = transport_config.get("trigger_mode", "mentions")
+        cfg = cast(dict[str, Any], transport_config)
+        bot_token = cast(str, cfg.get("bot_token", ""))
+        app_token = cast(str, cfg.get("app_token", ""))
+        channel_id = cast(str | None, cfg.get("channel_id") or None)
+        session_mode = cast(str, cfg.get("session_mode", "stateless"))
+        show_resume_line = cast(bool, cfg.get("show_resume_line", True))
+        message_overflow = cast(str, cfg.get("message_overflow", "trim"))
+        allowed_channel_ids = tuple(cast(list[str], cfg.get("allowed_channel_ids", [])))
+        allowed_user_ids = tuple(cast(list[str], cfg.get("allowed_user_ids", [])))
+        trigger_mode = cast(str, cfg.get("trigger_mode", "mentions"))
 
-        files_cfg = transport_config.get("files", {})
-        voice_cfg = transport_config.get("voice", {})
+        files_cfg = cfg.get("files", {})
+        voice_cfg = cfg.get("voice", {})
         if not isinstance(files_cfg, dict):
             files_cfg = {}
         if not isinstance(voice_cfg, dict):
@@ -110,7 +113,7 @@ class SlackBackend(TransportBackend):
             "trigger_mode": trigger_mode,
             "files_cfg": files_cfg,
             "voice_cfg": voice_cfg,
-            "transport_config": transport_config,
+            "transport_config": cfg,
             "default_engine_override": default_engine_override,
         }
         self._prepared = True
@@ -119,6 +122,7 @@ class SlackBackend(TransportBackend):
 
     _prepared: bool = False
     _prepare_only: bool = False
+    _pending_run: dict[str, Any] = {}
 
     async def async_run(self) -> None:
         """Async entry point — can be called from a shared task group."""
