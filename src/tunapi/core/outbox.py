@@ -35,11 +35,19 @@ class OutboxOp:
     execute: Callable[[], Awaitable[Any]]
     priority: int
     queued_at: float
+    chat_id: Any = None
     label: str | None = None
     done: anyio.Event = field(default_factory=anyio.Event)
     result: Any = None
 
+    @property
+    def channel_id(self) -> Any:
+        """Compatibility alias for chat transports that still use channel_id."""
+        return self.chat_id
+
     def set_result(self, result: Any) -> None:
+        if self.done.is_set():
+            return
         self.result = result
         self.done.set()
 
@@ -55,11 +63,12 @@ class Outbox:
     def __init__(
         self,
         *,
-        interval: float = 0.1,
+        interval: float | Callable[[OutboxOp], float] = 0.1,
         retry_after_type: type[Exception] = RetryAfter,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
         on_error: Callable[[str, Exception], None] | None = None,
+        on_error_op: Callable[[OutboxOp, Exception], None] | None = None,
         on_outbox_error: Callable[[Exception], None] | None = None,
     ) -> None:
         self._interval = interval
@@ -67,6 +76,7 @@ class Outbox:
         self._clock = clock
         self._sleep = sleep
         self._on_error = on_error
+        self._on_error_op = on_error_op
         self._on_outbox_error = on_outbox_error
 
         self._pending: dict[Hashable, OutboxOp] = {}
@@ -128,7 +138,9 @@ class Outbox:
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, self._retry_after_type):
                 raise
-            if self._on_error:
+            if self._on_error_op:
+                self._on_error_op(op, exc)
+            elif self._on_error:
                 self._on_error(op.label or "unknown", exc)
             return None
 
@@ -168,7 +180,10 @@ class Outbox:
                         continue
                     raise
 
-                self.next_at = started_at + self._interval
+                interval = (
+                    self._interval(op) if callable(self._interval) else self._interval
+                )
+                self.next_at = started_at + interval
                 op.set_result(result)
         except Exception as exc:  # noqa: BLE001
             self._closed = True

@@ -15,14 +15,23 @@ import discord
 
 from tunapi.logging import get_logger
 
-from .outbox import (
+from tunapi.core.outbox import (
     DELETE_PRIORITY,
     EDIT_PRIORITY,
     SEND_PRIORITY,
-    DiscordOutbox,
+    Outbox,
     OutboxOp,
-    RetryAfter,
 )
+
+
+class DiscordRetryAfter(Exception):
+    """Raised when Discord returns a rate limit response."""
+
+    def __init__(self, retry_after: float, description: str | None = None) -> None:
+        super().__init__(description or f"retry after {retry_after}")
+        self.retry_after = float(retry_after)
+        self.description = description
+
 
 logger = get_logger(__name__)
 
@@ -70,11 +79,12 @@ class DiscordBotClient:
         self._clock = clock
         self._sleep = sleep
         self._channel_interval = 0.0 if channel_rps <= 0 else 1.0 / channel_rps
-        self._outbox = DiscordOutbox(
-            interval_for_channel=self.interval_for_channel,
+        self._outbox = Outbox(
+            interval=lambda op: self.interval_for_channel(op.chat_id),
+            retry_after_type=DiscordRetryAfter,
             clock=clock,
             sleep=sleep,
-            on_error=self._log_request_error,
+            on_error_op=self._log_request_error,
             on_outbox_error=self._log_outbox_failure,
         )
         self._seq = itertools.count()
@@ -180,7 +190,7 @@ class DiscordBotClient:
             execute=execute,
             priority=priority,
             queued_at=self._clock(),
-            channel_id=channel_id,
+            chat_id=channel_id,
             label=label,
         )
         return await self._outbox.enqueue(key=key, op=request, wait=wait)
@@ -349,7 +359,7 @@ class DiscordBotClient:
             # Check for rate limit
             if exc.status == 429:
                 retry_after = self._extract_retry_after(exc)
-                raise RetryAfter(retry_after, "Discord rate limit") from exc
+                raise DiscordRetryAfter(retry_after, "Discord rate limit") from exc
             # If send failed and we had a reference, retry without it
             # This handles cases like new threads where the reply message
             # might not be in the thread
@@ -365,7 +375,7 @@ class DiscordBotClient:
                 except discord.HTTPException as retry_exc:
                     if retry_exc.status == 429:
                         retry_after = self._extract_retry_after(retry_exc)
-                        raise RetryAfter(
+                        raise DiscordRetryAfter(
                             retry_after, "Discord rate limit"
                         ) from retry_exc
                     return None
@@ -440,7 +450,7 @@ class DiscordBotClient:
         except discord.HTTPException as exc:
             if exc.status == 429:
                 retry_after = self._extract_retry_after(exc)
-                raise RetryAfter(retry_after, "Discord rate limit") from exc
+                raise DiscordRetryAfter(retry_after, "Discord rate limit") from exc
             return None
 
     async def delete_message(
@@ -492,7 +502,7 @@ class DiscordBotClient:
         except discord.HTTPException as exc:
             if exc.status == 429:
                 retry_after = self._extract_retry_after(exc)
-                raise RetryAfter(retry_after, "Discord rate limit") from exc
+                raise DiscordRetryAfter(retry_after, "Discord rate limit") from exc
             return False
 
     async def create_thread(

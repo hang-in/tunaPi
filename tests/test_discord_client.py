@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from tunapi.discord.client import DEFAULT_CHANNEL_RPS, DiscordBotClient, SentMessage
-from tunapi.discord.outbox import RetryAfter
+from tunapi.discord.client import (
+    DEFAULT_CHANNEL_RPS,
+    DiscordBotClient,
+    SentMessage,
+    DiscordRetryAfter,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +82,7 @@ def _make_messageable_channel(channel_id: int = 100) -> MagicMock:
     return channel
 
 
-def _make_sent_discord_message(
-    msg_id: int = 999, channel_id: int = 100
-) -> MagicMock:
+def _make_sent_discord_message(msg_id: int = 999, channel_id: int = 100) -> MagicMock:
     """Create a mock discord.Message returned by channel.send / channel.fetch_message."""
     msg = MagicMock(spec=discord.Message)
     msg.id = msg_id
@@ -91,7 +93,9 @@ def _make_sent_discord_message(
     return msg
 
 
-def _make_http_exception(status: int = 400, text: str | None = None) -> discord.HTTPException:
+def _make_http_exception(
+    status: int = 400, text: str | None = None
+) -> discord.HTTPException:
     """Create a discord.HTTPException with given status."""
     response = MagicMock()
     response.status = status
@@ -284,9 +288,7 @@ class TestSendMessageImpl:
         channel.send.return_value = sent_msg
         bot.get_channel.return_value = channel
 
-        result = await client._send_message_impl(
-            channel_id=100, content="hello"
-        )
+        result = await client._send_message_impl(channel_id=100, content="hello")
         assert result is not None
         assert result.message_id == 999
         assert result.channel_id == 100
@@ -407,7 +409,7 @@ class TestSendMessageImpl:
         channel.send.side_effect = exc_429
         bot.get_channel.return_value = channel
 
-        with pytest.raises(RetryAfter) as exc_info:
+        with pytest.raises(DiscordRetryAfter) as exc_info:
             await client._send_message_impl(channel_id=100, content="hi")
         assert exc_info.value.retry_after == pytest.approx(5.0)
 
@@ -437,7 +439,10 @@ class TestSendMessageImpl:
         client, _, _ = _make_client()
         bot = _inject_bot(client)
         channel = _make_messageable_channel(100)
-        channel.send.side_effect = [_make_http_exception(400), _make_http_exception(500)]
+        channel.send.side_effect = [
+            _make_http_exception(400),
+            _make_http_exception(500),
+        ]
         bot.get_channel.return_value = channel
 
         result = await client._send_message_impl(
@@ -456,7 +461,7 @@ class TestSendMessageImpl:
         channel.send.side_effect = [_make_http_exception(400), exc_429]
         bot.get_channel.return_value = channel
 
-        with pytest.raises(RetryAfter) as exc_info:
+        with pytest.raises(DiscordRetryAfter) as exc_info:
             await client._send_message_impl(
                 channel_id=100, content="hi", reply_to_message_id=555
             )
@@ -572,10 +577,8 @@ class TestEditMessageImpl:
         channel.fetch_message.side_effect = exc_429
         bot.get_channel.return_value = channel
 
-        with pytest.raises(RetryAfter) as exc_info:
-            await client._edit_message_impl(
-                channel_id=100, message_id=50, content="up"
-            )
+        with pytest.raises(DiscordRetryAfter) as exc_info:
+            await client._edit_message_impl(channel_id=100, message_id=50, content="up")
         assert exc_info.value.retry_after == pytest.approx(1.5)
 
     @pytest.mark.anyio
@@ -656,7 +659,7 @@ class TestDeleteMessageImpl:
         channel.fetch_message.side_effect = exc_429
         bot.get_channel.return_value = channel
 
-        with pytest.raises(RetryAfter) as exc_info:
+        with pytest.raises(DiscordRetryAfter) as exc_info:
             await client._delete_message_impl(channel_id=100, message_id=50)
         assert exc_info.value.retry_after == pytest.approx(3.0)
 
@@ -729,9 +732,7 @@ class TestCreateThread:
         bot.get_channel.return_value = None
         bot.fetch_channel.side_effect = discord.NotFound(MagicMock(), "nf")
 
-        result = await client.create_thread(
-            channel_id=100, message_id=50, name="T"
-        )
+        result = await client.create_thread(channel_id=100, message_id=50, name="T")
         assert result is None
 
     @pytest.mark.anyio
@@ -740,9 +741,7 @@ class TestCreateThread:
         bot = _inject_bot(client)
         bot.get_channel.return_value = MagicMock(spec=discord.VoiceChannel)
 
-        result = await client.create_thread(
-            channel_id=100, message_id=50, name="T"
-        )
+        result = await client.create_thread(channel_id=100, message_id=50, name="T")
         assert result is None
 
     @pytest.mark.anyio
@@ -753,9 +752,7 @@ class TestCreateThread:
         channel.fetch_message = AsyncMock(side_effect=_make_http_exception(500))
         bot.get_channel.return_value = channel
 
-        result = await client.create_thread(
-            channel_id=100, message_id=50, name="T"
-        )
+        result = await client.create_thread(channel_id=100, message_id=50, name="T")
         assert result is None
 
 
@@ -796,9 +793,7 @@ class TestCreateThreadWithoutMessage:
         bot.get_channel.return_value = None
         bot.fetch_channel.side_effect = discord.NotFound(MagicMock(), "nf")
 
-        result = await client.create_thread_without_message(
-            channel_id=100, name="T"
-        )
+        result = await client.create_thread_without_message(channel_id=100, name="T")
         assert result is None
 
     @pytest.mark.anyio
@@ -807,9 +802,7 @@ class TestCreateThreadWithoutMessage:
         bot = _inject_bot(client)
         bot.get_channel.return_value = MagicMock(spec=discord.VoiceChannel)
 
-        result = await client.create_thread_without_message(
-            channel_id=100, name="T"
-        )
+        result = await client.create_thread_without_message(channel_id=100, name="T")
         assert result is None
 
     @pytest.mark.anyio
@@ -820,9 +813,7 @@ class TestCreateThreadWithoutMessage:
         channel.create_thread = AsyncMock(side_effect=_make_http_exception(500))
         bot.get_channel.return_value = channel
 
-        result = await client.create_thread_without_message(
-            channel_id=100, name="T"
-        )
+        result = await client.create_thread_without_message(channel_id=100, name="T")
         assert result is None
 
     @pytest.mark.anyio
@@ -837,9 +828,7 @@ class TestCreateThreadWithoutMessage:
         bot.get_channel.return_value = None
         bot.fetch_channel.return_value = channel
 
-        result = await client.create_thread_without_message(
-            channel_id=100, name="T"
-        )
+        result = await client.create_thread_without_message(channel_id=100, name="T")
         assert result == 888
         bot.fetch_channel.assert_awaited_once_with(100)
 
@@ -930,9 +919,7 @@ class TestEditMessageQueued:
         client._outbox = MagicMock()
         client._outbox.enqueue = AsyncMock(return_value=None)
 
-        await client.edit_message(
-            channel_id=100, message_id=50, content="updated"
-        )
+        await client.edit_message(channel_id=100, message_id=50, content="updated")
         call_kwargs = client._outbox.enqueue.call_args.kwargs
         assert call_kwargs["key"] == ("edit", 100, 50)
         assert call_kwargs["op"].label == "edit_message"
@@ -963,9 +950,7 @@ class TestDeleteMessageQueued:
 
         result = await client.delete_message(channel_id=100, message_id=50)
         assert result is True
-        client._outbox.drop_pending.assert_awaited_once_with(
-            key=("edit", 100, 50)
-        )
+        client._outbox.drop_pending.assert_awaited_once_with(key=("edit", 100, 50))
 
     @pytest.mark.anyio
     async def test_delete_enqueues_with_priority(self) -> None:
@@ -1005,9 +990,7 @@ class TestDropPendingEdits:
         client._outbox.drop_pending = AsyncMock()
 
         await client.drop_pending_edits(channel_id=100, message_id=50)
-        client._outbox.drop_pending.assert_awaited_once_with(
-            key=("edit", 100, 50)
-        )
+        client._outbox.drop_pending.assert_awaited_once_with(key=("edit", 100, 50))
 
 
 # ===========================================================================
