@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -22,6 +21,7 @@ from ..core.chat_loop_helpers import (
     resolve_persona_prefix,
     ResolvedPrompt as _ResolvedPrompt,
     resolve_upload_dir,
+    run_chat_engine,
     send_to_channel,
     start_roundtable_thread,
 )
@@ -29,13 +29,10 @@ from ..core.memory_facade import ProjectMemoryFacade
 from ..journal import (
     Journal,
     PendingRunLedger,
-    build_handoff_preamble,
-    make_run_id,
 )
-from ..logging import bind_run_context, get_logger
-from ..model import ResumeToken
-from ..runner_bridge import IncomingMessage, handle_message
-from ..runners.run_options import EngineRunOptions, apply_run_options
+from ..logging import get_logger
+from ..runner_bridge import handle_message
+from ..runners.run_options import apply_run_options
 from ..transport import MessageRef, RenderedMessage
 from ..utils.paths import reset_run_base_dir, set_run_base_dir
 from .bridge import CANCEL_EMOJI, MattermostBridgeConfig
@@ -562,72 +559,6 @@ async def _run_engine(
     - handle_message() failure: log only (no user message)
     - Command handler errors: propagate (crash = bug in our code)
     """
-    runtime = cfg.runtime
-
-    # -- Resolve engine/context (use channel-bound project if set) --
-    ambient_context = None
-    if chat_prefs:
-        ambient_context = await chat_prefs.get_context(msg.channel_id)
-
-    resolved = runtime.resolve_message(
-        text=resolved_prompt.text,
-        reply_text=None,
-        ambient_context=ambient_context,
-        chat_id=msg.channel_id,
-    )
-
-    context = resolved.context
-    context_source = resolved.context_source
-
-    # Check chat prefs for engine override
-    engine_override = resolved.engine_override
-    if engine_override is None and chat_prefs:
-        pref_engine = await chat_prefs.get_default_engine(msg.channel_id)
-        if pref_engine:
-            engine_override = pref_engine
-
-    engine = runtime.resolve_engine(
-        engine_override=engine_override,
-        context=context,
-    )
-
-    context_line = runtime.format_context_line(context)
-    try:
-        cwd = runtime.resolve_run_cwd(context)
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "mattermost.resolve_cwd_error",
-            error=str(exc),
-            channel_id=msg.channel_id,
-        )
-        await send(RenderedMessage(text=f"⚠️ {exc}"))
-        return
-
-    # -- Resume token (engine-specific lookup) --
-    resume_token: ResumeToken | None = None
-    if cfg.session_mode == "chat":
-        resume_token = await sessions.get(msg.channel_id, engine, cwd=cwd)
-
-    effective_resume = resolved.resume_token or resume_token
-
-    resolved_runner = runtime.resolve_runner(
-        resume_token=effective_resume,
-        engine_override=engine,
-    )
-
-    if resolved_runner.issue:
-        logger.warning(
-            "mattermost.runner_unavailable",
-            issue=resolved_runner.issue,
-            channel_id=msg.channel_id,
-        )
-        await send(RenderedMessage(text=f"⚠️ {resolved_runner.issue}"))
-        return
-
-    if cwd:
-        bind_run_context(project=context.project if context else None)
-
-    # Thread handling
     if msg.root_id:
         reply_to = MessageRef(
             channel_id=msg.channel_id,
@@ -639,86 +570,42 @@ async def _run_engine(
         reply_to = None
         thread_id = None
 
-    # -- Persona prompt prepend (@persona_name prefix) --
-    final_prompt = resolved.prompt
-    if chat_prefs and final_prompt:
-        persona_prompt = await _resolve_persona_prefix(final_prompt, chat_prefs)
-        if persona_prompt is not None:
-            final_prompt = persona_prompt
-
-    # -- Handoff preamble (when resume token is absent) --
-    if effective_resume is None and journal is not None and final_prompt:
-        with contextlib.suppress(Exception):
-            j_entries = await journal.recent_entries(msg.channel_id, limit=50)
-            # Cross-transport fallback: if no entries for this channel,
-            # check all channels for recent work — but only when the
-            # channel is NOT bound to a specific project (otherwise the
-            # global entries would bleed context from unrelated projects).
-            if not j_entries and (context is None or context.project is None):
-                j_entries = await journal.recent_entries_global(limit=30)
-            if j_entries:
-                preamble = build_handoff_preamble(
-                    j_entries,
-                    old_engine=j_entries[-1].engine,
-                    reason="engine_change"
-                    if resume_token is None
-                    else "resume_expired",
-                )
-                if preamble:
-                    final_prompt = f"{preamble}\n{final_prompt}"
-
-    incoming = IncomingMessage(
+    await run_chat_engine(
+        resolved_prompt,
         channel_id=msg.channel_id,
         message_id=msg.post_id,
-        text=final_prompt,
+        runtime=cfg.runtime,
+        exec_cfg=cfg.exec_cfg,
+        session_mode=cfg.session_mode,
+        running_tasks=running_tasks,
+        sessions=sessions,
+        chat_prefs=chat_prefs,
+        send=send,
         reply_to=reply_to,
         thread_id=thread_id,
+        handle_message_func=handle_message,
+        resolve_persona_prefix_func=_resolve_persona_prefix,
+        set_run_base_dir_func=set_run_base_dir,
+        reset_run_base_dir_func=reset_run_base_dir,
+        apply_run_options_func=apply_run_options,
+        logger_obj=logger,
+        resolve_cwd_log_event="mattermost.resolve_cwd_error",
+        resolve_cwd_log_extra={},
+        resolve_cwd_message=lambda exc: f"⚠️ {exc}",
+        runner_unavailable_log_event="mattermost.runner_unavailable",
+        runner_unavailable_log_extra={},
+        runner_unavailable_message=lambda issue: f"⚠️ {issue}",
+        dispatch_error_log_event="mattermost.dispatch_error",
+        dispatch_error_log_extra={"post_id": msg.post_id},
+        journal=journal,
+        ledger=ledger,
+        project_sessions=project_sessions,
+        after_answer=lambda answer: _attach_referenced_files(
+            cfg,
+            msg.channel_id,
+            answer,
+        ),
     )
-
-    async def on_thread_known(token: ResumeToken, done: anyio.Event) -> None:
-        if cfg.session_mode == "chat":
-            await sessions.set(msg.channel_id, token, cwd=cwd)
-
-    j_run_id = make_run_id(msg.channel_id, msg.post_id) if journal else None
-
-    # -- Per-engine model override --
-    model_override = None
-    if chat_prefs:
-        model_override = await chat_prefs.get_engine_model(msg.channel_id, engine)
-    run_options = EngineRunOptions(model=model_override) if model_override else None
-
-    run_base_token = set_run_base_dir(cwd)
-    try:
-        with apply_run_options(run_options):
-            answer = await handle_message(
-                cfg.exec_cfg,
-                runner=resolved_runner.runner,
-                incoming=incoming,
-                resume_token=effective_resume,
-                context=context,
-                context_line=context_line,
-                context_source=context_source,
-                strip_resume_line=runtime.is_resume_line,
-                running_tasks=running_tasks,
-                on_thread_known=on_thread_known,
-                journal=journal,
-                run_id=j_run_id,
-                ledger=ledger,
-                project_sessions=project_sessions,
-            )
-        # Auto-attach referenced files to the channel
-        if answer:
-            await _attach_referenced_files(cfg, msg.channel_id, answer)
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "mattermost.dispatch_error",
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            channel_id=msg.channel_id,
-            post_id=msg.post_id,
-        )
-    finally:
-        reset_run_base_dir(run_base_token)
 
 
 async def _auto_bind_channel_project(

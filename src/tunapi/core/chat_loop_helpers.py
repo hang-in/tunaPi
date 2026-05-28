@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from ..journal import JournalEntry
+from ..model import ResumeToken
+from ..runner_bridge import IncomingMessage
+from ..runners.run_options import EngineRunOptions
 from ..logging import get_logger
-from ..transport import RenderedMessage
+from ..transport import MessageRef, RenderedMessage
 from . import files
 from .roundtable import RoundtableSession, RoundtableStore, run_roundtable
 from .voice import is_audio_file, transcribe_audio
@@ -404,6 +407,184 @@ async def resolve_chat_prompt(
         return None
 
     return ResolvedPrompt(text=prompt_text, file_context=file_context)
+
+
+async def run_chat_engine(
+    resolved_prompt: ResolvedPrompt,
+    *,
+    channel_id: str,
+    message_id: str,
+    runtime: Any,
+    exec_cfg: Any,
+    session_mode: str,
+    running_tasks: Any,
+    sessions: Any,
+    chat_prefs: Any | None,
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    reply_to: MessageRef | None,
+    thread_id: str | None,
+    handle_message_func: Callable[..., Awaitable[str | None]],
+    resolve_persona_prefix_func: Callable[[str, Any], Awaitable[str | None]],
+    set_run_base_dir_func: Callable[[Any], Any],
+    reset_run_base_dir_func: Callable[[Any], None],
+    apply_run_options_func: Callable[[EngineRunOptions | None], Any],
+    logger_obj: Any,
+    resolve_cwd_log_event: str,
+    resolve_cwd_log_extra: dict[str, Any],
+    resolve_cwd_message: Callable[[Exception], str],
+    runner_unavailable_log_event: str,
+    runner_unavailable_log_extra: dict[str, Any],
+    runner_unavailable_message: Callable[[str], str],
+    dispatch_error_log_event: str,
+    dispatch_error_log_extra: dict[str, Any],
+    journal: Any | None = None,
+    ledger: Any | None = None,
+    project_sessions: Any | None = None,
+    after_answer: Callable[[str], Awaitable[None]] | None = None,
+) -> None:
+    """Resolve context/session/persona and dispatch a chat prompt to a runner."""
+    ambient_context = None
+    if chat_prefs:
+        ambient_context = await chat_prefs.get_context(channel_id)
+
+    resolved = runtime.resolve_message(
+        text=resolved_prompt.text,
+        reply_text=None,
+        ambient_context=ambient_context,
+        chat_id=channel_id,
+    )
+
+    context = resolved.context
+    context_source = resolved.context_source
+
+    engine_override = resolved.engine_override
+    if engine_override is None and chat_prefs:
+        pref_engine = await chat_prefs.get_default_engine(channel_id)
+        if pref_engine:
+            engine_override = pref_engine
+
+    engine = runtime.resolve_engine(
+        engine_override=engine_override,
+        context=context,
+    )
+
+    context_line = runtime.format_context_line(context)
+    try:
+        cwd = runtime.resolve_run_cwd(context)
+    except Exception as exc:  # noqa: BLE001
+        logger_obj.error(
+            resolve_cwd_log_event,
+            error=str(exc),
+            channel_id=channel_id,
+            **resolve_cwd_log_extra,
+        )
+        await send(RenderedMessage(text=resolve_cwd_message(exc)))
+        return
+
+    resume_token: ResumeToken | None = None
+    if session_mode == "chat":
+        resume_token = await sessions.get(channel_id, engine, cwd=cwd)
+
+    effective_resume = resolved.resume_token or resume_token
+
+    resolved_runner = runtime.resolve_runner(
+        resume_token=effective_resume,
+        engine_override=engine,
+    )
+
+    if resolved_runner.issue:
+        logger_obj.warning(
+            runner_unavailable_log_event,
+            issue=resolved_runner.issue,
+            channel_id=channel_id,
+            **runner_unavailable_log_extra,
+        )
+        await send(
+            RenderedMessage(text=runner_unavailable_message(resolved_runner.issue))
+        )
+        return
+
+    if cwd:
+        from ..logging import bind_run_context
+
+        bind_run_context(project=context.project if context else None)
+
+    final_prompt = resolved.prompt
+    if chat_prefs and final_prompt:
+        persona_prompt = await resolve_persona_prefix_func(final_prompt, chat_prefs)
+        if persona_prompt is not None:
+            final_prompt = persona_prompt
+
+    if effective_resume is None and journal is not None and final_prompt:
+        with contextlib.suppress(Exception):
+            j_entries = await journal.recent_entries(channel_id, limit=50)
+            if not j_entries and (context is None or context.project is None):
+                j_entries = await journal.recent_entries_global(limit=30)
+            if j_entries:
+                from ..journal import build_handoff_preamble
+
+                preamble = build_handoff_preamble(
+                    j_entries,
+                    old_engine=j_entries[-1].engine,
+                    reason="engine_change"
+                    if resume_token is None
+                    else "resume_expired",
+                )
+                if preamble:
+                    final_prompt = f"{preamble}\n{final_prompt}"
+
+    incoming = IncomingMessage(
+        channel_id=channel_id,
+        message_id=message_id,
+        text=final_prompt,
+        reply_to=reply_to,
+        thread_id=thread_id,
+    )
+
+    async def on_thread_known(token: ResumeToken, done: Any) -> None:
+        if session_mode == "chat":
+            await sessions.set(channel_id, token, cwd=cwd)
+
+    from ..journal import make_run_id
+
+    j_run_id = make_run_id(channel_id, message_id) if journal else None
+
+    model_override = None
+    if chat_prefs:
+        model_override = await chat_prefs.get_engine_model(channel_id, engine)
+    run_options = EngineRunOptions(model=model_override) if model_override else None
+
+    run_base_token = set_run_base_dir_func(cwd)
+    try:
+        with apply_run_options_func(run_options):
+            answer = await handle_message_func(
+                exec_cfg,
+                runner=resolved_runner.runner,
+                incoming=incoming,
+                resume_token=effective_resume,
+                context=context,
+                context_line=context_line,
+                context_source=context_source,
+                strip_resume_line=runtime.is_resume_line,
+                running_tasks=running_tasks,
+                on_thread_known=on_thread_known,
+                journal=journal,
+                run_id=j_run_id,
+                ledger=ledger,
+                project_sessions=project_sessions,
+            )
+        if answer and after_answer:
+            await after_answer(answer)
+    except Exception as exc:  # noqa: BLE001
+        logger_obj.error(
+            dispatch_error_log_event,
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+            channel_id=channel_id,
+            **dispatch_error_log_extra,
+        )
+    finally:
+        reset_run_base_dir_func(run_base_token)
 
 
 async def start_roundtable_thread(
