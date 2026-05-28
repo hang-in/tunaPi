@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
@@ -53,8 +53,9 @@ def register_engine_commands(
             @pycord_bot.slash_command(name=cmd, description=desc)
             async def engine_command(
                 ctx: discord.ApplicationContext,
-                prompt: str = discord.Option(
-                    description="The prompt to send to the agent"
+                prompt: str = cast(
+                    str,
+                    discord.Option(description="The prompt to send to the agent"),
                 ),
             ) -> None:
                 await handle_engine_command(
@@ -117,12 +118,15 @@ async def handle_engine_command(
 
     guild_id = ctx.guild.id
     channel_id = ctx.channel_id
+    if channel_id is None:
+        await ctx.followup.send("This command requires a channel.", ephemeral=True)
+        return
     thread_id: int | None = None
     created_new_thread = False
     attempted_thread_create = False
 
     if isinstance(ctx.channel, discord_module.Thread):
-        thread_id = ctx.channel_id
+        thread_id = channel_id
         if ctx.channel.parent_id:
             channel_id = ctx.channel.parent_id
 
