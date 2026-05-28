@@ -90,17 +90,23 @@ def is_available() -> bool:
     return _get_rawq() is not None
 
 
+def _rawq_or_none() -> str | None:
+    """Return the cached rawq path with a type-narrowed result."""
+    return _get_rawq()
+
+
 async def check_index(project_path: str | Path) -> dict[str, Any] | None:
     """프로젝트의 rawq 인덱스 상태를 확인.
 
     Returns:
         인덱스 정보 dict 또는 None(rawq 미설치/인덱스 없음)
     """
-    if not is_available():
+    rawq = _rawq_or_none()
+    if rawq is None:
         return None
     try:
         result = await anyio.run_process(
-            [_get_rawq(), "index", "status", str(project_path), "--json"],
+            [rawq, "index", "status", str(project_path), "--json"],
             check=False,
         )
         if result.returncode == 0:
@@ -121,10 +127,11 @@ async def build_index(
     Returns:
         성공 여부
     """
-    if not is_available():
+    rawq = _rawq_or_none()
+    if rawq is None:
         return False
 
-    cmd = [_get_rawq(), "index", "build", str(project_path)]
+    cmd = [rawq, "index", "build", str(project_path)]
     for pattern in exclude or _DEFAULT_EXCLUDE:
         cmd.extend(["-x", pattern])
 
@@ -156,11 +163,12 @@ async def search(
     Returns:
         rawq JSON 출력 dict 또는 None(실패 시)
     """
-    if not is_available():
+    rawq = _rawq_or_none()
+    if rawq is None:
         return None
 
     cmd = [
-        _get_rawq(),
+        rawq,
         "search",
         query,
         str(project_path),
@@ -202,10 +210,11 @@ async def get_map(
     Returns:
         rawq map JSON 출력 dict 또는 None
     """
-    if not is_available():
+    rawq = _rawq_or_none()
+    if rawq is None:
         return None
 
-    cmd = [_get_rawq(), "map", str(project_path), "--depth", str(depth), "--json"]
+    cmd = [rawq, "map", str(project_path), "--depth", str(depth), "--json"]
     if lang_filter:
         cmd.extend(["--lang", lang_filter])
 
@@ -293,11 +302,12 @@ def format_map_block(map_result: dict[str, Any]) -> str:
 
 async def get_version() -> str | None:
     """로컬 rawq 바이너리의 버전을 반환."""
-    if not is_available():
+    rawq = _rawq_or_none()
+    if rawq is None:
         return None
     try:
         result = await anyio.run_process(
-            [_get_rawq(), "--version"],
+            [rawq, "--version"],
             check=False,
         )
         if result.returncode == 0:

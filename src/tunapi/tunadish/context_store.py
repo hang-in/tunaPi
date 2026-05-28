@@ -124,7 +124,7 @@ class ConversationContextStore:
     ) -> None:
         existing = self._cache.get(conv_id)
         self._cache[conv_id] = ConversationMeta(
-            project=context.project,
+            project=context.project or "",
             branch=context.branch,
             label=label
             if label is not None

@@ -1,10 +1,11 @@
 from typing import Any, Protocol
 
 from ..transport import (
-    Transport,
+    ChannelId,
     MessageRef,
-    SendOptions,
     RenderedMessage,
+    SendOptions,
+    Transport,
 )
 
 import dataclasses
@@ -116,7 +117,7 @@ class TunadishTransport(Transport):
     async def send(
         self,
         *,
-        channel_id: str,
+        channel_id: ChannelId,
         message: RenderedMessage,
         options: SendOptions | None = None,
     ) -> MessageRef | None:
