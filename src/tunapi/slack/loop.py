@@ -13,6 +13,7 @@ import anyio
 from ..core import lifecycle
 from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
+    handle_cancel_reaction_by_message_id,
     resolve_persona_prefix,
     resolve_upload_dir,
     send_to_channel,
@@ -498,31 +499,16 @@ async def _handle_cancel_reaction(
     running_tasks: RunningTasks,
     roundtables: RoundtableStore | None = None,
 ) -> None:
-    if reaction.emoji != CANCEL_EMOJI:
-        return
-
-    # Cancel roundtable session if reaction on header post
-    if roundtables:
-        session = roundtables.get(reaction.item_ts)
-        if session is not None:
-            logger.info(
-                "roundtable.cancel_by_reaction",
-                thread_id=session.thread_id,
-                user_id=reaction.user_id,
-            )
-            session.cancel_event.set()
-            return
-
-    # Cancel running task
-    for ref, task in list(running_tasks.items()):
-        if str(ref.message_id) == reaction.item_ts:
-            logger.info(
-                "slack.cancel_by_reaction",
-                ts=reaction.item_ts,
-                user_id=reaction.user_id,
-            )
-            task.cancel_requested.set()
-            return
+    await handle_cancel_reaction_by_message_id(
+        emoji=reaction.emoji,
+        cancel_emoji=CANCEL_EMOJI,
+        message_id=reaction.item_ts,
+        user_id=reaction.user_id,
+        running_tasks=running_tasks,
+        roundtables=roundtables,
+        transport_log_event="slack.cancel_by_reaction",
+        message_id_log_key="ts",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -26,6 +26,41 @@ async def send_to_channel(cfg: Any, channel_id: str, message: RenderedMessage) -
     await cfg.exec_cfg.transport.send(channel_id=channel_id, message=message)
 
 
+async def handle_cancel_reaction_by_message_id(
+    *,
+    emoji: str,
+    cancel_emoji: str,
+    message_id: str,
+    user_id: str,
+    running_tasks: Any,
+    roundtables: RoundtableStore | None,
+    transport_log_event: str,
+    message_id_log_key: str,
+) -> None:
+    if emoji != cancel_emoji:
+        return
+
+    if roundtables:
+        session = roundtables.get(message_id)
+        if session is not None:
+            logger.info(
+                "roundtable.cancel_by_reaction",
+                thread_id=session.thread_id,
+                user_id=user_id,
+            )
+            session.cancel_event.set()
+            return
+
+    for ref, task in list(running_tasks.items()):
+        if str(ref.message_id) == message_id:
+            logger.info(
+                transport_log_event,
+                **{message_id_log_key: message_id, "user_id": user_id},
+            )
+            task.cancel_requested.set()
+            return
+
+
 async def resolve_persona_prefix(prompt: str, chat_prefs: Any) -> str | None:
     """If prompt starts with @persona_name, prepend the persona prompt."""
     match = _PERSONA_PREFIX_RE.match(prompt)
