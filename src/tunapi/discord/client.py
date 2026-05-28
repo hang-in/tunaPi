@@ -8,7 +8,7 @@ import itertools
 import time
 from collections.abc import Awaitable, Callable, Hashable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import anyio
 import discord
@@ -37,6 +37,7 @@ logger = get_logger(__name__)
 
 # Default rate limit: ~1 message per second per channel (Discord: 5/5s)
 DEFAULT_CHANNEL_RPS = 1.0
+AutoArchiveDuration = Literal[60, 1440, 4320, 10080]
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -111,11 +112,12 @@ class DiscordBotClient:
 
         @self._bot.event
         async def on_ready() -> None:
+            bot = self._ensure_bot()
             assert self._ready_event is not None
             logger.info(
                 "gateway.connected",
-                user=self._bot.user.name if self._bot.user is not None else None,
-                user_id=self._bot.user.id if self._bot.user is not None else None,
+                user=bot.user.name if bot.user is not None else None,
+                user_id=bot.user.id if bot.user is not None else None,
                 guild_id=self._guild_id,
             )
             self._ready_event.set()
@@ -140,7 +142,7 @@ class DiscordBotClient:
         """Get the bot user."""
         if self._bot is None:
             return None
-        return self._bot.user
+        return cast(discord.User | None, self._bot.user)
 
     def set_message_handler(self, handler: MessageHandler) -> None:
         """Set the message handler."""
@@ -226,6 +228,7 @@ class DiscordBotClient:
         """Start the bot and wait until ready."""
         bot = self._ensure_bot()
         assert self._ready_event is not None
+        ready_event = self._ready_event
         self._startup_error = None
         logger.info("gateway.connecting", guild_id=self._guild_id)
 
@@ -238,7 +241,7 @@ class DiscordBotClient:
                 # Suppress "Session is closed" error during shutdown
                 if "Session is closed" not in str(e):
                     self._startup_error = e
-                    self._ready_event.set()
+                    ready_event.set()
                     logger.exception(
                         "gateway.start_failed",
                         error=str(e),
@@ -247,7 +250,7 @@ class DiscordBotClient:
                     raise
             except Exception as exc:  # noqa: BLE001
                 self._startup_error = exc
-                self._ready_event.set()
+                ready_event.set()
                 logger.exception(
                     "gateway.start_failed",
                     error=str(exc),
@@ -256,7 +259,7 @@ class DiscordBotClient:
                 raise
 
         self._start_task = asyncio.create_task(_run_bot(), name="discord-bot-start")
-        await self._ready_event.wait()
+        await ready_event.wait()
         if self._startup_error is not None:
             raise self._startup_error
 
@@ -321,10 +324,11 @@ class DiscordBotClient:
         suppress_embeds: bool = True,
     ) -> SentMessage | None:
         """Internal implementation of send_message."""
-        channel = self._bot.get_channel(thread_id or channel_id)
+        bot = self._ensure_bot()
+        channel = bot.get_channel(thread_id or channel_id)
         if channel is None:
             try:
-                channel = await self._bot.fetch_channel(thread_id or channel_id)
+                channel = await bot.fetch_channel(thread_id or channel_id)
             except discord.NotFound:
                 return None
 
@@ -424,10 +428,11 @@ class DiscordBotClient:
         suppress_embeds: bool = True,
     ) -> SentMessage | None:
         """Internal implementation of edit_message."""
-        channel = self._bot.get_channel(channel_id)
+        bot = self._ensure_bot()
+        channel = bot.get_channel(channel_id)
         if channel is None:
             try:
-                channel = await self._bot.fetch_channel(channel_id)
+                channel = await bot.fetch_channel(channel_id)
             except discord.NotFound:
                 return None
 
@@ -485,10 +490,11 @@ class DiscordBotClient:
         message_id: int,
     ) -> bool:
         """Internal implementation of delete_message."""
-        channel = self._bot.get_channel(channel_id)
+        bot = self._ensure_bot()
+        channel = bot.get_channel(channel_id)
         if channel is None:
             try:
-                channel = await self._bot.fetch_channel(channel_id)
+                channel = await bot.fetch_channel(channel_id)
             except discord.NotFound:
                 return False
 
@@ -511,13 +517,14 @@ class DiscordBotClient:
         channel_id: int,
         message_id: int,
         name: str,
-        auto_archive_duration: int = 1440,  # 24 hours
+        auto_archive_duration: AutoArchiveDuration = 1440,  # 24 hours
     ) -> int | None:
         """Create a thread from a message."""
-        channel = self._bot.get_channel(channel_id)
+        bot = self._ensure_bot()
+        channel = bot.get_channel(channel_id)
         if channel is None:
             try:
-                channel = await self._bot.fetch_channel(channel_id)
+                channel = await bot.fetch_channel(channel_id)
             except discord.NotFound:
                 return None
 
@@ -541,13 +548,14 @@ class DiscordBotClient:
         *,
         channel_id: int,
         name: str,
-        auto_archive_duration: int = 1440,  # 24 hours
+        auto_archive_duration: AutoArchiveDuration = 1440,  # 24 hours
     ) -> int | None:
         """Create a thread without a starter message."""
-        channel = self._bot.get_channel(channel_id)
+        bot = self._ensure_bot()
+        channel = bot.get_channel(channel_id)
         if channel is None:
             try:
-                channel = await self._bot.fetch_channel(channel_id)
+                channel = await bot.fetch_channel(channel_id)
             except discord.NotFound:
                 return None
 
@@ -568,11 +576,11 @@ class DiscordBotClient:
 
     def get_guild(self, guild_id: int) -> discord.Guild | None:
         """Get a guild by ID."""
-        return self._bot.get_guild(guild_id)
+        return self._ensure_bot().get_guild(guild_id)
 
     def get_channel(self, channel_id: int) -> discord.abc.GuildChannel | None:
         """Get a channel by ID."""
-        channel = self._bot.get_channel(channel_id)
+        channel = self._ensure_bot().get_channel(channel_id)
         if isinstance(channel, discord.abc.GuildChannel):
             return channel
         return None
