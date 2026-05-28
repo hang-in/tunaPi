@@ -14,6 +14,8 @@ from ..core import lifecycle
 from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
     handle_cancel_reaction_by_message_id,
+    render_file_put_results,
+    render_saved_file_context,
     resolve_persona_prefix,
     resolve_upload_dir,
     send_to_channel,
@@ -179,11 +181,7 @@ async def _handle_file_command(
             return True
 
         results = await _put_files(cfg, msg.channel_id, msg.files)
-        text = (
-            "\n".join(f"- {r.message}" for r in results)
-            if results
-            else "No files processed."
-        )
+        text = render_file_put_results(results)
         await send(RenderedMessage(text=text))
         return True
 
@@ -539,11 +537,7 @@ async def _resolve_prompt(
     # -- Auto file put: attachment with no text → save to project --
     if msg.files and not msg.text.strip() and cfg.files_enabled:
         results = await _put_files(cfg, msg.channel_id, msg.files)
-        text = (
-            "\n".join(f"- {r.message}" for r in results)
-            if results
-            else "No files processed."
-        )
+        text = render_file_put_results(results)
         await send(RenderedMessage(text=text))
         return None
 
@@ -551,10 +545,7 @@ async def _resolve_prompt(
     file_context = ""
     if msg.files and msg.text.strip() and cfg.files_enabled:
         results = await _put_files(cfg, msg.channel_id, msg.files)
-        saved_paths = [str(r.path) for r in results if r.ok and r.path]
-        if saved_paths:
-            paths_str = ", ".join(f"`{p}`" for p in saved_paths)
-            file_context = f"\n[Attached files saved to: {paths_str}]\n"
+        file_context = render_saved_file_context(results)
 
     # -- Voice transcription --
     voice_text = await _handle_voice(msg, cfg)

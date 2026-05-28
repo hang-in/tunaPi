@@ -15,6 +15,22 @@ logger = get_logger(__name__)
 _PERSONA_PREFIX_RE = re.compile(r"^@(\w+)\s+", re.UNICODE)
 
 
+def render_file_put_results(results: list[Any]) -> str:
+    return (
+        "\n".join(f"- {result.message}" for result in results)
+        if results
+        else "No files processed."
+    )
+
+
+def render_saved_file_context(results: list[Any]) -> str:
+    saved_paths = [str(result.path) for result in results if result.ok and result.path]
+    if not saved_paths:
+        return ""
+    paths_str = ", ".join(f"`{path}`" for path in saved_paths)
+    return f"\n[Attached files saved to: {paths_str}]\n"
+
+
 def resolve_upload_dir(runtime: Any, channel_id: str) -> Path:
     """Resolve the upload target directory for a channel-bound project."""
     context = runtime.default_context_for_chat(channel_id)
