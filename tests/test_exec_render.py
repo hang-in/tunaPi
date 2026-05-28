@@ -233,7 +233,7 @@ def test_progress_renderer_renders_commands_in_markdown() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5, command_width=None)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    assert parts.body is None
+    assert parts.body == "✓ `echo 30`  \n✓ `echo 31`  \n✓ `echo 32`"
 
 
 def test_progress_renderer_handles_duplicate_action_ids() -> None:
