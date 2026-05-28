@@ -23,7 +23,6 @@ from tunapi.core.roundtable import (
 from tunapi.logging import get_logger
 from tunapi.markdown import MarkdownParts
 from tunapi.model import ResumeToken
-from tunapi.progress import ProgressTracker
 from tunapi.runner_bridge import RunningTasks
 from tunapi.scheduler import ThreadJob, ThreadScheduler
 from tunapi.runners.run_options import EngineRunOptions, apply_run_options
@@ -32,12 +31,14 @@ from tunapi.transport import MessageRef, RenderedMessage, SendOptions
 from .allowlist import is_user_allowed
 from .loop_state import (
     MediaGroupBuffer,
-    ResumeDecision,
     _MediaGroupState,
     _diff_keys,
     _extract_engine_id_from_header,
     _strip_ctx_lines,
 )
+from .resume_queue import ResumeResolver as _ResumeResolverImpl
+from .resume_queue import _send_queued_progress as _send_queued_progress_impl
+from .resume_queue import send_with_resume as _send_with_resume_impl
 from .bridge import CANCEL_BUTTON_ID, DiscordBridgeConfig, DiscordTransport
 from .commands import discover_command_ids, register_plugin_commands
 from .handlers import (
@@ -208,28 +209,13 @@ async def _send_queued_progress(
     resume_token: ResumeToken,
     context: RunContext | None,
 ) -> MessageRef | None:
-    tracker = ProgressTracker(engine=resume_token.engine)
-    tracker.set_resume(resume_token)
-    context_line = cfg.runtime.format_context_line(context)
-    state = tracker.snapshot(context_line=context_line)
-    queued = cfg.exec_cfg.presenter.render_progress(
-        state,
-        elapsed_s=0.0,
-        label="queued",
-    )
-    message = RenderedMessage(
-        text=queued.text,
-        extra={**queued.extra, "show_cancel": False},
-    )
-    reply_ref = MessageRef(
+    return await _send_queued_progress_impl(
+        cfg,
         channel_id=channel_id,
-        message_id=user_msg_id,
+        user_msg_id=user_msg_id,
         thread_id=thread_id,
-    )
-    return await cfg.exec_cfg.transport.send(
-        channel_id=channel_id,
-        message=message,
-        options=SendOptions(reply_to=reply_ref, notify=False, thread_id=thread_id),
+        resume_token=resume_token,
+        context=context,
     )
 
 
@@ -255,37 +241,22 @@ async def send_with_resume(
     session_key: tuple[int, int | None] | None,
     text: str,
 ) -> None:
-    resume = await _wait_for_resume(running_task)
-    if resume is None:
-        await _send_plain_reply(
-            cfg,
-            channel_id=channel_id,
-            user_msg_id=user_msg_id,
-            thread_id=thread_id,
-            text="resume token not ready yet; try replying to the final message.",
-        )
-        return
-    progress_ref = await _send_queued_progress(
+    await _send_with_resume_impl(
         cfg,
+        enqueue,
+        running_task,
         channel_id=channel_id,
         user_msg_id=user_msg_id,
         thread_id=thread_id,
-        resume_token=resume,
-        context=running_task.context,
-    )
-    await enqueue(
-        channel_id,
-        user_msg_id,
-        text,
-        resume,
-        running_task.context,
-        thread_id,
-        session_key,
-        progress_ref,
+        session_key=session_key,
+        text=text,
+        wait_for_resume=_wait_for_resume,
+        send_plain_reply=_send_plain_reply,
+        send_queued_progress=_send_queued_progress,
     )
 
 
-class ResumeResolver:
+class ResumeResolver(_ResumeResolverImpl):
     def __init__(
         self,
         *,
@@ -306,45 +277,13 @@ class ResumeResolver:
             Awaitable[None],
         ],
     ) -> None:
-        self._cfg = cfg
-        self._task_group = task_group
-        self._running_tasks = running_tasks
-        self._enqueue_resume = enqueue_resume
-
-    async def resolve(
-        self,
-        *,
-        resume_token: ResumeToken | None,
-        reply_id: int | None,
-        chat_id: int,
-        user_msg_id: int,
-        thread_id: int | None,
-        session_key: tuple[int, int | None] | None,
-        prompt_text: str,
-    ) -> ResumeDecision:
-        if resume_token is not None:
-            return ResumeDecision(
-                resume_token=resume_token,
-                handled_by_running_task=False,
-            )
-        if reply_id is not None:
-            running_task = self._running_tasks.get(
-                MessageRef(channel_id=chat_id, message_id=reply_id)
-            )
-            if running_task is not None:
-                self._task_group.start_soon(
-                    send_with_resume,
-                    self._cfg,
-                    self._enqueue_resume,
-                    running_task,
-                    chat_id,
-                    user_msg_id,
-                    thread_id,
-                    session_key,
-                    prompt_text,
-                )
-                return ResumeDecision(resume_token=None, handled_by_running_task=True)
-        return ResumeDecision(resume_token=None, handled_by_running_task=False)
+        super().__init__(
+            cfg=cfg,
+            task_group=task_group,
+            running_tasks=running_tasks,
+            enqueue_resume=enqueue_resume,
+            send_with_resume_fn=send_with_resume,
+        )
 
 
 async def run_main_loop(
