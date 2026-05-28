@@ -128,9 +128,12 @@ async def run_main_loop(
     state_store = DiscordStateStore(cfg.runtime.config_path)
     prefs_store = DiscordPrefsStore(cfg.runtime.config_path)
     await prefs_store.ensure_loaded()
-    roundtable_store = RoundtableStore(
+    roundtable_path = (
         cfg.runtime.config_path / "discord_roundtables.json"
+        if cfg.runtime.config_path is not None
+        else None
     )
+    roundtable_store = RoundtableStore(roundtable_path)
     _ = cast(DiscordTransport, cfg.exec_cfg.transport)  # Used for type checking only
     scheduler: ThreadScheduler | None = None
     resume_resolver: ResumeResolver | None = None
@@ -202,7 +205,7 @@ async def run_main_loop(
         for ref in running_tasks:
             # ref is a MessageRef; check both channel_id and thread_id
             if ref.channel_id == channel_id or ref.thread_id == channel_id:
-                return ref.message_id
+                return ref.message_id if isinstance(ref.message_id, int) else None
         return None
 
     async def cancel_task(channel_id: int) -> None:

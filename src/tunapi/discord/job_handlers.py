@@ -284,19 +284,20 @@ async def dispatch_media_group(
         combined_prompt = "\n".join(file_annotations) + "\n\n" + prompt_text
 
     engine_id = state.engine_id or (ctx.cfg.runtime.default_engine or "claude")
-    overrides = await resolve_overrides(
-        ctx.prefs_store,
-        state.guild_id,
-        state.channel_id,
-        state.thread_id,
-        engine_id,
-    )
     run_options: EngineRunOptions | None = None
-    if overrides.model or overrides.reasoning:
-        run_options = EngineRunOptions(
-            model=overrides.model,
-            reasoning=overrides.reasoning,
+    if ctx.prefs_store is not None:
+        overrides = await resolve_overrides(
+            ctx.prefs_store,
+            state.guild_id,
+            state.channel_id,
+            state.thread_id,
+            engine_id,
         )
+        if overrides.model or overrides.reasoning:
+            run_options = EngineRunOptions(
+                model=overrides.model,
+                reasoning=overrides.reasoning,
+            )
 
     if failures:
         combined_prompt = (

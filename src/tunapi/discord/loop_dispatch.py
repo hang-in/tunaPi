@@ -120,13 +120,16 @@ async def handle_message(ctx: DiscordLoopContext, message: discord.Message) -> N
         if isinstance(ctx_val, DiscordChannelContext):
             channel_context = ctx_val
 
-    trigger_mode = await resolve_trigger_mode(
-        ctx.prefs_store,
-        guild_id,
-        channel_id,
-        thread_id,
-        default_mode=ctx.cfg.trigger_mode_default,
-    )
+    if ctx.prefs_store is None:
+        trigger_mode = ctx.cfg.trigger_mode_default
+    else:
+        trigger_mode = await resolve_trigger_mode(
+            ctx.prefs_store,
+            guild_id,
+            channel_id,
+            thread_id,
+            default_mode=ctx.cfg.trigger_mode_default,
+        )
     if trigger_mode == "mentions":
         bot_mentioned = is_bot_mentioned(message, ctx.cfg.bot.user)
         is_reply_to_bot = False
@@ -173,6 +176,11 @@ async def handle_message(ctx: DiscordLoopContext, message: discord.Message) -> N
     if cmd == "rt":
         import tunapi.discord.loop as loop
 
+        if ctx.roundtable_store is None:
+            await message.reply(
+                "Roundtable support is not available.", mention_author=False
+            )
+            return
         rt_send_opts = SendOptions(thread_id=thread_id)
         await loop._dispatch_rt_command(
             cmd_args,
@@ -350,17 +358,25 @@ async def handle_message(ctx: DiscordLoopContext, message: discord.Message) -> N
         has_state_store=ctx.state_store is not None,
     )
 
-    engine_id, engine_source = await resolve_effective_default_engine(
-        ctx.prefs_store,
-        guild_id=guild_id,
-        channel_id=channel_id,
-        thread_id=thread_id,
-        bound_thread_default=thread_context.default_engine if thread_context else None,
-        bound_channel_default=channel_context.default_engine
-        if channel_context
-        else None,
-        config_default=ctx.cfg.runtime.default_engine,
-    )
+    bound_thread_default = thread_context.default_engine if thread_context else None
+    bound_channel_default = channel_context.default_engine if channel_context else None
+    if ctx.prefs_store is None:
+        engine_id = (
+            bound_thread_default
+            or bound_channel_default
+            or ctx.cfg.runtime.default_engine
+        )
+        engine_source = "context" if engine_id else None
+    else:
+        engine_id, engine_source = await resolve_effective_default_engine(
+            ctx.prefs_store,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            thread_id=thread_id,
+            bound_thread_default=bound_thread_default,
+            bound_channel_default=bound_channel_default,
+            config_default=ctx.cfg.runtime.default_engine,
+        )
     if engine_id is None:
         engine_id = ctx.cfg.runtime.default_engine or "claude"
     logger.debug(
@@ -649,20 +665,21 @@ async def handle_message(ctx: DiscordLoopContext, message: discord.Message) -> N
             resume_token,
             run_context,
             thread_id,
-            session_meta,
+            session_meta,  # type: ignore[arg-type]
             progress_ref,
         )
         return
 
-    overrides = await resolve_overrides(
-        ctx.prefs_store, guild_id, channel_id, thread_id, engine_id
-    )
     run_options: EngineRunOptions | None = None
-    if overrides.model or overrides.reasoning:
-        run_options = EngineRunOptions(
-            model=overrides.model,
-            reasoning=overrides.reasoning,
+    if ctx.prefs_store is not None:
+        overrides = await resolve_overrides(
+            ctx.prefs_store, guild_id, channel_id, thread_id, engine_id
         )
+        if overrides.model or overrides.reasoning:
+            run_options = EngineRunOptions(
+                model=overrides.model,
+                reasoning=overrides.reasoning,
+            )
         logger.debug(
             "run_options.resolved",
             model=overrides.model,
