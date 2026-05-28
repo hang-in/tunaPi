@@ -13,6 +13,7 @@ import anyio
 from ..core import lifecycle
 from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
+    archive_roundtable_thread,
     handle_cancel_reaction_by_message_id,
     render_file_put_results,
     render_saved_file_context,
@@ -24,7 +25,6 @@ from ..core.chat_loop_helpers import (
 from ..core.memory_facade import ProjectMemoryFacade
 from ..journal import (
     Journal,
-    JournalEntry,
     PendingRunLedger,
     build_handoff_preamble,
     make_run_id,
@@ -336,48 +336,15 @@ async def _archive_roundtable(
     project: str | None = None,
     branch: str | None = None,
 ) -> None:
-    """Archive roundtable transcript to journal, then notify.
-
-    If *facade* and *project* are provided, also persist a
-    :class:`DiscussionRecord` in project memory.  Failures in
-    project-memory writes are suppressed — journal archive is the
-    primary path.
-    """
-    if journal and session.transcript:
-        import time as _t
-
-        ts = _t.strftime("%Y-%m-%dT%H:%M:%S")
-        run_id = f"rt:{session.thread_id}"
-        transcript_lines = []
-        for engine, answer in session.transcript:
-            transcript_lines.append(f"[{engine}]: {answer[:500]}")
-        entry = JournalEntry(
-            run_id=run_id,
-            channel_id=session.channel_id,
-            timestamp=ts,
-            event="roundtable_closed",
-            data={
-                "topic": session.topic,
-                "engines": session.engines,
-                "rounds": session.current_round,
-                "transcript": "\n\n".join(transcript_lines),
-            },
-        )
-        with contextlib.suppress(Exception):
-            await journal.append(entry)
-
-    # Project memory — best-effort, never blocks main archive path
-    if facade and project and session.transcript:
-        with contextlib.suppress(Exception):
-            await facade.save_roundtable(
-                session,
-                project,
-                branch_name=branch,
-                auto_synthesis=True,
-                auto_structured=True,
-            )
-
-    await send(RenderedMessage(text="🔴 라운드테이블이 종료되었습니다."))
+    await archive_roundtable_thread(
+        session,
+        journal,
+        send,
+        close_message="🔴 라운드테이블이 종료되었습니다.",
+        facade=facade,
+        project=project,
+        branch=branch,
+    )
 
 
 async def _dispatch_rt_command(

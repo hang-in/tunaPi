@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
+import time
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from ..journal import JournalEntry
 from ..logging import get_logger
 from ..transport import RenderedMessage
 from . import files
@@ -88,6 +91,49 @@ async def resolve_persona_prefix(prompt: str, chat_prefs: Any) -> str | None:
         return None
     user_text = prompt[match.end() :]
     return f"[역할: {persona.name}]\n{persona.prompt}\n\n---\n\n{user_text}"
+
+
+async def archive_roundtable_thread(
+    session: RoundtableSession,
+    journal: Any | None,
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    *,
+    close_message: str,
+    facade: Any | None = None,
+    project: str | None = None,
+    branch: str | None = None,
+) -> None:
+    if journal and session.transcript:
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+        transcript_lines = [
+            f"[{engine}]: {answer[:500]}" for engine, answer in session.transcript
+        ]
+        entry = JournalEntry(
+            run_id=f"rt:{session.thread_id}",
+            channel_id=session.channel_id,
+            timestamp=timestamp,
+            event="roundtable_closed",
+            data={
+                "topic": session.topic,
+                "engines": session.engines,
+                "rounds": session.current_round,
+                "transcript": "\n\n".join(transcript_lines),
+            },
+        )
+        with contextlib.suppress(Exception):
+            await journal.append(entry)
+
+    if facade and project and session.transcript:
+        with contextlib.suppress(Exception):
+            await facade.save_roundtable(
+                session,
+                project,
+                branch_name=branch,
+                auto_synthesis=True,
+                auto_structured=True,
+            )
+
+    await send(RenderedMessage(text=close_message))
 
 
 async def start_roundtable_thread(
