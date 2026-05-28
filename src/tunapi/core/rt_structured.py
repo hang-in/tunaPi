@@ -12,8 +12,9 @@ Each project gets its own JSON file at
 from __future__ import annotations
 
 import time
+from builtins import list as list_type
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import msgspec
 
@@ -68,13 +69,16 @@ class StructuredRoundtableStore:
         store = self._stores.get(project)
         if store is None:
             path = self._base_dir / f"{project}_rt_structured.json"
-            store = JsonStateStore(
-                path,
-                version=_STATE_VERSION,
-                state_type=_State,
-                state_factory=_State,
-                log_prefix="rt_structured",
-                logger=logger,
+            store = cast(
+                JsonStateStore[_State],
+                JsonStateStore(
+                    path,
+                    version=_STATE_VERSION,
+                    state_type=_State,
+                    state_factory=_State,
+                    log_prefix="rt_structured",
+                    logger=logger,
+                ),
             )
             self._stores[project] = store
         return store
@@ -85,9 +89,9 @@ class StructuredRoundtableStore:
         *,
         session_id: str | None = None,
         topic: str,
-        stages: list[str],
-        participants: list[RoundtableParticipant],
-        utterances: list[Utterance] | None = None,
+        stages: list_type[str],
+        participants: list_type[RoundtableParticipant],
+        utterances: list_type[Utterance] | None = None,
     ) -> StructuredRoundtableSession:
         sid = session_id or generate_entry_id()
         session = StructuredRoundtableSession(
@@ -120,7 +124,7 @@ class StructuredRoundtableStore:
         project: str,
         *,
         status: StructuredSessionStatus | None = None,
-    ) -> list[StructuredRoundtableSession]:
+    ) -> list_type[StructuredRoundtableSession]:
         store = self._store_for(project)
         async with store._lock:
             store._reload_locked_if_needed()

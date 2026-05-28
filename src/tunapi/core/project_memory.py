@@ -12,7 +12,7 @@ from __future__ import annotations
 import secrets
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import msgspec
 
@@ -66,13 +66,16 @@ class ProjectMemoryStore:
         store = self._stores.get(project)
         if store is None:
             path = self._base_dir / f"{project}.json"
-            store = JsonStateStore(
-                path,
-                version=_STATE_VERSION,
-                state_type=_State,
-                state_factory=_State,
-                log_prefix="project_memory",
-                logger=logger,
+            store = cast(
+                JsonStateStore[_State],
+                JsonStateStore(
+                    path,
+                    version=_STATE_VERSION,
+                    state_type=_State,
+                    state_factory=_State,
+                    log_prefix="project_memory",
+                    logger=logger,
+                ),
             )
             self._stores[project] = store
         return store

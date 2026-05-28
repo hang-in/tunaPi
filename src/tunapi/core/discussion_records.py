@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import msgspec
 
@@ -79,13 +79,16 @@ class DiscussionRecordStore:
         store = self._stores.get(project)
         if store is None:
             path = self._base_dir / f"{project}_discussions.json"
-            store = JsonStateStore(
-                path,
-                version=_STATE_VERSION,
-                state_type=_State,
-                state_factory=_State,
-                log_prefix="discussion_records",
-                logger=logger,
+            store = cast(
+                JsonStateStore[_State],
+                JsonStateStore(
+                    path,
+                    version=_STATE_VERSION,
+                    state_type=_State,
+                    state_factory=_State,
+                    log_prefix="discussion_records",
+                    logger=logger,
+                ),
             )
             self._stores[project] = store
         return store

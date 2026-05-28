@@ -12,8 +12,9 @@ Each project gets its own JSON file at
 from __future__ import annotations
 
 import time
+from builtins import list as list_type
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import msgspec
 
@@ -70,13 +71,16 @@ class SynthesisStore:
         store = self._stores.get(project)
         if store is None:
             path = self._base_dir / f"{project}_synthesis.json"
-            store = JsonStateStore(
-                path,
-                version=_STATE_VERSION,
-                state_type=_State,
-                state_factory=_State,
-                log_prefix="synthesis",
-                logger=logger,
+            store = cast(
+                JsonStateStore[_State],
+                JsonStateStore(
+                    path,
+                    version=_STATE_VERSION,
+                    state_type=_State,
+                    state_factory=_State,
+                    log_prefix="synthesis",
+                    logger=logger,
+                ),
             )
             self._stores[project] = store
         return store
@@ -88,10 +92,10 @@ class SynthesisStore:
         source_type: SourceType,
         source_id: str,
         thesis: str,
-        agreements: list[str] | None = None,
-        disagreements: list[str] | None = None,
-        open_questions: list[str] | None = None,
-        action_items: list[ActionItem] | None = None,
+        agreements: list_type[str] | None = None,
+        disagreements: list_type[str] | None = None,
+        open_questions: list_type[str] | None = None,
+        action_items: list_type[ActionItem] | None = None,
         version: int = 1,
     ) -> SynthesisArtifact:
         artifact = SynthesisArtifact(
@@ -124,7 +128,7 @@ class SynthesisStore:
         project: str,
         *,
         source_type: SourceType | None = None,
-    ) -> list[SynthesisArtifact]:
+    ) -> list_type[SynthesisArtifact]:
         store = self._store_for(project)
         async with store._lock:
             store._reload_locked_if_needed()
@@ -140,10 +144,10 @@ class SynthesisStore:
         artifact_id: str,
         *,
         thesis: str | None = None,
-        agreements: list[str] | None = None,
-        disagreements: list[str] | None = None,
-        open_questions: list[str] | None = None,
-        action_items: list[ActionItem] | None = None,
+        agreements: list_type[str] | None = None,
+        disagreements: list_type[str] | None = None,
+        open_questions: list_type[str] | None = None,
+        action_items: list_type[ActionItem] | None = None,
     ) -> SynthesisArtifact | None:
         """Create a new version in-place (bumps version, updates fields)."""
         store = self._store_for(project)

@@ -12,8 +12,9 @@ Each project gets its own JSON file at
 from __future__ import annotations
 
 import time
+from builtins import list as list_type
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import msgspec
 
@@ -61,13 +62,16 @@ class ConversationBranchStore:
         store = self._stores.get(project)
         if store is None:
             path = self._base_dir / f"{project}_conv_branches.json"
-            store = JsonStateStore(
-                path,
-                version=_STATE_VERSION,
-                state_type=_State,
-                state_factory=_State,
-                log_prefix="conversation_branch",
-                logger=logger,
+            store = cast(
+                JsonStateStore[_State],
+                JsonStateStore(
+                    path,
+                    version=_STATE_VERSION,
+                    state_type=_State,
+                    state_factory=_State,
+                    log_prefix="conversation_branch",
+                    logger=logger,
+                ),
             )
             self._stores[project] = store
             # Migrate legacy "merged" → "adopted"
@@ -113,7 +117,7 @@ class ConversationBranchStore:
         project: str,
         *,
         status: ConvBranchStatus | None = None,
-    ) -> list[ConversationBranch]:
+    ) -> list_type[ConversationBranch]:
         store = self._store_for(project)
         async with store._lock:
             store._reload_locked_if_needed()
