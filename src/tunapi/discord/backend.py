@@ -37,10 +37,11 @@ def _get_discord_settings(transport_config: object) -> dict[str, Any]:
     Since Discord is a plugin, settings come as a dict from model_extra.
     """
     if isinstance(transport_config, dict):
-        return transport_config
+        return cast(dict[str, Any], transport_config)
     # Try to convert pydantic model to dict
-    if hasattr(transport_config, "model_dump"):
-        return transport_config.model_dump()
+    model_dump = getattr(transport_config, "model_dump", None)
+    if callable(model_dump):
+        return cast(dict[str, Any], model_dump())
     raise TypeError(f"unexpected transport_config type: {type(transport_config)}")
 
 

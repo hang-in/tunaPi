@@ -328,8 +328,9 @@ class DiscordTransport:
         view = CancelView() if show_cancel else ClearView()
 
         followups = self._extract_followups(message)
+        thread_id = cast(int, ref.thread_id) if ref.thread_id is not None else None
         edited = await self._bot.edit_message(
-            channel_id=ref.thread_id or channel_id,
+            channel_id=thread_id or channel_id,
             message_id=message_id,
             content=message.text,
             view=view,
@@ -343,14 +344,14 @@ class DiscordTransport:
                 channel_id=channel_id,
                 followups=followups,
                 reply_to_message_id=None,
-                thread_id=ref.thread_id,
+                thread_id=thread_id,
             )
 
         return MessageRef(
             channel_id=channel_id,
             message_id=edited.message_id,
             raw=edited,
-            thread_id=ref.thread_id,
+            thread_id=thread_id,
         )
 
     async def delete(self, *, ref: MessageRef) -> bool:

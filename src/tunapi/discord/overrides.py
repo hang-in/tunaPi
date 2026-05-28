@@ -6,7 +6,7 @@ Implements cascading override resolution: thread -> channel -> config default ->
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 if TYPE_CHECKING:
     from .prefs import DiscordPrefsStore
@@ -107,12 +107,12 @@ async def resolve_trigger_mode(
     if thread_id is not None:
         thread_mode = await prefs_store.get_trigger_mode(guild_id, thread_id)
         if thread_mode is not None:
-            return thread_mode
+            return cast(Literal["all", "mentions"], thread_mode)
 
     # Fall back to channel
     channel_mode = await prefs_store.get_trigger_mode(guild_id, channel_id)
     if channel_mode is not None:
-        return channel_mode
+        return cast(Literal["all", "mentions"], channel_mode)
 
     # Default
     return default_mode
