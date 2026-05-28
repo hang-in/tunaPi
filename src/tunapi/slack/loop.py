@@ -17,6 +17,7 @@ from ..core.chat_loop_helpers import (
     auto_bind_channel_project,
     dispatch_roundtable_command,
     handle_cancel_reaction_by_message_id,
+    handle_file_command,
     render_file_put_results,
     render_saved_file_context,
     resolve_persona_prefix,
@@ -169,61 +170,41 @@ async def _handle_file_command(
     send: _SendFn,
 ) -> bool:
     """Handle /file put or /file get. Returns True if handled."""
-    if not cfg.files_enabled:
-        await send(RenderedMessage(text="File transfer is disabled."))
-        return True
 
-    parts = args.strip().split(None, 1)
-    subcmd = parts[0].lower() if parts else ""
-    subargs = parts[1] if len(parts) > 1 else ""
-
-    if subcmd == "put":
-        if not msg.files:
-            await send(RenderedMessage(text="Attach files to the message to upload."))
-            return True
-
-        results = await _put_files(cfg, msg.channel_id, msg.files)
-        text = render_file_put_results(results)
-        await send(RenderedMessage(text=text))
-        return True
-
-    elif subcmd == "get":
-        rel_path = subargs.strip()
-        if not rel_path:
-            await send(RenderedMessage(text="Usage: `!file get <path>`"))
-            return True
-
-        context = cfg.runtime.default_context_for_chat(msg.channel_id)
-        root = cfg.runtime.resolve_run_cwd(context) or Path.cwd()
-
+    async def _get_file(
+        rel_path: str, root: Path
+    ) -> tuple[str | None, str | None, Any | None]:
         filename, error, content = await handle_file_get(
             rel_path=rel_path,
             root=root,
             deny_globs=cfg.files_deny_globs,
             max_bytes=cfg.files_max_download_bytes,
         )
-        if error or filename is None or content is None:
-            await send(RenderedMessage(text=error or "Failed to read file."))
-            return True
+        return filename, error, content
 
-        # Upload file back to Slack
+    async def _upload_file(filename: str, content: Any, _rel_path: str) -> bool:
         file_id = await cfg.bot.upload_file(
             filename,
             content,
             channel_id=msg.channel_id,
             thread_ts=msg.thread_ts or msg.ts,
         )
-        if not file_id:
-            await send(RenderedMessage(text="Failed to upload file."))
-        return True
+        return bool(file_id)
 
-    else:
-        await send(
-            RenderedMessage(
-                text="Usage: `!file put` (with attachments) or `!file get <path>`"
-            )
-        )
-        return True
+    return await handle_file_command(
+        args,
+        files_enabled=cfg.files_enabled,
+        channel_id=msg.channel_id,
+        runtime=cfg.runtime,
+        send=send,
+        has_attachments=lambda: bool(msg.files),
+        put_files=lambda: _put_files(cfg, msg.channel_id, msg.files or []),
+        get_file=_get_file,
+        upload_file=_upload_file,
+        put_usage="Attach files to the message to upload.",
+        get_usage="Usage: `!file get <path>`",
+        unknown_usage="Usage: `!file put` (with attachments) or `!file get <path>`",
+    )
 
 
 # ---------------------------------------------------------------------------

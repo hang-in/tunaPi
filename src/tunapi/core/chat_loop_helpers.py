@@ -252,6 +252,64 @@ async def auto_bind_channel_project(
             return
 
 
+async def handle_file_command(
+    args: str,
+    *,
+    files_enabled: bool,
+    channel_id: str,
+    runtime: Any,
+    send: Callable[[RenderedMessage], Awaitable[None]],
+    has_attachments: Callable[[], bool],
+    put_files: Callable[[], Awaitable[list[Any]]],
+    get_file: Callable[
+        [str, Path], Awaitable[tuple[str | None, str | None, Any | None]]
+    ],
+    upload_file: Callable[[str, Any, str], Awaitable[bool]],
+    put_usage: str,
+    get_usage: str,
+    unknown_usage: str,
+) -> bool:
+    """Handle transport-neutral /file routing around transport-specific I/O."""
+    if not files_enabled:
+        await send(RenderedMessage(text="File transfer is disabled."))
+        return True
+
+    parts = args.strip().split(None, 1)
+    subcmd = parts[0].lower() if parts else ""
+    subargs = parts[1] if len(parts) > 1 else ""
+
+    if subcmd == "put":
+        if not has_attachments():
+            await send(RenderedMessage(text=put_usage))
+            return True
+
+        results = await put_files()
+        await send(RenderedMessage(text=render_file_put_results(results)))
+        return True
+
+    if subcmd == "get":
+        rel_path = subargs.strip()
+        if not rel_path:
+            await send(RenderedMessage(text=get_usage))
+            return True
+
+        context = runtime.default_context_for_chat(channel_id)
+        root = runtime.resolve_run_cwd(context) or Path.cwd()
+
+        filename, error, content = await get_file(rel_path, root)
+        if error or filename is None or content is None:
+            await send(RenderedMessage(text=error or "Failed to read file."))
+            return True
+
+        ok = await upload_file(filename, content, rel_path)
+        if not ok:
+            await send(RenderedMessage(text="Failed to upload file."))
+        return True
+
+    await send(RenderedMessage(text=unknown_usage))
+    return True
+
+
 async def start_roundtable_thread(
     channel_id: str,
     topic: str,
