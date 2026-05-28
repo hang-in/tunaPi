@@ -13,7 +13,7 @@ from typing import Any, TYPE_CHECKING
 
 from ..core.chat_command_handlers import handle_model_command, handle_models_command
 from ..core.commands import parse_command  # noqa: F401 — re-exported
-from ..engine_models import get_models, shorten_model
+from ..engine_models import shorten_model
 from ..transport import RenderedMessage
 from ..context import RunContext
 from ..logging import get_logger
@@ -89,75 +89,6 @@ async def handle_model(
         describe_model=shorten_model,
         include_models_hint=False,
     )
-    parts = args.strip().split(None, 1)
-    available = list(runtime.available_engine_ids())
-    engine_map = {e.lower(): e for e in available}
-
-    if not parts or not parts[0]:
-        current_engine = None
-        if chat_prefs:
-            current_engine = await chat_prefs.get_default_engine(channel_id)
-        current_display = current_engine or runtime.default_engine
-        model_display = ""
-        if chat_prefs:
-            model = await chat_prefs.get_engine_model(channel_id, current_display)
-            if model:
-                model_display = f"\nModel: `{model}` ({shorten_model(model)})"
-        engine_list = ", ".join(f"`{e}`" for e in available)
-        await send(
-            RenderedMessage(
-                text=(
-                    f"Current engine: `{current_display}`{model_display}\n"
-                    f"Available: {engine_list}\n\n"
-                    "Usage: `!model <engine>` | `!model <engine> <model>` | `!model <engine> clear`"
-                )
-            )
-        )
-        return
-
-    first = parts[0].lower()
-    second = parts[1].strip() if len(parts) > 1 else ""
-
-    if first not in engine_map:
-        await send(
-            RenderedMessage(
-                text=f"Unknown engine `{first}`. Available: {', '.join(f'`{e}`' for e in available)}"
-            )
-        )
-        return
-
-    canonical_engine = engine_map[first]
-
-    if not second:
-        if chat_prefs:
-            await chat_prefs.set_default_engine(channel_id, canonical_engine)
-        model_display = ""
-        if chat_prefs:
-            model = await chat_prefs.get_engine_model(channel_id, canonical_engine)
-            if model:
-                model_display = f" (model: `{model}`)"
-        await send(
-            RenderedMessage(
-                text=f"Default engine set to `{canonical_engine}`{model_display}"
-            )
-        )
-        return
-
-    if second.lower() == "clear":
-        if chat_prefs:
-            await chat_prefs.clear_engine_model(channel_id, canonical_engine)
-        await send(
-            RenderedMessage(text=f"Model override cleared for `{canonical_engine}`")
-        )
-        return
-
-    if chat_prefs:
-        await chat_prefs.set_engine_model(channel_id, canonical_engine, second)
-    await send(
-        RenderedMessage(
-            text=f"Model for `{canonical_engine}` set to `{second}` ({shorten_model(second)})"
-        )
-    )
 
 
 async def handle_models(
@@ -177,47 +108,6 @@ async def handle_models(
         title="**Available Models**",
         engine_bold=lambda engine: f"**{engine}**",
     )
-    available = list(runtime.available_engine_ids())
-    target = args.strip().lower() if args.strip() else None
-
-    if target:
-        engine_map = {e.lower(): e for e in available}
-        if target not in engine_map:
-            await send(
-                RenderedMessage(
-                    text=f"Unknown engine `{target}`. Available: {', '.join(f'`{e}`' for e in available)}"
-                )
-            )
-            return
-        engines_to_show = [engine_map[target]]
-    else:
-        engines_to_show = available
-
-    lines: list[str] = ["**Available Models**", ""]
-    current_models: dict[str, str] = {}
-    if chat_prefs:
-        current_models = await chat_prefs.get_all_engine_models(channel_id)
-
-    for engine in engines_to_show:
-        models, source = get_models(engine)
-        current = current_models.get(engine)
-        current_marker = f" ← current: `{current}`" if current else ""
-
-        if models:
-            model_list = ", ".join(f"`{m}`" for m in models)
-            lines.append(f"**{engine}** ({source}){current_marker}")
-            lines.append(f"  {model_list}")
-        else:
-            lines.append(f"**{engine}** (no known models){current_marker}")
-        lines.append("")
-
-    lines.append("Set: `!model <engine> <model>` | Clear: `!model <engine> clear`")
-    await send(RenderedMessage(text="\n".join(lines)))
-
-
-# ---------------------------------------------------------------------------
-# !trigger
-# ---------------------------------------------------------------------------
 
 
 async def handle_trigger(
