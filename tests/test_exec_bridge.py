@@ -437,3 +437,87 @@ async def test_handle_message_error_preserves_resume_token() -> None:
     last_edit = transport.edit_calls[-1]["message"].text
     assert "error" in last_edit.lower()
     assert session_id[:5] in last_edit
+
+
+# ---------------------------------------------------------------------------
+# handle_message setup-phase characterization
+#
+# Pin the behaviour of the project-session resume injection and pending-run
+# ledger registration before those blocks are extracted into helpers.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_handle_message_injects_project_resume() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    cfg = ExecBridgeConfig(
+        transport=FakeTransport(), presenter=MarkdownPresenter(), final_notify=True
+    )
+    stored = ResumeToken(engine=CODEX_ENGINE, value="stored-sid")
+    project_sessions = AsyncMock()
+    project_sessions.get = AsyncMock(return_value=stored)
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="go"),
+        resume_token=None,
+        context=SimpleNamespace(project="proj-a"),
+        project_sessions=project_sessions,
+    )
+
+    project_sessions.get.assert_awaited_once()
+    assert runner.calls[0][1] == stored
+
+
+@pytest.mark.anyio
+async def test_handle_message_skips_project_resume_for_other_engine() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    cfg = ExecBridgeConfig(
+        transport=FakeTransport(), presenter=MarkdownPresenter(), final_notify=True
+    )
+    # Stored token belongs to a different engine — must NOT be injected.
+    stored = ResumeToken(engine="claude", value="other-engine-sid")
+    project_sessions = AsyncMock()
+    project_sessions.get = AsyncMock(return_value=stored)
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="go"),
+        resume_token=None,
+        context=SimpleNamespace(project="proj-a"),
+        project_sessions=project_sessions,
+    )
+
+    # Mismatched engine token dropped → runner invoked without a resume token.
+    assert runner.calls[0][1] is None
+
+
+@pytest.mark.anyio
+async def test_handle_message_registers_and_completes_ledger() -> None:
+    from unittest.mock import AsyncMock
+
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    cfg = ExecBridgeConfig(
+        transport=FakeTransport(), presenter=MarkdownPresenter(), final_notify=True
+    )
+    ledger = AsyncMock()
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="go"),
+        resume_token=None,
+        ledger=ledger,
+        run_id="run-1",
+    )
+
+    ledger.register.assert_awaited_once()
+    ledger.complete.assert_awaited_once_with("run-1")

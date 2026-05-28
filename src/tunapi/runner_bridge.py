@@ -479,6 +479,293 @@ async def _finalize_run(
             await journal.append(entry)
 
 
+async def _inject_project_resume(
+    resume_token: ResumeToken | None,
+    *,
+    project_sessions: ProjectSessionStore | None,
+    project_key: str | None,
+    project_cwd: object,
+    engine: str,
+) -> ResumeToken | None:
+    """Resolve a resume token from the project session store when none was
+    supplied. Tokens belonging to a different engine are ignored (engine
+    switch via model.set)."""
+    if resume_token is None and project_sessions is not None and project_key:
+        candidate = await project_sessions.get(project_key, cwd=project_cwd)
+        if candidate is None or candidate.engine == engine:
+            return candidate
+    return resume_token
+
+
+async def _register_pending_run(
+    ledger: PendingRunLedger | None,
+    run_id: str | None,
+    incoming: IncomingMessage,
+    runner: Runner,
+) -> None:
+    """Register the run in the pending-run ledger before the runner starts."""
+    if ledger is not None and run_id is not None:
+        with contextlib.suppress(Exception):
+            await ledger.register(
+                PendingRun(
+                    run_id=run_id,
+                    channel_id=str(incoming.channel_id),
+                    engine=runner.engine,
+                    prompt_summary=_truncate(incoming.text, 200),
+                    started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                )
+            )
+
+
+def _wrap_on_thread_known_for_project(
+    on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]] | None,
+    *,
+    project_sessions: ProjectSessionStore | None,
+    project_key: str | None,
+    project_cwd: object,
+) -> Callable[[ResumeToken, anyio.Event], Awaitable[None]] | None:
+    """Wrap ``on_thread_known`` so the resume token is also persisted to the
+    project session store. Returns the original callback unchanged when no
+    project session store is configured."""
+    if project_sessions is None or not project_key:
+        return on_thread_known
+
+    async def wrapped(token: ResumeToken, done: anyio.Event) -> None:
+        await project_sessions.set(
+            project_key,
+            token,
+            cwd=project_cwd,  # type: ignore[arg-type]
+        )
+        if on_thread_known is not None:
+            await on_thread_known(token, done)
+
+    return wrapped
+
+
+async def _handle_run_error(
+    cfg: ExecBridgeConfig,
+    *,
+    error: Exception,
+    progress_tracker: ProgressTracker,
+    runner: Runner,
+    outcome: RunOutcome,
+    elapsed: float,
+    incoming: IncomingMessage,
+    user_ref: MessageRef,
+    progress_ref: MessageRef | None,
+    context_line: str | None,
+    journal: Journal | None,
+    run_id: str | None,
+    ledger: PendingRunLedger | None,
+    model: str | None,
+) -> None:
+    """Render and dispatch the error result, then finalize the run."""
+    sync_resume_token(progress_tracker, outcome.resume)
+    err_body = _format_error(error)
+    state = progress_tracker.snapshot(
+        resume_formatter=runner.format_resume,
+        context_line=context_line,
+    )
+    final_rendered = cfg.presenter.render_final(
+        state,
+        elapsed_s=elapsed,
+        status="error",
+        answer=err_body,
+    )
+    logger.debug(
+        "handle.error.rendered",
+        error=err_body,
+        rendered=final_rendered.text,
+    )
+    await send_result_message(
+        cfg,
+        channel_id=incoming.channel_id,
+        reply_to=user_ref,
+        progress_ref=progress_ref,
+        message=final_rendered,
+        notify=False,
+        edit_ref=progress_ref,
+        replace_ref=progress_ref,
+        delete_tag="error",
+        thread_id=incoming.thread_id,
+    )
+    await _finalize_run(
+        journal,
+        run_id,
+        incoming,
+        runner.engine,
+        progress_tracker,
+        event="interrupted",
+        data={"reason": "error", "error": err_body},
+        ledger=ledger,
+        model=model,
+    )
+
+
+async def _handle_run_cancelled(
+    cfg: ExecBridgeConfig,
+    *,
+    progress_tracker: ProgressTracker,
+    runner: Runner,
+    outcome: RunOutcome,
+    elapsed: float,
+    incoming: IncomingMessage,
+    user_ref: MessageRef,
+    progress_ref: MessageRef | None,
+    context_line: str | None,
+    journal: Journal | None,
+    run_id: str | None,
+    ledger: PendingRunLedger | None,
+    model: str | None,
+) -> None:
+    """Render and dispatch the cancelled result, then finalize the run."""
+    resume = sync_resume_token(progress_tracker, outcome.resume)
+    logger.info(
+        "handle.cancelled",
+        resume=resume.value if resume else None,
+        elapsed_s=elapsed,
+    )
+    state = progress_tracker.snapshot(
+        resume_formatter=runner.format_resume,
+        context_line=context_line,
+    )
+    final_rendered = cfg.presenter.render_progress(
+        state,
+        elapsed_s=elapsed,
+        label="`cancelled`",
+    )
+    await send_result_message(
+        cfg,
+        channel_id=incoming.channel_id,
+        reply_to=user_ref,
+        progress_ref=progress_ref,
+        message=final_rendered,
+        notify=False,
+        edit_ref=progress_ref,
+        replace_ref=progress_ref,
+        delete_tag="cancel",
+        thread_id=incoming.thread_id,
+    )
+    await _finalize_run(
+        journal,
+        run_id,
+        incoming,
+        runner.engine,
+        progress_tracker,
+        event="interrupted",
+        data={"reason": "cancel"},
+        ledger=ledger,
+        model=model,
+    )
+
+
+async def _handle_run_completed(
+    cfg: ExecBridgeConfig,
+    *,
+    outcome: RunOutcome,
+    progress_tracker: ProgressTracker,
+    runner: Runner,
+    elapsed: float,
+    incoming: IncomingMessage,
+    user_ref: MessageRef,
+    progress_ref: MessageRef | None,
+    context_line: str | None,
+    journal: Journal | None,
+    run_id: str | None,
+    ledger: PendingRunLedger | None,
+    model: str | None,
+) -> str | None:
+    """Render and dispatch the successful result, then finalize the run."""
+    if outcome.completed is None:
+        raise RuntimeError("runner finished without a completed event")
+
+    completed = outcome.completed
+    run_ok = completed.ok
+    run_error = completed.error
+
+    final_answer = completed.answer
+    if run_ok is False and run_error:
+        if final_answer.strip():
+            final_answer = f"{final_answer}\n\n{run_error}"
+        else:
+            final_answer = str(run_error)
+
+    status = (
+        "error" if run_ok is False else ("done" if final_answer.strip() else "error")
+    )
+    resume_value = None
+    resume_token = completed.resume or outcome.resume
+    if resume_token is not None:
+        resume_value = resume_token.value
+    logger.info(
+        "runner.completed",
+        ok=run_ok,
+        error=run_error,
+        answer_len=len(final_answer or ""),
+        elapsed_s=round(elapsed, 2),
+        action_count=progress_tracker.action_count,
+        resume=resume_value,
+    )
+    sync_resume_token(progress_tracker, completed.resume or outcome.resume)
+    state = progress_tracker.snapshot(
+        resume_formatter=runner.format_resume,
+        context_line=context_line,
+    )
+    final_rendered = cfg.presenter.render_final(
+        state,
+        elapsed_s=elapsed,
+        status=status,
+        answer=final_answer,
+    )
+    logger.debug(
+        "handle.final.rendered",
+        rendered=final_rendered.text,
+        status=status,
+    )
+
+    can_edit_final = progress_ref is not None
+    edit_ref = None if cfg.final_notify or not can_edit_final else progress_ref
+
+    await send_result_message(
+        cfg,
+        channel_id=incoming.channel_id,
+        reply_to=user_ref,
+        progress_ref=None,
+        message=final_rendered,
+        notify=cfg.final_notify,
+        edit_ref=edit_ref,
+        replace_ref=None,
+        delete_tag="final",
+        thread_id=incoming.thread_id,
+    )
+
+    # Edit progress message to show last 3 action summary
+    if progress_ref is not None:
+        summary = cfg.presenter.render_progress_summary(
+            state,
+            elapsed_s=elapsed,
+            label="done",
+        )
+        await cfg.transport.edit(ref=progress_ref, message=summary, wait=False)
+    await _finalize_run(
+        journal,
+        run_id,
+        incoming,
+        runner.engine,
+        progress_tracker,
+        event="completed",
+        data={
+            "ok": run_ok,
+            "answer": _truncate(final_answer),
+            "error": run_error,
+            "usage": completed.usage,
+        },
+        ledger=ledger,
+        model=model,
+    )
+    return final_answer if run_ok is not False else None
+
+
 async def handle_message(
     cfg: ExecBridgeConfig,
     *,
@@ -512,42 +799,29 @@ async def handle_message(
     # -- Auto-inject resume token from project session store --
     _project_key: str | None = context.project if context else None
     _project_cwd = runner.cwd if hasattr(runner, "cwd") else None
-    if resume_token is None and project_sessions is not None and _project_key:
-        _candidate = await project_sessions.get(_project_key, cwd=_project_cwd)
-        # 엔진이 다른 토큰은 무시 (model.set으로 엔진 전환 시)
-        if _candidate is None or _candidate.engine == runner.engine:
-            resume_token = _candidate
+    resume_token = await _inject_project_resume(
+        resume_token,
+        project_sessions=project_sessions,
+        project_key=_project_key,
+        project_cwd=_project_cwd,
+        engine=runner.engine,
+    )
 
     # -- Wrap on_thread_known to auto-save to project session store --
-    _original_on_thread_known = on_thread_known
-    if project_sessions is not None and _project_key:
-
-        async def on_thread_known(token: ResumeToken, done: anyio.Event) -> None:
-            assert project_sessions is not None  # narrowing
-            await project_sessions.set(
-                _project_key,
-                token,
-                cwd=_project_cwd,  # type: ignore[arg-type]
-            )
-            if _original_on_thread_known is not None:
-                await _original_on_thread_known(token, done)
+    on_thread_known = _wrap_on_thread_known_for_project(
+        on_thread_known,
+        project_sessions=project_sessions,
+        project_key=_project_key,
+        project_cwd=_project_cwd,
+    )
 
     # Generate run_id for journal if not provided
     if run_id is None and (journal is not None or ledger is not None):
         run_id = make_run_id(str(incoming.channel_id), str(incoming.message_id))
 
     # Register in pending-run ledger (before runner starts)
-    if ledger is not None and run_id is not None:
-        with contextlib.suppress(Exception):
-            await ledger.register(
-                PendingRun(
-                    run_id=run_id,
-                    channel_id=str(incoming.channel_id),
-                    engine=runner.engine,
-                    prompt_summary=_truncate(incoming.text, 200),
-                    started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-                )
-            )
+    await _register_pending_run(ledger, run_id, incoming, runner)
+
     is_resume_line = runner.is_resume_line
     resume_strip = strip_resume_line or is_resume_line
     runner_text = _strip_resume_lines(incoming.text, is_resume_line=resume_strip)
@@ -642,176 +916,55 @@ async def handle_message(
             edits_scope.cancel()
 
     elapsed = clock() - started_at
+    _final_model = _model or getattr(runner, "model", None)
 
     if error is not None:
-        sync_resume_token(progress_tracker, outcome.resume)
-        err_body = _format_error(error)
-        state = progress_tracker.snapshot(
-            resume_formatter=runner.format_resume,
-            context_line=context_line,
-        )
-        final_rendered = cfg.presenter.render_final(
-            state,
-            elapsed_s=elapsed,
-            status="error",
-            answer=err_body,
-        )
-        logger.debug(
-            "handle.error.rendered",
-            error=err_body,
-            rendered=final_rendered.text,
-        )
-        await send_result_message(
+        return await _handle_run_error(
             cfg,
-            channel_id=incoming.channel_id,
-            reply_to=user_ref,
+            error=error,
+            progress_tracker=progress_tracker,
+            runner=runner,
+            outcome=outcome,
+            elapsed=elapsed,
+            incoming=incoming,
+            user_ref=user_ref,
             progress_ref=progress_ref,
-            message=final_rendered,
-            notify=False,
-            edit_ref=progress_ref,
-            replace_ref=progress_ref,
-            delete_tag="error",
-            thread_id=incoming.thread_id,
-        )
-        await _finalize_run(
-            journal,
-            run_id,
-            incoming,
-            runner.engine,
-            progress_tracker,
-            event="interrupted",
-            data={"reason": "error", "error": err_body},
+            context_line=context_line,
+            journal=journal,
+            run_id=run_id,
             ledger=ledger,
-            model=_model or getattr(runner, "model", None),
+            model=_final_model,
         )
-        return None
 
     if outcome.cancelled:
-        resume = sync_resume_token(progress_tracker, outcome.resume)
-        logger.info(
-            "handle.cancelled",
-            resume=resume.value if resume else None,
-            elapsed_s=elapsed,
-        )
-        state = progress_tracker.snapshot(
-            resume_formatter=runner.format_resume,
-            context_line=context_line,
-        )
-        final_rendered = cfg.presenter.render_progress(
-            state,
-            elapsed_s=elapsed,
-            label="`cancelled`",
-        )
-        await send_result_message(
+        return await _handle_run_cancelled(
             cfg,
-            channel_id=incoming.channel_id,
-            reply_to=user_ref,
+            progress_tracker=progress_tracker,
+            runner=runner,
+            outcome=outcome,
+            elapsed=elapsed,
+            incoming=incoming,
+            user_ref=user_ref,
             progress_ref=progress_ref,
-            message=final_rendered,
-            notify=False,
-            edit_ref=progress_ref,
-            replace_ref=progress_ref,
-            delete_tag="cancel",
-            thread_id=incoming.thread_id,
-        )
-        await _finalize_run(
-            journal,
-            run_id,
-            incoming,
-            runner.engine,
-            progress_tracker,
-            event="interrupted",
-            data={"reason": "cancel"},
+            context_line=context_line,
+            journal=journal,
+            run_id=run_id,
             ledger=ledger,
-            model=_model or getattr(runner, "model", None),
+            model=_final_model,
         )
-        return None
 
-    if outcome.completed is None:
-        raise RuntimeError("runner finished without a completed event")
-
-    completed = outcome.completed
-    run_ok = completed.ok
-    run_error = completed.error
-
-    final_answer = completed.answer
-    if run_ok is False and run_error:
-        if final_answer.strip():
-            final_answer = f"{final_answer}\n\n{run_error}"
-        else:
-            final_answer = str(run_error)
-
-    status = (
-        "error" if run_ok is False else ("done" if final_answer.strip() else "error")
-    )
-    resume_value = None
-    resume_token = completed.resume or outcome.resume
-    if resume_token is not None:
-        resume_value = resume_token.value
-    logger.info(
-        "runner.completed",
-        ok=run_ok,
-        error=run_error,
-        answer_len=len(final_answer or ""),
-        elapsed_s=round(elapsed, 2),
-        action_count=progress_tracker.action_count,
-        resume=resume_value,
-    )
-    sync_resume_token(progress_tracker, completed.resume or outcome.resume)
-    state = progress_tracker.snapshot(
-        resume_formatter=runner.format_resume,
-        context_line=context_line,
-    )
-    final_rendered = cfg.presenter.render_final(
-        state,
-        elapsed_s=elapsed,
-        status=status,
-        answer=final_answer,
-    )
-    logger.debug(
-        "handle.final.rendered",
-        rendered=final_rendered.text,
-        status=status,
-    )
-
-    can_edit_final = progress_ref is not None
-    edit_ref = None if cfg.final_notify or not can_edit_final else progress_ref
-
-    await send_result_message(
+    return await _handle_run_completed(
         cfg,
-        channel_id=incoming.channel_id,
-        reply_to=user_ref,
-        progress_ref=None,
-        message=final_rendered,
-        notify=cfg.final_notify,
-        edit_ref=edit_ref,
-        replace_ref=None,
-        delete_tag="final",
-        thread_id=incoming.thread_id,
-    )
-
-    # Edit progress message to show last 3 action summary
-    if progress_ref is not None:
-        summary = cfg.presenter.render_progress_summary(
-            state,
-            elapsed_s=elapsed,
-            label="done",
-        )
-        await cfg.transport.edit(ref=progress_ref, message=summary, wait=False)
-    await _finalize_run(
-        journal,
-        run_id,
-        incoming,
-        runner.engine,
-        progress_tracker,
-        event="completed",
-        data={
-            "ok": run_ok,
-            "answer": _truncate(final_answer),
-            "error": run_error,
-            "usage": completed.usage,
-        },
+        outcome=outcome,
+        progress_tracker=progress_tracker,
+        runner=runner,
+        elapsed=elapsed,
+        incoming=incoming,
+        user_ref=user_ref,
+        progress_ref=progress_ref,
+        context_line=context_line,
+        journal=journal,
+        run_id=run_id,
         ledger=ledger,
-        model=_model or getattr(runner, "model", None),
+        model=_final_model,
     )
-    return final_answer if run_ok is not False else None
