@@ -64,12 +64,16 @@ class SlackTransport:
         )
         if resp is None or not resp.ok:
             return None
+        if resp.ts is None:
+            return None
 
+        thread_id = resp.message.thread_ts if resp.message else None
+        thread_id = thread_id or resp.ts
         ref = MessageRef(
             channel_id=ch,
             message_id=resp.ts,
             raw=resp.message,
-            thread_id=resp.message.thread_ts if resp.message else resp.ts,
+            thread_id=thread_id,
             sender_id=resp.message.user if resp.message else None,
         )
 
@@ -78,7 +82,7 @@ class SlackTransport:
             await self._send_followups(
                 followups,
                 channel_id=ch,
-                thread_ts=ref.thread_id or ref.message_id,
+                thread_ts=thread_id,
             )
 
         return ref
@@ -97,6 +101,8 @@ class SlackTransport:
             wait=wait,
         )
         if resp is None or not resp.ok:
+            return None
+        if resp.ts is None:
             return None
 
         new_ref = MessageRef(
