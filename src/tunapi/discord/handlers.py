@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Literal, cast
 
 import discord
 
@@ -74,7 +74,7 @@ def register_slash_commands(
     state_store: DiscordStateStore,
     prefs_store: DiscordPrefsStore,
     get_running_task: Callable[..., object],
-    cancel_task: Callable[..., object],
+    cancel_task: Callable[[int], Awaitable[object]],
     allowed_user_ids: frozenset[int] | None = None,
     trigger_mode_default: Literal["all", "mentions"] = "all",
     runtime: TransportRuntime | None = None,
@@ -124,6 +124,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
         guild_id = ctx.guild.id
 
         # Get context from state
@@ -170,20 +173,30 @@ def register_slash_commands(
     @pycord_bot.slash_command(name="bind", description="Bind this channel to a project")
     async def bind_command(
         ctx: discord.ApplicationContext,
-        project: str = discord.Option(
-            description="The project path (e.g., ~/dev/myproject)"
+        project: str = cast(
+            str,
+            discord.Option(description="The project path (e.g., ~/dev/myproject)"),
         ),
-        worktrees_dir: str = discord.Option(
-            default=".worktrees",
-            description="Directory for git worktrees (default: .worktrees)",
+        worktrees_dir: str = cast(
+            str,
+            discord.Option(
+                default=".worktrees",
+                description="Directory for git worktrees (default: .worktrees)",
+            ),
         ),
-        default_engine: str = discord.Option(
-            default="claude",
-            description="Default engine to use (default: claude)",
+        default_engine: str = cast(
+            str,
+            discord.Option(
+                default="claude",
+                description="Default engine to use (default: claude)",
+            ),
         ),
-        worktree_base: str = discord.Option(
-            default="main",
-            description="Base branch for worktrees and default working branch (default: main)",
+        worktree_base: str = cast(
+            str,
+            discord.Option(
+                default="main",
+                description="Base branch for worktrees and default working branch (default: main)",
+            ),
         ),
     ) -> None:
         """Bind a channel to a project."""
@@ -196,6 +209,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
         guild_id = ctx.guild.id
 
         from .types import DiscordChannelContext
@@ -231,6 +247,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
         guild_id = ctx.guild.id
 
         await state_store.clear_channel(guild_id, channel_id)
@@ -251,6 +270,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
 
         running = get_running_task(channel_id)
         if running is None:
@@ -276,6 +298,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
         guild_id = ctx.guild.id
 
         author_id = getattr(getattr(ctx, "author", None), "id", None)
@@ -287,18 +312,27 @@ def register_slash_commands(
     @pycord_bot.slash_command(name="ctx", description="Show or manage context binding")
     async def ctx_command(
         ctx: discord.ApplicationContext,
-        action: str | None = discord.Option(
-            default=None,
-            description="Action to perform (show, clear, or set)",
-            choices=["show", "clear", "set"],
+        action: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Action to perform (show, clear, or set)",
+                choices=["show", "clear", "set"],
+            ),
         ),
-        project: str | None = discord.Option(
-            default=None,
-            description="Project path (channel only): ~/dev/myproject",
+        project: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Project path (channel only): ~/dev/myproject",
+            ),
         ),
-        branch: str | None = discord.Option(
-            default=None,
-            description="Branch to bind (use @name). In channels: base branch; in threads: thread branch.",
+        branch: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Branch to bind (use @name). In channels: base branch; in threads: thread branch.",
+            ),
         ),
     ) -> None:
         """Show/clear/set context binding."""
@@ -320,14 +354,20 @@ def register_slash_commands(
     @pycord_bot.slash_command(name="agent", description="Show or manage default agent")
     async def agent_command(
         ctx: discord.ApplicationContext,
-        action: str | None = discord.Option(
-            default=None,
-            description="Action to perform (show, set, clear)",
-            choices=["show", "set", "clear"],
+        action: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Action to perform (show, set, clear)",
+                choices=["show", "set", "clear"],
+            ),
         ),
-        engine: str | None = discord.Option(
-            default=None,
-            description="Engine to set as default (for action=set)",
+        engine: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Engine to set as default (for action=set)",
+            ),
         ),
     ) -> None:
         """Show or manage default engine selection."""
@@ -345,10 +385,13 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        thread_id = None
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
+        thread_id: int | None = None
         if isinstance(ctx.channel, discord.Thread):
-            thread_id = ctx.channel_id
-            channel_id = ctx.channel.parent_id or ctx.channel_id
+            thread_id = channel_id
+            channel_id = ctx.channel.parent_id or channel_id
 
         target_id = thread_id if thread_id is not None else channel_id
         scope = "thread" if thread_id is not None else "channel"
@@ -446,13 +489,19 @@ def register_slash_commands(
     )
     async def model_command(
         ctx: discord.ApplicationContext,
-        engine: str | None = discord.Option(
-            default=None,
-            description="Engine to configure (e.g., claude, codex)",
+        engine: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Engine to configure (e.g., claude, codex)",
+            ),
         ),
-        model: str | None = discord.Option(
-            default=None,
-            description="Model to use (or 'clear' to remove override)",
+        model: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Model to use (or 'clear' to remove override)",
+            ),
         ),
     ) -> None:
         """Show or set model override."""
@@ -466,11 +515,14 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        thread_id = None
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
+        thread_id: int | None = None
         target_id = channel_id  # Where to store the override
 
         if isinstance(ctx.channel, discord.Thread):
-            thread_id = ctx.channel_id
+            thread_id = channel_id
             target_id = thread_id  # Store on thread
 
         # Show current overrides
@@ -518,13 +570,19 @@ def register_slash_commands(
     )
     async def reasoning_command(
         ctx: discord.ApplicationContext,
-        engine: str | None = discord.Option(
-            default=None,
-            description="Engine to configure (e.g., codex)",
+        engine: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Engine to configure (e.g., codex)",
+            ),
         ),
-        level: str | None = discord.Option(
-            default=None,
-            description="Reasoning level (minimal/low/medium/high/xhigh) or 'clear'",
+        level: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Reasoning level (minimal/low/medium/high/xhigh) or 'clear'",
+            ),
         ),
     ) -> None:
         """Show or set reasoning level override."""
@@ -538,11 +596,14 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        thread_id = None
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
+        thread_id: int | None = None
         target_id = channel_id
 
         if isinstance(ctx.channel, discord.Thread):
-            thread_id = ctx.channel_id
+            thread_id = channel_id
             target_id = thread_id
 
         # Show current overrides
@@ -610,10 +671,13 @@ def register_slash_commands(
     )
     async def trigger_command(
         ctx: discord.ApplicationContext,
-        mode: str | None = discord.Option(
-            default=None,
-            description="Trigger mode: all, mentions, or clear",
-            choices=["all", "mentions", "clear"],
+        mode: str | None = cast(
+            str | None,
+            discord.Option(
+                default=None,
+                description="Trigger mode: all, mentions, or clear",
+                choices=["all", "mentions", "clear"],
+            ),
         ),
     ) -> None:
         """Show or set trigger mode."""
@@ -627,13 +691,16 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        thread_id = None
+        if channel_id is None:
+            await ctx.respond("This command requires a channel.", ephemeral=True)
+            return
+        thread_id: int | None = None
         target_id = channel_id
 
         if isinstance(ctx.channel, discord.Thread):
-            thread_id = ctx.channel_id
+            thread_id = channel_id
             target_id = thread_id
-            channel_id = ctx.channel.parent_id or ctx.channel_id
+            channel_id = ctx.channel.parent_id or channel_id
 
         # Show current mode
         if mode is None:
