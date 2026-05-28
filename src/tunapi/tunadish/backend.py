@@ -21,6 +21,7 @@ from ..logging import get_logger
 
 from .transport import TunadishTransport
 from .presenter import TunadishPresenter
+from . import rawq_handlers
 
 logger = get_logger(__name__)
 
@@ -1496,31 +1497,7 @@ class TunadishBackend:
     # ── rawq integration ──
 
     async def _rawq_startup_check(self):
-        """시작 시 rawq 버전 확인 + 원격 업데이트 체크 (백그라운드)."""
-        from . import rawq_bridge
-
-        if not rawq_bridge.is_available():
-            logger.info("rawq: not installed (code search disabled)")
-            return
-
-        version = await rawq_bridge.get_version()
-        logger.info("rawq %s available", version or "unknown")
-
-        # 원격 업데이트 확인 (네트워크, 실패 무시)
-        update_info = await rawq_bridge.check_for_update()
-        if update_info and update_info.get("has_update"):
-            commits = update_info.get("commits", [])
-            msg = (
-                f"rawq 업데이트 가능: {update_info['current']} → {update_info['latest']}"
-                f" ({len(commits)}개 새 커밋)"
-            )
-            logger.info(msg)
-            # 연결된 클라이언트에 알림
-            await self._broadcast("command.result", {
-                "command": "rawq",
-                "conversation_id": "__system__",
-                "text": f"🔄 {msg}\n`./scripts/update-rawq.sh --apply`로 업데이트하세요.",
-            })
+        await rawq_handlers.rawq_startup_check(self)
 
     def _resolve_project_path(self, project_name: str, runtime: TransportRuntime) -> Path | None:
         """프로젝트 이름으로 실제 파일시스템 경로를 해석한다."""
@@ -1540,42 +1517,7 @@ class TunadishBackend:
         return None
 
     async def _rawq_ensure_index(self, project_name: str, runtime: TransportRuntime, transport: TunadishTransport):
-        """프로젝트의 rawq 인덱스를 확보한다 (백그라운드)."""
-        from . import rawq_bridge
-
-        if not rawq_bridge.is_available():
-            return
-
-        project_path = self._resolve_project_path(project_name, runtime)
-        if not project_path:
-            return
-
-        # 인덱스 상태 확인
-        status = await rawq_bridge.check_index(project_path)
-        if status is not None:
-            logger.debug("rawq index exists for %s", project_name)
-            return  # 증분 갱신은 search 시 자동 처리
-
-        # 인덱스 생성
-        logger.info("Building rawq index for %s at %s", project_name, project_path)
-        await transport._send_notification("command.result", {
-            "command": "rawq",
-            "conversation_id": "__system__",
-            "text": f"🔍 프로젝트 `{project_name}` 코드 인덱스를 생성합니다...",
-        })
-
-        ok = await rawq_bridge.build_index(project_path)
-
-        msg = (
-            f"✅ `{project_name}` 인덱스 생성 완료."
-            if ok
-            else f"⚠️ `{project_name}` 인덱스 생성 실패. rawq 없이 계속합니다."
-        )
-        await transport._send_notification("command.result", {
-            "command": "rawq",
-            "conversation_id": "__system__",
-            "text": msg,
-        })
+        await rawq_handlers.rawq_ensure_index(self, project_name, runtime, transport)
 
     async def _rawq_enrich_message(
         self,
@@ -1583,123 +1525,13 @@ class TunadishBackend:
         project_name: str,
         runtime: TransportRuntime,
     ) -> str:
-        """메시지에 rawq 검색 결과를 컨텍스트로 첨부한다.
-
-        실패 시 원본 텍스트를 그대로 반환한다.
-        """
-        from . import rawq_bridge
-
-        if not rawq_bridge.is_available():
-            return text
-
-        project_path = self._resolve_project_path(project_name, runtime)
-        if not project_path:
-            return text
-
-        # 짧은 질문에는 더 많은 코드 컨텍스트 제공
-        text_len = len(text)
-        if text_len < 100:
-            token_budget = 4000
-        elif text_len < 500:
-            token_budget = 2000
-        else:
-            token_budget = 1000
-
-        result = await rawq_bridge.search(
-            query=text,
-            project_path=project_path,
-            top=5,
-            token_budget=token_budget,
-            threshold=0.5,
-        )
-
-        context_block = rawq_bridge.format_context_block(result) if result else ""
-
-        if context_block:
-            logger.info(
-                "rawq.enrich",
-                project=project_name,
-                results=len(result.get("results", [])),
-                token_budget=token_budget,
-            )
-            return f"{context_block}\n\n---\n\n{text}"
-
-        # 검색 결과 0건 → code map 폴백으로 프로젝트 구조 제공
-        map_result = await rawq_bridge.get_map(project_path=project_path, depth=2)
-        map_block = rawq_bridge.format_map_block(map_result) if map_result else ""
-        if map_block:
-            logger.info("rawq.enrich.map_fallback", project=project_name)
-            return f"{map_block}\n\n---\n\n{text}"
-
-        logger.info("rawq.enrich.no_results", project=project_name)
-        return text
+        return await rawq_handlers.rawq_enrich_message(self, text, project_name, runtime)
 
     async def _handle_code_search(self, params: dict[str, Any], runtime: TransportRuntime, transport: TunadishTransport):
-        """code.search RPC 처리 — ContextPanel 코드 검색용."""
-        from . import rawq_bridge
-
-        query = params.get("query", "")
-        project = params.get("project", "")
-        lang = params.get("lang")
-        top = params.get("top", 10)
-
-        if not query or not project:
-            await transport._send_notification("code.search.result", {
-                "error": "query and project are required",
-            })
-            return
-
-        project_path = self._resolve_project_path(project, runtime)
-        if not project_path:
-            await transport._send_notification("code.search.result", {
-                "error": f"Project path not found: {project}",
-            })
-            return
-
-        result = await rawq_bridge.search(
-            query=query,
-            project_path=project_path,
-            top=top,
-            token_budget=8000,  # UI 검색은 더 많은 결과 허용
-            threshold=0.3,      # UI에서는 낮은 threshold 허용
-            lang_filter=lang,
-        )
-
-        await transport._send_notification("code.search.result", {
-            "query": query,
-            "project": project,
-            "available": rawq_bridge.is_available(),
-            "results": result.get("results", []) if result else [],
-            "query_ms": result.get("query_ms", 0) if result else 0,
-            "total_tokens": result.get("total_tokens", 0) if result else 0,
-        })
+        await rawq_handlers.handle_code_search(self, params, runtime, transport)
 
     async def _handle_code_map(self, params: dict[str, Any], runtime: TransportRuntime, transport: TunadishTransport):
-        """code.map RPC 처리 — 프로젝트 구조 뷰용."""
-        from . import rawq_bridge
-
-        project = params.get("project", "")
-        depth = params.get("depth", 2)
-        lang = params.get("lang")
-
-        project_path = self._resolve_project_path(project, runtime)
-        if not project_path:
-            await transport._send_notification("code.map.result", {
-                "error": f"Project path not found: {project}",
-            })
-            return
-
-        result = await rawq_bridge.get_map(
-            project_path=project_path,
-            depth=depth,
-            lang_filter=lang,
-        )
-
-        await transport._send_notification("code.map.result", {
-            "project": project,
-            "available": rawq_bridge.is_available(),
-            "map": result if result else {},
-        })
+        await rawq_handlers.handle_code_map(self, params, runtime, transport)
 
     # --- Phase 4: Write API + Handoff handlers ---
 
