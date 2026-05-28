@@ -17,11 +17,11 @@ from ..core.roundtable import RoundtableStore
 from ..model import EngineId
 from ..runners.run_options import EngineRunOptions
 from ..transport import MessageRef
-from .chat_prefs import ChatPrefsStore
-from .chat_sessions import ChatSessionStore
+from ..core.chat_prefs import ChatPrefsStore
+from ..core.chat_sessions import ChatSessionStore
 from .commands.handlers import parse_slash_command
 from .commands.parse import is_cancel_command
-from .engine_overrides import merge_overrides
+from .engine_overrides import merge_overrides, get_telegram_engine_override
 from .forward_coalescing import (
     ForwardKey,
     PendingPrompt,
@@ -157,7 +157,8 @@ async def resolve_engine_run_options(
         )
     chat_override = None
     if chat_prefs is not None:
-        chat_override = await chat_prefs.get_engine_override(chat_id, engine)
+        chat_override = await get_telegram_engine_override(chat_prefs, chat_id, engine)
+
     merged = merge_overrides(topic_override, chat_override)
     if merged is None:
         return None

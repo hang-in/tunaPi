@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Awaitable
+from typing import TYPE_CHECKING
+from collections.abc import Callable, Awaitable
 
 from ..logging import get_logger
 
@@ -33,7 +34,7 @@ def _classify_message(
 ) -> MessageClassification:
     from .commands.handlers import parse_slash_command
     from .commands.parse import is_cancel_command
-    from .forward_coalescing import _is_forwarded
+    from .forward_coalescing import is_forwarded as _is_forwarded
 
     text = msg.text
     command_id, args_text = parse_slash_command(text)

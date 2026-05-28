@@ -6,7 +6,8 @@ from typing import Literal
 from ..context import RunContext
 from ..model import EngineId
 from ..transport_runtime import TransportRuntime
-from .chat_prefs import ChatPrefsStore
+from ..core.chat_prefs import ChatPrefsStore
+
 from .topic_state import TopicStateStore
 
 EngineSource = Literal[
@@ -42,7 +43,8 @@ async def resolve_engine_for_message(
         topic_default = await topic_store.get_default_engine(*topic_key)
     chat_default = None
     if chat_prefs is not None:
-        chat_default = await chat_prefs.get_default_engine(chat_id)
+        chat_default = await chat_prefs.get_default_engine(str(chat_id))
+
     project_default = runtime.project_default_engine(context)
 
     if explicit_engine is not None:

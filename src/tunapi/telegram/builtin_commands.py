@@ -36,7 +36,7 @@ from .topics import _topic_key
 if TYPE_CHECKING:
     from ..runner_bridge import RunningTasks
     from .bridge import TelegramBridgeConfig
-    from .chat_prefs import ChatPrefsStore
+    from ..core.chat_prefs import ChatPrefsStore
     from .loop_state import TelegramCommandContext, TelegramLoopContext
     from .types import TelegramIncomingMessage
 
@@ -243,7 +243,7 @@ async def _start_roundtable(
     # Resolve ambient context (channel-bound project)
     ambient_context = None
     if chat_prefs:
-        ambient_context = await chat_prefs.get_context(chat_id)
+        ambient_context = await chat_prefs.get_context(str(chat_id))
 
     _logger.info(
         "roundtable.start",
@@ -304,7 +304,7 @@ async def dispatch_rt_command(
         completed_session = roundtables.get_completed(thread_id)
         if completed_session:
             ambient_ctx = (
-                await chat_prefs.get_context(chat_id) if chat_prefs else None
+                await chat_prefs.get_context(str(chat_id)) if chat_prefs else None
             )
 
             async def continue_rt(

@@ -20,6 +20,7 @@ Storage layout (version 2)::
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import msgspec
@@ -60,7 +61,32 @@ class _ChannelSessions(msgspec.Struct, forbid_unknown_fields=False):
 
 class _State(msgspec.Struct, forbid_unknown_fields=False):
     version: int = STATE_VERSION
+    cwd: str | None = None
     channels: dict[str, _ChannelSessions] = msgspec.field(default_factory=dict)
+
+
+def _migrate_telegram_sessions(raw: bytes) -> bytes:
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return raw
+    if data.get("version") != 1:
+        return raw
+    if "chats" in data and "channels" not in data:
+        channels = {}
+        for chat_key, chat_val in data["chats"].items():
+            sessions = {}
+            for eng, sess in chat_val.get("sessions", {}).items():
+                sessions[eng] = {
+                    "value": sess.get("resume", ""),
+                    "cwd": data.get("cwd"),
+                }
+            channels[chat_key] = {"sessions": sessions}
+        data["version"] = 2
+        data["channels"] = channels
+        data.pop("chats", None)
+        return json.dumps(data).encode("utf-8")
+    return raw
 
 
 def _migrate_v1(raw: bytes) -> _State | None:
@@ -106,11 +132,13 @@ class ChatSessionStore(JsonStateStore[_State]):
             return
         try:
             raw = self._path.read_bytes()
+            raw = _migrate_telegram_sessions(raw)
             payload = msgspec.json.decode(raw, type=self._state_type)
         except Exception:  # noqa: BLE001
             # Try v1 migration before giving up
             try:
                 raw = self._path.read_bytes()
+                raw = _migrate_telegram_sessions(raw)
             except Exception:  # noqa: BLE001
                 self._state = self._state_factory()
                 return
@@ -153,12 +181,12 @@ class ChatSessionStore(JsonStateStore[_State]):
         return str(cwd.expanduser().resolve())
 
     async def get(
-        self, channel_id: str, engine: str, *, cwd: Path | None = None
+        self, channel_id: str | int, engine: str, *, cwd: Path | None = None
     ) -> ResumeToken | None:
         """Get resume token for a specific channel+engine pair."""
         async with self._lock:
             self._reload_locked_if_needed()
-            channel = self._state.channels.get(channel_id)
+            channel = self._state.channels.get(str(channel_id))
             if channel is None:
                 return None
             entry = channel.sessions.get(engine)
@@ -169,49 +197,98 @@ class ChatSessionStore(JsonStateStore[_State]):
                 if expected_cwd is not None:
                     channel.sessions.pop(engine, None)
                     if not channel.sessions:
-                        self._state.channels.pop(channel_id, None)
+                        self._state.channels.pop(str(channel_id), None)
                     self._save_locked()
                 return None
             return ResumeToken(engine=engine, value=entry.value)
 
     async def set(
-        self, channel_id: str, token: ResumeToken, *, cwd: Path | None = None
+        self, channel_id: str | int, token: ResumeToken, *, cwd: Path | None = None
     ) -> None:
         """Store a resume token (uses token.engine as key)."""
+        key = str(channel_id)
         async with self._lock:
             self._reload_locked_if_needed()
-            channel = self._state.channels.get(channel_id)
+            channel = self._state.channels.get(key)
             if channel is None:
                 channel = _ChannelSessions()
-                self._state.channels[channel_id] = channel
+                self._state.channels[key] = channel
             channel.sessions[token.engine] = _SessionEntry(
                 value=token.value,
                 cwd=self._normalize_cwd(cwd),
             )
             self._save_locked()
 
-    async def clear(self, channel_id: str) -> None:
+    async def clear(self, channel_id: str | int) -> None:
         """Clear all engine sessions for a channel (/new)."""
+        key = str(channel_id)
         async with self._lock:
             self._reload_locked_if_needed()
-            if self._state.channels.pop(channel_id, None) is not None:
+            if self._state.channels.pop(key, None) is not None:
                 self._save_locked()
 
-    async def clear_engine(self, channel_id: str, engine: str) -> None:
+    async def clear_engine(self, channel_id: str | int, engine: str) -> None:
         """Clear a specific engine session for a channel."""
+        key = str(channel_id)
         async with self._lock:
             self._reload_locked_if_needed()
-            channel = self._state.channels.get(channel_id)
+            channel = self._state.channels.get(key)
             if channel is None:
                 return
             if channel.sessions.pop(engine, None) is not None:
                 if not channel.sessions:
-                    del self._state.channels[channel_id]
+                    del self._state.channels[key]
                 self._save_locked()
 
-    async def has_any(self, channel_id: str) -> bool:
+    async def has_any(self, channel_id: str | int) -> bool:
         """Check if channel has any active session (for /status)."""
         async with self._lock:
             self._reload_locked_if_needed()
-            channel = self._state.channels.get(channel_id)
+            channel = self._state.channels.get(str(channel_id))
             return channel is not None and bool(channel.sessions)
+
+    async def sync_startup_cwd(self, cwd: Path) -> bool:
+        normalized = self._normalize_cwd(cwd)
+        async with self._lock:
+            self._reload_locked_if_needed()
+            previous = self._state.cwd
+            cleared = False
+            if previous is not None and previous != normalized:
+                self._state.channels = {}
+                cleared = True
+            if previous != normalized:
+                self._state.cwd = normalized
+                self._save_locked()
+            return cleared
+
+    # -- Telegram backward-compatibility helpers --
+
+    async def get_session_resume(
+        self, chat_id: str | int, user_id: str | int | None, engine: str
+    ) -> ResumeToken | None:
+        owner = "chat" if user_id is None else str(user_id)
+        channel_id = f"{chat_id}:{owner}"
+        from pathlib import Path
+
+        return await self.get(channel_id, engine, cwd=Path.cwd())
+
+    async def set_session_resume(
+        self, chat_id: str | int, user_id: str | int | None, token: ResumeToken
+    ) -> None:
+        owner = "chat" if user_id is None else str(user_id)
+        channel_id = f"{chat_id}:{owner}"
+        from pathlib import Path
+
+        await self.set(channel_id, token, cwd=Path.cwd())
+
+    async def clear_chat_sessions(self, chat_id: str | int) -> None:
+        prefix = f"{chat_id}:"
+        async with self._lock:
+            self._reload_locked_if_needed()
+            keys_to_remove = [k for k in self._state.channels if k.startswith(prefix)]
+            removed = False
+            for k in keys_to_remove:
+                self._state.channels.pop(k, None)
+                removed = True
+            if removed:
+                self._save_locked()

@@ -6,7 +6,7 @@ from tunapi.config import ProjectConfig, ProjectsConfig
 from tunapi.context import RunContext
 from tunapi.router import AutoRouter, RunnerEntry
 from tunapi.runners.mock import Return, ScriptRunner
-from tunapi.telegram.chat_prefs import ChatPrefsStore
+from tunapi.core.chat_prefs import ChatPrefsStore
 from tunapi.telegram.engine_defaults import resolve_engine_for_message
 from tunapi.telegram.topic_state import TopicStateStore
 from tunapi.transport_runtime import TransportRuntime

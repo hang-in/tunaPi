@@ -12,12 +12,12 @@ import anyio
 import pytest
 
 from tunapi.config import ProjectConfig, ProjectsConfig
-from tunapi.context import RunContext
 from tunapi.runners.mock import Return, ScriptRunner
 from tunapi.settings import TelegramTopicsSettings
 from tunapi.telegram.bridge import CANCEL_CALLBACK_DATA
-from tunapi.telegram.chat_prefs import ChatPrefsStore
-from tunapi.telegram.chat_sessions import ChatSessionStore
+from tunapi.core.chat_prefs import ChatPrefsStore
+from tunapi.core.chat_sessions import ChatSessionStore
+
 from tunapi.telegram.commands.topics import (
     _handle_chat_ctx_command,
     _handle_chat_new_command,
@@ -33,7 +33,6 @@ from tunapi.telegram.types import (
     TelegramIncomingMessage,
 )
 from tunapi.telegram.loop_state import (
-    MessageClassification,
     classify_message as _classify_message,
 )
 from tunapi.telegram.update_routing import (
@@ -191,8 +190,11 @@ class TestClassifyMessage:
         from tunapi.telegram.types import TelegramDocument
 
         doc = TelegramDocument(
-            file_id="f1", file_name="test.txt", mime_type="text/plain",
-            file_size=100, raw={},
+            file_id="f1",
+            file_name="test.txt",
+            mime_type="text/plain",
+            file_size=100,
+            raw={},
         )
         msg = _msg(
             "forwarded text",
@@ -206,8 +208,11 @@ class TestClassifyMessage:
         from tunapi.telegram.types import TelegramDocument
 
         doc = TelegramDocument(
-            file_id="f1", file_name="test.txt", mime_type="text/plain",
-            file_size=100, raw={},
+            file_id="f1",
+            file_name="test.txt",
+            mime_type="text/plain",
+            file_size=100,
+            raw={},
         )
         msg = _msg("text", document=doc, media_group_id="mg1")
         c = _classify_message(msg, files_enabled=True)
@@ -217,8 +222,11 @@ class TestClassifyMessage:
         from tunapi.telegram.types import TelegramDocument
 
         doc = TelegramDocument(
-            file_id="f1", file_name="test.txt", mime_type="text/plain",
-            file_size=100, raw={},
+            file_id="f1",
+            file_name="test.txt",
+            mime_type="text/plain",
+            file_size=100,
+            raw={},
         )
         msg = _msg("text", document=doc, media_group_id="mg1")
         c = _classify_message(msg, files_enabled=False)
@@ -242,8 +250,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", update_id=1)
             await router.route_update(msg)
@@ -261,8 +272,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", update_id=42)
             await router.route_update(msg)
@@ -281,8 +295,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", update_id=None, message_id=10)
             await router.route_update(msg)
@@ -301,8 +318,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", sender_id=1, update_id=1)
             await router.route_update(msg)
@@ -320,8 +340,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", sender_id=1, update_id=1)
             await router.route_update(msg)
@@ -339,8 +362,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             msg = _msg("hello", sender_id=None, update_id=1)
             await router.route_update(msg)
@@ -369,8 +395,11 @@ class TestTelegramUpdateRouter:
         ):
             async with anyio.create_task_group() as tg:
                 router = TelegramUpdateRouter(
-                    cfg=cfg, state=state, tg=tg,
-                    scheduler=AsyncMock(), route_message=_route,
+                    cfg=cfg,
+                    state=state,
+                    tg=tg,
+                    scheduler=AsyncMock(),
+                    route_message=_route,
                 )
                 cb = _callback(data=CANCEL_CALLBACK_DATA, update_id=1)
                 await router.route_update(cb)
@@ -393,8 +422,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             cb = _callback(data="other_data", update_id=2)
             await router.route_update(cb)
@@ -417,8 +449,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             # Fill past the limit
             for i in range(_SEEN_UPDATES_LIMIT + 5):
@@ -440,8 +475,11 @@ class TestTelegramUpdateRouter:
 
         async with anyio.create_task_group() as tg:
             router = TelegramUpdateRouter(
-                cfg=cfg, state=state, tg=tg,
-                scheduler=AsyncMock(), route_message=_route,
+                cfg=cfg,
+                state=state,
+                tg=tg,
+                scheduler=AsyncMock(),
+                route_message=_route,
             )
             for i in range(_SEEN_MESSAGES_LIMIT + 5):
                 msg = _msg("hi", update_id=None, message_id=i)
@@ -476,9 +514,7 @@ class TestParseChatCtxArgs:
 
     def test_project_and_branch(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "alpha @main", runtime=rt, default_project=None
-        )
+        ctx, err = _parse_chat_ctx_args("alpha @main", runtime=rt, default_project=None)
         assert err is None
         assert ctx is not None
         assert ctx.project == "alpha"
@@ -486,9 +522,7 @@ class TestParseChatCtxArgs:
 
     def test_branch_only_with_default(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "@feature", runtime=rt, default_project="alpha"
-        )
+        ctx, err = _parse_chat_ctx_args("@feature", runtime=rt, default_project="alpha")
         assert err is None
         assert ctx is not None
         assert ctx.project == "alpha"
@@ -496,34 +530,26 @@ class TestParseChatCtxArgs:
 
     def test_branch_only_no_default(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "@feature", runtime=rt, default_project=None
-        )
+        ctx, err = _parse_chat_ctx_args("@feature", runtime=rt, default_project=None)
         assert ctx is None
         assert err is not None
         assert "project is required" in err
 
     def test_too_many_args(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "a b c", runtime=rt, default_project=None
-        )
+        ctx, err = _parse_chat_ctx_args("a b c", runtime=rt, default_project=None)
         assert ctx is None
         assert "too many" in err
 
     def test_branch_without_prefix(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "alpha main", runtime=rt, default_project=None
-        )
+        ctx, err = _parse_chat_ctx_args("alpha main", runtime=rt, default_project=None)
         assert ctx is None
         assert "prefixed with @" in err
 
     def test_unknown_project(self, tmp_path: Path) -> None:
         rt = self._runtime(tmp_path)
-        ctx, err = _parse_chat_ctx_args(
-            "nonexistent", runtime=rt, default_project=None
-        )
+        ctx, err = _parse_chat_ctx_args("nonexistent", runtime=rt, default_project=None)
         assert ctx is None
         assert "unknown project" in err
 
@@ -622,7 +648,9 @@ class TestHandleChatNewCommand:
         msg = _msg("/new", chat_type="private")
         store = ChatSessionStore(tmp_path / "sessions.json")
         await _handle_chat_new_command(cfg, msg, store, session_key=(123, None))
-        assert any("cleared stored sessions for this chat" in t for t in _sent_texts(transport))
+        assert any(
+            "cleared stored sessions for this chat" in t for t in _sent_texts(transport)
+        )
 
     @pytest.mark.anyio
     async def test_clear_group(self, tmp_path: Path) -> None:
@@ -650,7 +678,9 @@ class TestHandleNewCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/new")
         await _handle_new_command(
-            cfg, msg, store,
+            cfg,
+            msg,
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -666,7 +696,9 @@ class TestHandleNewCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/new", thread_id=42, chat_type="supergroup", chat_id=123)
         await _handle_new_command(
-            cfg, msg, store,
+            cfg,
+            msg,
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -689,7 +721,10 @@ class TestHandleCtxCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/ctx")
         await _handle_ctx_command(
-            cfg, msg, "", store,
+            cfg,
+            msg,
+            "",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -707,7 +742,10 @@ class TestHandleCtxCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/ctx", thread_id=42, chat_type="supergroup", chat_id=123)
         await _handle_ctx_command(
-            cfg, msg, "", store,
+            cfg,
+            msg,
+            "",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -725,7 +763,10 @@ class TestHandleCtxCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/ctx clear", thread_id=42, chat_type="supergroup", chat_id=123)
         await _handle_ctx_command(
-            cfg, msg, "clear", store,
+            cfg,
+            msg,
+            "clear",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -743,7 +784,10 @@ class TestHandleCtxCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/ctx bad", thread_id=42, chat_type="supergroup", chat_id=123)
         await _handle_ctx_command(
-            cfg, msg, "bad", store,
+            cfg,
+            msg,
+            "bad",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -766,7 +810,10 @@ class TestHandleTopicCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/topic alpha @main")
         await _handle_topic_command(
-            cfg, msg, "alpha @main", store,
+            cfg,
+            msg,
+            "alpha @main",
+            store,
             resolved_scope=None,
             scope_chat_ids=frozenset(),
         )
@@ -784,7 +831,10 @@ class TestHandleTopicCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/topic alpha @main", chat_id=123)
         await _handle_topic_command(
-            cfg, msg, "alpha @main", store,
+            cfg,
+            msg,
+            "alpha @main",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )
@@ -802,7 +852,10 @@ class TestHandleTopicCommand:
         store = TopicStateStore(tmp_path / "topics.json")
         msg = _msg("/topic", chat_id=123)
         await _handle_topic_command(
-            cfg, msg, "", store,
+            cfg,
+            msg,
+            "",
+            store,
             resolved_scope="all",
             scope_chat_ids=frozenset({123}),
         )

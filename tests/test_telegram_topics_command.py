@@ -6,8 +6,8 @@ import pytest
 from tunapi.settings import TelegramTopicsSettings
 from tunapi.config import ProjectConfig, ProjectsConfig
 from tunapi.runners.mock import Return, ScriptRunner
-from tunapi.telegram.chat_sessions import ChatSessionStore
-from tunapi.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+from tunapi.core.chat_sessions import ChatSessionStore
+from tunapi.core.chat_prefs import ChatPrefsStore
 from tunapi.telegram.commands.topics import (
     _handle_chat_ctx_command,
     _handle_chat_new_command,
@@ -24,6 +24,10 @@ from tests.telegram_fakes import (
     make_cfg,
 )
 from tunapi.transport_runtime import TransportRuntime
+
+
+def resolve_prefs_path(p: Path) -> Path:
+    return p.with_name("telegram_chat_prefs_state.json")
 
 
 def _msg(

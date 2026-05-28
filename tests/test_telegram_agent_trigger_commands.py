@@ -6,7 +6,7 @@ import pytest
 from tunapi.telegram.api_models import ChatMember
 from tunapi.telegram.commands.agent import _handle_agent_command
 from tunapi.telegram.commands.trigger import _handle_trigger_command
-from tunapi.telegram.chat_prefs import ChatPrefsStore
+from tunapi.core.chat_prefs import ChatPrefsStore
 from tunapi.telegram.topic_state import TopicStateStore
 from tunapi.telegram.types import TelegramIncomingMessage
 from tunapi.settings import TelegramTopicsSettings

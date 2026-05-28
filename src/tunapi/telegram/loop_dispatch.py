@@ -115,9 +115,11 @@ def wrap_on_thread_known(
                 topic_key[0], topic_key[1], token
             )
         if state.chat_session_store is not None and chat_session_key is not None:
-            await state.chat_session_store.set_session_resume(
-                chat_session_key[0], chat_session_key[1], token
-            )
+            owner = "chat" if chat_session_key[1] is None else str(chat_session_key[1])
+            channel_id = f"{chat_session_key[0]}:{owner}"
+            from pathlib import Path
+
+            await state.chat_session_store.set(channel_id, token, cwd=Path.cwd())
 
     return _wrapped
 

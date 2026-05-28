@@ -11,12 +11,12 @@ import httpx
 from ..logging import get_logger
 from .api_models import Chat, ChatMember, File, ForumTopic, Message, Update, User
 from .client_api import BotClient, HttpBotClient, TelegramRetryAfter
-from .outbox import (
+from ..core.outbox import (
     DELETE_PRIORITY,
     EDIT_PRIORITY,
     SEND_PRIORITY,
+    Outbox,
     OutboxOp,
-    TelegramOutbox,
 )
 from .parsing import parse_incoming_update, poll_incoming
 
@@ -67,13 +67,15 @@ class TelegramClient:
             0.0 if private_chat_rps <= 0 else 1.0 / private_chat_rps
         )
         self._group_interval = 0.0 if group_chat_rps <= 0 else 1.0 / group_chat_rps
-        self._outbox = TelegramOutbox(
-            interval_for_chat=self.interval_for_chat,
+        self._outbox = Outbox(
+            interval=lambda op: self.interval_for_chat(op.chat_id),
+            retry_after_type=TelegramRetryAfter,
             clock=clock,
             sleep=sleep,
-            on_error=self.log_request_error,
+            on_error_op=self.log_request_error,
             on_outbox_error=self.log_outbox_failure,
         )
+
         self._seq = itertools.count()
 
     def interval_for_chat(self, chat_id: int | None) -> float:
@@ -121,7 +123,7 @@ class TelegramClient:
             chat_id=chat_id,
             label=label,
         )
-        return await self._outbox.enqueue(key=key, op=request, wait=wait)
+        return await self._outbox.enqueue(key, request, wait=wait)
 
     async def close(self) -> None:
         await self._outbox.close()

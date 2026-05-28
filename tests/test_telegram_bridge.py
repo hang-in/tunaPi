@@ -30,8 +30,8 @@ from tunapi.telegram.bridge import (
 from tunapi.telegram.client import BotClient
 from tunapi.telegram.render import MAX_BODY_CHARS
 from tunapi.telegram.topic_state import TopicStateStore, resolve_state_path
-from tunapi.telegram.chat_sessions import ChatSessionStore, resolve_sessions_path
-from tunapi.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+from tunapi.core.chat_sessions import ChatSessionStore
+from tunapi.core.chat_prefs import ChatPrefsStore
 from tunapi.telegram.engine_overrides import EngineOverrides
 from tunapi.context import RunContext
 from tunapi.config import ProjectConfig, ProjectsConfig
@@ -64,6 +64,14 @@ FAST_FORWARD_COALESCE_S = 0.0
 FAST_MEDIA_GROUP_DEBOUNCE_S = 0.0
 BATCH_MEDIA_GROUP_DEBOUNCE_S = 0.05
 DEBOUNCE_FORWARD_COALESCE_S = 0.05
+
+
+def resolve_sessions_path(p: Path) -> Path:
+    return p.with_name("telegram_chat_sessions_state.json")
+
+
+def resolve_prefs_path(p: Path) -> Path:
+    return p.with_name("telegram_chat_prefs_state.json")
 
 
 class _NoopTaskGroup:

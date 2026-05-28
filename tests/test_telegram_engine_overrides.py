@@ -1,11 +1,14 @@
 import pytest
 
-from tunapi.telegram.chat_prefs import ChatPrefsStore
+from tunapi.core.chat_prefs import ChatPrefsStore
 from tunapi.telegram.engine_overrides import (
     EngineOverrides,
     merge_overrides,
     resolve_override_value,
+    get_telegram_engine_override,
+    set_telegram_engine_override,
 )
+
 from tunapi.telegram.topic_state import TopicStateStore
 
 
@@ -38,39 +41,42 @@ def test_resolve_override_value_tracks_sources() -> None:
 async def test_chat_prefs_engine_overrides_roundtrip(tmp_path) -> None:
     path = tmp_path / "telegram_chat_prefs_state.json"
     store = ChatPrefsStore(path)
-    await store.set_engine_override(
+    await set_telegram_engine_override(
+        store,
         123,
         "codex",
         EngineOverrides(model="gpt-4.1-mini", reasoning="low"),
     )
 
-    override = await store.get_engine_override(123, "codex")
+    override = await get_telegram_engine_override(store, 123, "codex")
     assert override is not None
     assert override.model == "gpt-4.1-mini"
     assert override.reasoning == "low"
 
     store2 = ChatPrefsStore(path)
-    override2 = await store2.get_engine_override(123, "codex")
+    override2 = await get_telegram_engine_override(store2, 123, "codex")
     assert override2 is not None
     assert override2.model == "gpt-4.1-mini"
     assert override2.reasoning == "low"
 
-    await store2.set_engine_override(
+    await set_telegram_engine_override(
+        store2,
         123,
         "codex",
         EngineOverrides(model=None, reasoning="low"),
     )
-    override3 = await store2.get_engine_override(123, "codex")
+    override3 = await get_telegram_engine_override(store2, 123, "codex")
     assert override3 is not None
     assert override3.model is None
     assert override3.reasoning == "low"
 
-    await store2.set_engine_override(
+    await set_telegram_engine_override(
+        store2,
         123,
         "codex",
         EngineOverrides(model=None, reasoning=None),
     )
-    override4 = await store2.get_engine_override(123, "codex")
+    override4 = await get_telegram_engine_override(store2, 123, "codex")
     assert override4 is None
 
 

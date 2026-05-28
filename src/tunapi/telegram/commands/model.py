@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ...context import RunContext
-from ..chat_prefs import ChatPrefsStore
-from ..engine_overrides import EngineOverrides, resolve_override_value
+from ...core.chat_prefs import ChatPrefsStore
+from ..engine_overrides import (
+    EngineOverrides,
+    resolve_override_value,
+    get_telegram_engine_override,
+)
 from ..files import split_command_args
 from ..topic_state import TopicStateStore
 from ..topics import _topic_key
@@ -68,7 +72,10 @@ async def _handle_model_command(
             )
         chat_override = None
         if chat_prefs is not None:
-            chat_override = await chat_prefs.get_engine_override(msg.chat_id, engine)
+            chat_override = await get_telegram_engine_override(
+                chat_prefs, msg.chat_id, engine
+            )
+
         resolution = resolve_override_value(
             topic_override=topic_override,
             chat_override=chat_override,

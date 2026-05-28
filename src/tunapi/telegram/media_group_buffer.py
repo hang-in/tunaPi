@@ -16,9 +16,10 @@ from ..logging import get_logger
 
 if TYPE_CHECKING:
     from .bridge import TelegramBridgeConfig
-    from .chat_prefs import ChatPrefsStore
+    from ..core.chat_prefs import ChatPrefsStore
     from .topics import TopicStateStore
     from .types import TelegramIncomingMessage
+
 
 logger = get_logger(__name__)
 

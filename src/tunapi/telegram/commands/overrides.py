@@ -6,9 +6,13 @@ from typing import TYPE_CHECKING, Literal
 
 from ...context import RunContext
 from ...directives import DirectiveError
-from ..chat_prefs import ChatPrefsStore
+from ...core.chat_prefs import ChatPrefsStore
 from ..engine_defaults import resolve_engine_for_message
-from ..engine_overrides import EngineOverrides
+from ..engine_overrides import (
+    EngineOverrides,
+    get_telegram_engine_override,
+    set_telegram_engine_override,
+)
 from ..topic_state import TopicStateStore
 from ..types import TelegramIncomingMessage
 from .reply import make_reply
@@ -153,7 +157,7 @@ async def apply_engine_override(
     if chat_prefs is None:
         await reply(text=chat_unavailable)
         return None
-    current = await chat_prefs.get_engine_override(chat_id, engine)
+    current = await get_telegram_engine_override(chat_prefs, chat_id, engine)
     updated = update(current)
-    await chat_prefs.set_engine_override(chat_id, engine, updated)
+    await set_telegram_engine_override(chat_prefs, chat_id, engine, updated)
     return "chat"

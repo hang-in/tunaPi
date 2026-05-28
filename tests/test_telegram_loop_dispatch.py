@@ -236,7 +236,9 @@ class TestWrapOnThreadKnown:
         assert wrapped is not None
         token = ResumeToken(engine="claude", value="t1")
         await wrapped(token, anyio.Event())
-        session_store.set_session_resume.assert_called_once_with(100, 42, token)
+        from pathlib import Path
+
+        session_store.set.assert_called_once_with("100:42", token, cwd=Path.cwd())
 
 
 # ---------------------------------------------------------------------------

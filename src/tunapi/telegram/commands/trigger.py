@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..chat_prefs import ChatPrefsStore
+from ...core.chat_prefs import ChatPrefsStore
+
 from ..files import split_command_args
 from ..topic_state import TopicStateStore
 from ..topics import _topic_key
@@ -68,7 +69,8 @@ async def _plan_trigger_command(
             topic_mode = await topic_store.get_trigger_mode(tkey[0], tkey[1])
         chat_mode = None
         if chat_prefs is not None:
-            chat_mode = await chat_prefs.get_trigger_mode(msg.chat_id)
+            chat_mode = await chat_prefs.get_trigger_mode(str(msg.chat_id))
+
         if topic_mode is not None:
             source = "topic override"
         elif chat_mode is not None:
@@ -111,7 +113,7 @@ async def _plan_trigger_command(
             )
         return ActionPlan(
             reply_text=f"chat trigger mode set to `{action}`",
-            actions=(lambda: chat_prefs.set_trigger_mode(msg.chat_id, action),),
+            actions=(lambda: chat_prefs.set_trigger_mode(str(msg.chat_id), action),),
         )
 
     if action == "clear":
@@ -137,7 +139,7 @@ async def _plan_trigger_command(
             )
         return ActionPlan(
             reply_text="chat trigger mode reset to `all`.",
-            actions=(lambda: chat_prefs.clear_trigger_mode(msg.chat_id),),
+            actions=(lambda: chat_prefs.set_trigger_mode(str(msg.chat_id), None),),
         )
 
     return ActionPlan(reply_text=TRIGGER_USAGE)

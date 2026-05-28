@@ -31,8 +31,9 @@ from .commands.handlers import (
 )
 from .client import poll_incoming
 from ..core.roundtable import RoundtableStore
-from .chat_prefs import ChatPrefsStore, resolve_prefs_path
-from .chat_sessions import ChatSessionStore, resolve_sessions_path
+from ..core.chat_prefs import ChatPrefsStore
+from ..core.chat_sessions import ChatSessionStore
+
 from .forward_coalescing import (
     ForwardCoalescer,
     is_forwarded as _is_forwarded,  # noqa: F401 — re-exported for tests
@@ -284,11 +285,13 @@ async def run_main_loop(
     try:
         config_path = cfg.runtime.config_path
         if config_path is not None:
-            state.chat_prefs = ChatPrefsStore(resolve_prefs_path(config_path))
+            prefs_path = config_path.with_name("telegram_chat_prefs_state.json")
+            state.chat_prefs = ChatPrefsStore(prefs_path)
             logger.info(
                 "chat_prefs.enabled",
-                state_path=str(resolve_prefs_path(config_path)),
+                state_path=str(prefs_path),
             )
+
             rt_path = config_path.parent / "telegram_roundtables.json"
             state.roundtable_store = RoundtableStore(rt_path)
             logger.info("roundtable_store.enabled", state_path=str(rt_path))
@@ -297,20 +300,20 @@ async def run_main_loop(
                 raise ConfigError(
                     "session_mode=chat but config path is not set; cannot locate state file."
                 )
-            state.chat_session_store = ChatSessionStore(
-                resolve_sessions_path(config_path)
-            )
+            sessions_path = config_path.with_name("telegram_chat_sessions_state.json")
+            state.chat_session_store = ChatSessionStore(sessions_path)
+
             cleared = await state.chat_session_store.sync_startup_cwd(Path.cwd())
             if cleared:
                 logger.info(
                     "chat_sessions.cleared",
                     reason="startup_cwd_changed",
                     cwd=str(Path.cwd()),
-                    state_path=str(resolve_sessions_path(config_path)),
+                    state_path=str(sessions_path),
                 )
             logger.info(
                 "chat_sessions.enabled",
-                state_path=str(resolve_sessions_path(config_path)),
+                state_path=str(sessions_path),
             )
         if cfg.topics.enabled:
             if config_path is None:

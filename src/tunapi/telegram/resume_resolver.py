@@ -18,7 +18,7 @@ from ..transport import MessageRef
 if TYPE_CHECKING:
     from ..context import RunContext
     from .bridge import TelegramBridgeConfig
-    from .chat_sessions import ChatSessionStore
+    from ..core.chat_sessions import ChatSessionStore
     from .topics import TopicStateStore
 
 
@@ -108,10 +108,14 @@ class ResumeResolver:
             and self._chat_session_store is not None
             and chat_session_key is not None
         ):
-            stored = await self._chat_session_store.get_session_resume(
-                chat_session_key[0],
-                chat_session_key[1],
+            owner = "chat" if chat_session_key[1] is None else str(chat_session_key[1])
+            channel_id = f"{chat_session_key[0]}:{owner}"
+            from pathlib import Path
+
+            stored = await self._chat_session_store.get(
+                channel_id,
                 engine_for_session,
+                cwd=Path.cwd(),
             )
             if stored is not None:
                 resume_token = stored

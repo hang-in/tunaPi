@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import msgspec
+
+if TYPE_CHECKING:
+    from ..core.chat_prefs import ChatPrefsStore
+
 
 OverrideSource = Literal["topic_override", "chat_default", "default"]
 
@@ -103,3 +107,36 @@ def allowed_reasoning_levels(engine: str) -> tuple[str, ...]:
 
 def supports_reasoning(engine: str) -> bool:
     return engine in REASONING_SUPPORTED_ENGINES
+
+
+async def get_telegram_engine_override(
+    chat_prefs: ChatPrefsStore, chat_id: int, engine: str
+) -> EngineOverrides | None:
+    model = await chat_prefs.get_engine_model(str(chat_id), engine)
+    reasoning = await chat_prefs.get_engine_reasoning(str(chat_id), engine)
+    if model is None and reasoning is None:
+        return None
+    return EngineOverrides(model=model, reasoning=reasoning)
+
+
+async def set_telegram_engine_override(
+    chat_prefs: ChatPrefsStore,
+    chat_id: int,
+    engine: str,
+    override: EngineOverrides | None,
+) -> None:
+    if override is None:
+        await chat_prefs.clear_engine_model(str(chat_id), engine)
+        await chat_prefs.clear_engine_reasoning(str(chat_id), engine)
+    else:
+        if override.model is not None:
+            await chat_prefs.set_engine_model(str(chat_id), engine, override.model)
+        else:
+            await chat_prefs.clear_engine_model(str(chat_id), engine)
+
+        if override.reasoning is not None:
+            await chat_prefs.set_engine_reasoning(
+                str(chat_id), engine, override.reasoning
+            )
+        else:
+            await chat_prefs.clear_engine_reasoning(str(chat_id), engine)

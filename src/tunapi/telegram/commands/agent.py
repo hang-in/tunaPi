@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 
 from ...context import RunContext
 from ...directives import DirectiveError
-from ..chat_prefs import ChatPrefsStore
+from ...core.chat_prefs import ChatPrefsStore
 from ..engine_defaults import resolve_engine_for_message
-from ..engine_overrides import resolve_override_value
+from ..engine_overrides import resolve_override_value, get_telegram_engine_override
 from ..files import split_command_args
 from ..topic_state import TopicStateStore
 from ..topics import _topic_key
@@ -94,8 +94,8 @@ async def _handle_agent_command(
             )
         chat_override = None
         if chat_prefs is not None:
-            chat_override = await chat_prefs.get_engine_override(
-                msg.chat_id, selection.engine
+            chat_override = await get_telegram_engine_override(
+                chat_prefs, msg.chat_id, selection.engine
             )
         override_labels = {
             "topic_override": "topic override",
@@ -172,7 +172,8 @@ async def _handle_agent_command(
         if chat_prefs is None:
             await reply(text="chat defaults are unavailable (no config path).")
             return
-        await chat_prefs.set_default_engine(msg.chat_id, engine)
+        await chat_prefs.set_default_engine(str(msg.chat_id), engine)
+
         await reply(text=f"chat default engine set to `{engine}`")
         return
 
@@ -189,7 +190,8 @@ async def _handle_agent_command(
         if chat_prefs is None:
             await reply(text="chat defaults are unavailable (no config path).")
             return
-        await chat_prefs.clear_default_engine(msg.chat_id)
+        await chat_prefs.set_default_engine(str(msg.chat_id), None)
+
         await reply(text="chat default engine cleared.")
         return
 

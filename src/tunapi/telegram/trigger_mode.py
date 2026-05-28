@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Literal
 
 from ..transport_runtime import TransportRuntime
-from .chat_prefs import ChatPrefsStore
+from ..core.chat_prefs import ChatPrefsStore
+
 from .commands.parse import _parse_slash_command
 from .topic_state import TopicStateStore
 from .types import TelegramIncomingMessage
@@ -23,7 +24,8 @@ async def resolve_trigger_mode(
         if topic_mode == "mentions":
             return "mentions"
     if chat_prefs is not None:
-        chat_mode = await chat_prefs.get_trigger_mode(chat_id)
+        chat_mode = await chat_prefs.get_trigger_mode(str(chat_id))
+
         if chat_mode == "mentions":
             return "mentions"
     return "all"

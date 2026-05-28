@@ -6,8 +6,8 @@ from ...context import RunContext
 from ...markdown import MarkdownParts
 from ...transport_runtime import TransportRuntime
 from ...transport import RenderedMessage, SendOptions
-from ..chat_prefs import ChatPrefsStore
-from ..chat_sessions import ChatSessionStore
+from ...core.chat_prefs import ChatPrefsStore
+from ...core.chat_sessions import ChatSessionStore
 from ..context import (
     _format_context,
     _format_ctx_status,
@@ -168,7 +168,8 @@ async def _handle_chat_ctx_command(
     tokens = split_command_args(args_text)
     action = tokens[0].lower() if tokens else "show"
     if action in {"show", ""}:
-        bound = await chat_prefs.get_context(msg.chat_id)
+        bound = await chat_prefs.get_context(str(msg.chat_id))
+
         resolved = cfg.runtime.resolve_message(
             text="",
             reply_text=msg.reply_to_text,
@@ -204,13 +205,15 @@ async def _handle_chat_ctx_command(
         if context is None:
             await reply(text=f"error:\n{_usage_ctx_set(chat_project=None)}")
             return
-        await chat_prefs.set_context(msg.chat_id, context)
+        await chat_prefs.set_context(str(msg.chat_id), context)
+
         await reply(
             text=f"chat bound to `{_format_context(cfg.runtime, context)}`",
         )
         return
     if action == "clear":
-        await chat_prefs.clear_context(msg.chat_id)
+        await chat_prefs.set_context(str(msg.chat_id), None)
+
         await reply(text="chat context cleared.")
         return
     await reply(
@@ -254,7 +257,9 @@ async def _handle_chat_new_command(
     if session_key is None:
         await reply(text="no stored sessions to clear for this chat.")
         return
-    await store.clear_sessions(session_key[0], session_key[1])
+    owner = "chat" if session_key[1] is None else str(session_key[1])
+    channel_id = f"{session_key[0]}:{owner}"
+    await store.clear(channel_id)
     if msg.chat_type == "private":
         text = "cleared stored sessions for this chat."
     else:
