@@ -11,7 +11,12 @@ import time
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-from ..core.chat_command_handlers import handle_model_command, handle_models_command
+from ..core.chat_command_handlers import (
+    handle_model_command,
+    handle_models_command,
+    handle_status_command,
+    handle_trigger_command,
+)
 from ..core.commands import parse_command  # noqa: F401 — re-exported
 from ..engine_models import shorten_model
 from ..transport import RenderedMessage
@@ -117,6 +122,14 @@ async def handle_trigger(
     chat_prefs: ChatPrefsStore | None,
     send: Any,
 ) -> None:
+    return await handle_trigger_command(
+        args,
+        channel_id=channel_id,
+        chat_prefs=chat_prefs,
+        send=send,
+        default_mode="mentions",
+        usage_command="!trigger",
+    )
     mode = args.strip().lower()
 
     if mode not in ("all", "mentions"):
@@ -130,19 +143,6 @@ async def handle_trigger(
         )
         return
 
-    if chat_prefs:
-        await chat_prefs.set_trigger_mode(channel_id, mode)
-
-    desc = (
-        "respond to all messages" if mode == "all" else "respond only when @mentioned"
-    )
-    await send(RenderedMessage(text=f"Trigger mode set to `{mode}` — {desc}"))
-
-
-# ---------------------------------------------------------------------------
-# !status
-# ---------------------------------------------------------------------------
-
 
 async def handle_status(
     *,
@@ -151,32 +151,15 @@ async def handle_status(
     chat_prefs: ChatPrefsStore | None,
     send: Any,
 ) -> None:
-    engine = runtime.default_engine
-    trigger = "mentions"
-    project_display = "none"
-    if chat_prefs:
-        engine = await chat_prefs.get_default_engine(channel_id) or engine
-        trigger = await chat_prefs.get_trigger_mode(channel_id) or "mentions"
-        ctx = await chat_prefs.get_context(channel_id)
-        if ctx and ctx.project:
-            project_display = f"`{ctx.project}`"
-            if ctx.branch:
-                project_display += f" ({ctx.branch})"
-
-    lines = [
-        "**Session status**",
-        "",
-        f"- Engine: `{engine}`",
-        f"- Project: {project_display}",
-        f"- Trigger: `{trigger}`",
-        f"- Channel: `{channel_id}`",
-    ]
-    await send(RenderedMessage(text="\n".join(lines)))
-
-
-# ---------------------------------------------------------------------------
-# !project
-# ---------------------------------------------------------------------------
+    return await handle_status_command(
+        channel_id=channel_id,
+        runtime=runtime,
+        chat_prefs=chat_prefs,
+        has_session=None,
+        send=send,
+        title="**Session status**",
+        default_trigger="mentions",
+    )
 
 
 async def handle_project(

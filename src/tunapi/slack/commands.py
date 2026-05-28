@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING, Any
 
 from ..config import HOME_CONFIG_PATH, ConfigError, read_config, write_config
 from ..context import RunContext
-from ..core.chat_command_handlers import handle_model_command, handle_models_command
+from ..core.chat_command_handlers import (
+    handle_cancel_command,
+    handle_model_command,
+    handle_models_command,
+    handle_status_command,
+    handle_trigger_command,
+)
 from ..core.commands import parse_command  # noqa: F401 — re-exported
 from ..core.roundtable import handle_rt as _core_handle_rt
 from ..logging import get_logger
@@ -109,27 +115,18 @@ async def handle_trigger(
     send: Any,
 ) -> None:
     """Set trigger mode for this channel."""
-    mode = args.strip().lower()
-
-    if mode not in ("all", "mentions"):
-        current = "mentions"
-        if chat_prefs:
-            current = await chat_prefs.get_trigger_mode(channel_id) or "mentions"
-        await send(
-            RenderedMessage(
-                text=f"Current trigger mode: `{current}`\n\nUsage: `/trigger all` or `/trigger mentions`"
-            )
-        )
-        return
-
-    if chat_prefs:
-        await chat_prefs.set_trigger_mode(channel_id, mode)
-
-    desc = (
-        "respond to all messages" if mode == "all" else "respond only when @mentioned"
+    await handle_trigger_command(
+        args,
+        channel_id=channel_id,
+        chat_prefs=chat_prefs,
+        send=send,
+        default_mode="mentions",
+        usage_command="/trigger",
     )
-    await send(RenderedMessage(text=f"Trigger mode set to `{mode}` — {desc}"))
-    logger.info("slack.command.trigger", channel_id=channel_id, mode=mode)
+    logger.info(
+        "slack.command.trigger", channel_id=channel_id, mode=args.strip().lower()
+    )
+    return
 
 
 async def handle_status(
@@ -142,28 +139,15 @@ async def handle_status(
     send: Any,
 ) -> None:
     """Show current session info."""
-    engine = runtime.default_engine
-    trigger = "mentions"
-    project_display = "none"
-    if chat_prefs:
-        engine = await chat_prefs.get_default_engine(channel_id) or engine
-        trigger = await chat_prefs.get_trigger_mode(channel_id) or "mentions"
-        ctx = await chat_prefs.get_context(channel_id)
-        if ctx and ctx.project:
-            project_display = f"`{ctx.project}`"
-            if ctx.branch:
-                project_display += f" ({ctx.branch})"
-
-    lines = [
-        "*Session status*",
-        "",
-        f"- Engine: `{engine}`",
-        f"- Project: {project_display}",
-        f"- Trigger: `{trigger}`",
-        f"- Session: {'active' if has_session else 'none'}",
-        f"- Channel: `{channel_id}`",
-    ]
-    await send(RenderedMessage(text="\n".join(lines)))
+    return await handle_status_command(
+        channel_id=channel_id,
+        runtime=runtime,
+        chat_prefs=chat_prefs,
+        has_session=has_session,
+        send=send,
+        title="*Session status*",
+        default_trigger="mentions",
+    )
 
 
 def _register_project_in_config(
@@ -899,14 +883,8 @@ async def handle_cancel(
     send: Any,
 ) -> None:
     """Cancel the running task in this channel."""
-    cancelled = False
-    for ref, task in list(running_tasks.items()):
-        if str(ref.channel_id) == channel_id:
-            task.cancel_requested.set()
-            cancelled = True
-            break
-
-    if cancelled:
-        await send(RenderedMessage(text="Task cancelled."))
-    else:
-        await send(RenderedMessage(text="No running task to cancel."))
+    return await handle_cancel_command(
+        channel_id=channel_id,
+        running_tasks=running_tasks,
+        send=send,
+    )

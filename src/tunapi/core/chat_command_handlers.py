@@ -145,3 +145,88 @@ async def handle_models_command(
 
     lines.append("Set: `!model <engine> <model>` | Clear: `!model <engine> clear`")
     await send(RenderedMessage(text="\n".join(lines)))
+
+
+async def handle_trigger_command(
+    args: str,
+    *,
+    channel_id: str,
+    chat_prefs: Any | None,
+    send: Any,
+    default_mode: str,
+    usage_command: str,
+) -> None:
+    mode = args.strip().lower()
+
+    if mode not in ("all", "mentions"):
+        current = default_mode
+        if chat_prefs:
+            current = await chat_prefs.get_trigger_mode(channel_id) or default_mode
+        await send(
+            RenderedMessage(
+                text=f"Current trigger mode: `{current}`\n\nUsage: `{usage_command} all` or `{usage_command} mentions`"
+            )
+        )
+        return
+
+    if chat_prefs:
+        await chat_prefs.set_trigger_mode(channel_id, mode)
+
+    desc = (
+        "respond to all messages" if mode == "all" else "respond only when @mentioned"
+    )
+    await send(RenderedMessage(text=f"Trigger mode set to `{mode}` — {desc}"))
+
+
+async def handle_status_command(
+    *,
+    channel_id: str,
+    runtime: Any,
+    chat_prefs: Any | None,
+    has_session: bool | None,
+    send: Any,
+    title: str,
+    default_trigger: str,
+) -> None:
+    engine = runtime.default_engine
+    trigger = default_trigger
+    project_display = "none"
+    if chat_prefs:
+        engine = await chat_prefs.get_default_engine(channel_id) or engine
+        trigger = await chat_prefs.get_trigger_mode(channel_id) or default_trigger
+        ctx = await chat_prefs.get_context(channel_id)
+        if ctx and ctx.project:
+            project_display = f"`{ctx.project}`"
+            if ctx.branch:
+                project_display += f" ({ctx.branch})"
+
+    lines = [
+        title,
+        "",
+        f"- Engine: `{engine}`",
+        f"- Project: {project_display}",
+        f"- Trigger: `{trigger}`",
+    ]
+    if has_session is not None:
+        lines.append(f"- Session: {'active' if has_session else 'none'}")
+    lines.append(f"- Channel: `{channel_id}`")
+    await send(RenderedMessage(text="\n".join(lines)))
+
+
+async def handle_cancel_command(
+    *,
+    channel_id: str,
+    running_tasks: dict[Any, Any],
+    send: Any,
+) -> None:
+    cancelled = False
+    for ref, task in list(running_tasks.items()):
+        if str(ref.channel_id) == channel_id:
+            task.cancel_requested.set()
+            cancelled = True
+            break
+
+    if cancelled:
+        await send(RenderedMessage(text="Task cancelled."))
+    else:
+        await send(RenderedMessage(text="No running task to cancel."))
