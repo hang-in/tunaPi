@@ -300,7 +300,7 @@ def _build_round_prompt(
 # ---------------------------------------------------------------------------
 
 
-async def _run_single_round(
+async def _run_round_parallel(
     session: RoundtableSession,
     topic: str,
     engines: list[str],
@@ -309,7 +309,116 @@ async def _run_single_round(
     running_tasks: RunningTasks,
     ambient_context: RunContext | None,
 ) -> list[tuple[str, str]]:
+    """첫 라운드 엔진들을 병렬 실행하고 결과를 수집."""
+    runtime = cfg.runtime
+    transport = cfg.exec_cfg.transport
+    send_opts = SendOptions(thread_id=session.thread_id)
+    results: dict[str, str] = {}
+
+    async def _run_one(engine_id: str) -> None:
+        if session.cancel_event.is_set():
+            return
+
+        prompt = _build_round_prompt(
+            topic,
+            session.transcript,
+            session.current_round,
+            current_round_responses=[],
+        )
+
+        resolved = runtime.resolve_runner(
+            resume_token=None,
+            engine_override=engine_id,
+        )
+        if resolved.issue:
+            await transport.send(
+                channel_id=session.channel_id,
+                message=RenderedMessage(text=f"**[{engine_id}]**: {resolved.issue}"),
+                options=send_opts,
+            )
+            return
+
+        context = ambient_context
+        context_line = runtime.format_context_line(context)
+        try:
+            cwd = runtime.resolve_run_cwd(context)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("roundtable.resolve_cwd_error", error=str(exc))
+            await transport.send(
+                channel_id=session.channel_id,
+                message=RenderedMessage(text=f"{exc}"),
+                options=send_opts,
+            )
+            return
+
+        if cwd:
+            bind_run_context(project=context.project if context else None)
+
+        engine_label = f"`{engine_id}`"
+        full_context = (
+            f"{context_line} | {engine_label}" if context_line else engine_label
+        )
+
+        incoming = IncomingMessage(
+            channel_id=session.channel_id,
+            message_id=session.thread_id,
+            text=prompt,
+            thread_id=session.thread_id,
+        )
+
+        try:
+            answer = await handle_message(
+                cfg.exec_cfg,
+                runner=resolved.runner,
+                incoming=incoming,
+                resume_token=None,
+                context=context,
+                context_line=full_context,
+                running_tasks=running_tasks,
+            )
+            if answer:
+                results[engine_id] = answer
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "roundtable.agent_error",
+                engine=engine_id,
+                error=str(exc),
+            )
+            await transport.send(
+                channel_id=session.channel_id,
+                message=RenderedMessage(text=f"**[{engine_id}]** error: {exc}"),
+                options=send_opts,
+            )
+
+    async with anyio.create_task_group() as tg:
+        for engine_id in engines:
+            tg.start_soon(_run_one, engine_id)
+
+    # 원래 engines 순서 유지
+    return [(eid, results[eid]) for eid in engines if eid in results]
+
+
+async def _run_single_round(
+    session: RoundtableSession,
+    topic: str,
+    engines: list[str],
+    *,
+    cfg: RoundtableBridgeCfg,
+    running_tasks: RunningTasks,
+    ambient_context: RunContext | None,
+    parallel: bool = False,
+) -> list[tuple[str, str]]:
     """Run one round of agents and return the round transcript."""
+    if parallel and len(engines) > 1:
+        return await _run_round_parallel(
+            session,
+            topic,
+            engines,
+            cfg=cfg,
+            running_tasks=running_tasks,
+            ambient_context=ambient_context,
+        )
+
     runtime = cfg.runtime
     transport = cfg.exec_cfg.transport
     send_opts = SendOptions(thread_id=session.thread_id)
@@ -407,6 +516,7 @@ async def run_roundtable(
     chat_prefs: object | None,
     running_tasks: RunningTasks,
     ambient_context: RunContext | None,
+    parallel_first_round: bool = False,
 ) -> None:
     """Run all rounds of a roundtable session."""
     transport = cfg.exec_cfg.transport
@@ -432,6 +542,7 @@ async def run_roundtable(
                 options=send_opts,
             )
 
+        parallel = parallel_first_round and round_num == 1
         round_transcript = await _run_single_round(
             session,
             session.topic,
@@ -439,6 +550,7 @@ async def run_roundtable(
             cfg=cfg,
             running_tasks=running_tasks,
             ambient_context=ambient_context,
+            parallel=parallel,
         )
         session.transcript.extend(round_transcript)
 

@@ -27,6 +27,7 @@ class RoundtableConfig:
     engines: tuple[str, ...]  # empty = all available
     rounds: int = 1
     max_rounds: int = 3
+    parallel_first_round: bool = False
 
 type ContextSource = Literal[
     "reply_ctx",

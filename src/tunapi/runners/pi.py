@@ -145,6 +145,92 @@ def _last_assistant_message(messages: Any) -> dict[str, Any] | None:
     return None
 
 
+def _process_content_blocks(
+    content: Any,
+    *,
+    state: PiStreamState,
+    parent_tool_use_id: str | None = None,
+) -> list[TunapiEvent]:
+    """Process content blocks from assistant message, generating action events."""
+    out: list[TunapiEvent] = []
+    if not isinstance(content, list):
+        return out
+    for idx, item in enumerate(content):
+        if not isinstance(item, dict):
+            continue
+        block_type = item.get("type")
+        if block_type == "toolCall":
+            tool_id = item.get("id", "")
+            tool_name = str(item.get("name", "tool"))
+            args = item.get("arguments", {})
+            if not isinstance(args, dict):
+                args = {}
+            if isinstance(tool_id, str) and tool_id:
+                kind, title_str = _tool_kind_and_title(tool_name, args)
+                detail: dict[str, Any] = {"tool_name": tool_name, "args": args}
+                if parent_tool_use_id:
+                    detail["parent_tool_use_id"] = parent_tool_use_id
+                if kind == "file_change":
+                    path = args.get("path")
+                    if path:
+                        detail["changes"] = [{"path": str(path), "kind": "update"}]
+                action = Action(id=tool_id, kind=kind, title=title_str, detail=detail)
+                state.pending_actions[action.id] = action
+                out.append(_action_event(phase="started", action=action))
+        elif block_type == "tool_result":
+            tool_use_id = item.get("tool_use_id", "")
+            if isinstance(tool_use_id, str) and tool_use_id:
+                action = state.pending_actions.pop(tool_use_id, None)
+                result_content = item.get("content", "")
+                is_error = item.get("is_error", False)
+                if action is None:
+                    action = Action(id=tool_use_id, kind="tool", title="tool result", detail={})
+                detail = dict(action.detail)
+                detail["result"] = result_content
+                detail["is_error"] = is_error
+                out.append(
+                    _action_event(
+                        phase="completed",
+                        action=Action(
+                            id=action.id,
+                            kind=action.kind,
+                            title=action.title,
+                            detail=detail,
+                        ),
+                        ok=not is_error,
+                    )
+                )
+        elif block_type == "thinking":
+            thinking_text = item.get("thinking", "")
+            if thinking_text:
+                # Use content index for stable ID — same thinking block
+                # gets updated rather than duplicated across delta events
+                action_id = f"pi.thinking.{idx}"
+                detail: dict[str, Any] = {}
+                if parent_tool_use_id:
+                    detail["parent_tool_use_id"] = parent_tool_use_id
+                thinkingSignature = item.get("thinkingSignature")
+                if thinkingSignature:
+                    detail["thinkingSignature"] = thinkingSignature
+                out.append(
+                    _action_event(
+                        phase="completed",
+                        action=Action(
+                            id=action_id,
+                            kind="note",
+                            title=thinking_text,
+                            detail=detail,
+                        ),
+                        ok=True,
+                    )
+                )
+        elif block_type == "text":
+            text = item.get("text")
+            if isinstance(text, str) and text:
+                state.last_assistant_text = text
+    return out
+
+
 def translate_pi_event(
     event: pi_schema.PiEvent,
     *,
@@ -179,6 +265,41 @@ def translate_pi_event(
         state.started = True
 
     match event:
+        case pi_schema.MessageStart(message=message):
+            if isinstance(message, dict) and message.get("role") == "assistant":
+                content = message.get("content")
+                parent_id = message.get("parent_tool_use_id")
+                out.extend(
+                    _process_content_blocks(
+                        content,
+                        state=state,
+                        parent_tool_use_id=parent_id if isinstance(parent_id, str) else None,
+                    )
+                )
+            return out
+
+        case pi_schema.MessageUpdate(
+            message=_message, assistantMessageEvent=assistant_event, event=update_event
+        ):
+            # pi wraps the actual payload in an "event" sub-object (future-proof)
+            if update_event is not None:
+                _message = update_event.message
+                assistant_event = update_event.assistantMessageEvent
+            # assistantMessageEvent carries type/delta metadata but no "role" field.
+            # The full content (with role) is always in the message field.
+            msg = _message
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                content = msg.get("content")
+                parent_id = msg.get("parent_tool_use_id")
+                out.extend(
+                    _process_content_blocks(
+                        content,
+                        state=state,
+                        parent_tool_use_id=parent_id if isinstance(parent_id, str) else None,
+                    )
+                )
+            return out
+
         case pi_schema.ToolExecutionStart(
             toolCallId=tool_id, toolName=tool_name, args=args
         ):

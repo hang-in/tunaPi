@@ -35,9 +35,15 @@ class MessageStart(_Event, tag="message_start"):
     message: dict[str, Any] | None = None
 
 
+class _MessageUpdateEvent(msgspec.Struct, forbid_unknown_fields=False):
+    message: dict[str, Any] | None = None
+    assistantMessageEvent: dict[str, Any] | None = None
+
+
 class MessageUpdate(_Event, tag="message_update"):
     message: dict[str, Any] | None = None
     assistantMessageEvent: dict[str, Any] | None = None
+    event: _MessageUpdateEvent | None = None
 
 
 class TurnStart(_Event, tag="turn_start"):

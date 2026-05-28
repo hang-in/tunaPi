@@ -207,6 +207,7 @@ def build_runtime_spec(
         engines=tuple(rt.engines),
         rounds=rt.rounds,
         max_rounds=rt.max_rounds,
+        parallel_first_round=rt.parallel_first_round,
     )
 
     return RuntimeSpec(

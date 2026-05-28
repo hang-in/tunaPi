@@ -290,6 +290,7 @@ async def _start_roundtable(
             chat_prefs=chat_prefs,
             running_tasks=running_tasks,
             ambient_context=ambient_context,
+            parallel_first_round=cfg.runtime.roundtable.parallel_first_round,
         )
     finally:
         roundtables.complete(thread_id)
@@ -798,6 +799,7 @@ async def _run_engine(
     )
 
     context = resolved.context
+    context_source = resolved.context_source
     engine_override = resolved.engine_override
     if engine_override is None and chat_prefs:
         pref_engine = await chat_prefs.get_default_engine(msg.channel_id)
@@ -897,6 +899,7 @@ async def _run_engine(
                 resume_token=effective_resume,
                 context=context,
                 context_line=context_line,
+                context_source=context_source,
                 strip_resume_line=runtime.is_resume_line,
                 running_tasks=running_tasks,
                 on_thread_known=on_thread_known,

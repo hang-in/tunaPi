@@ -94,3 +94,19 @@ class ChatPresenter:
 
         text = self._prepare(parts)
         return RenderedMessage(text=text)
+
+    def render_progress_summary(
+        self,
+        state: ProgressState,
+        *,
+        elapsed_s: float,
+        label: str = "done",
+        max_actions: int = 3,
+    ) -> RenderedMessage:
+        """Render a compact progress summary (last N actions)."""
+        state = self._strip_resume(state)
+        parts = self._formatter.render_summary_parts(
+            state, elapsed_s=elapsed_s, label=label, max_actions=max_actions
+        )
+        text = self._prepare(parts)
+        return RenderedMessage(text=text)

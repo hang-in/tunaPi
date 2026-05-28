@@ -47,14 +47,36 @@ def format_elapsed(elapsed_s: float) -> str:
 
 
 def format_header(
-    elapsed_s: float, item: int | None, *, label: str, engine: str
+    elapsed_s: float,
+    item: int | None,
+    *,
+    label: str,
+    engine: str,
+    context: str | None = None,
 ) -> str:
     elapsed = format_elapsed(elapsed_s)
     parts = [label, engine]
+    if context:
+        parts.append(context)
     parts.append(elapsed)
     if item is not None:
         parts.append(f"step {item}")
     return HEADER_SEP.join(parts)
+
+
+def _format_context_display(
+    context_line: str | None,
+    context_source: str | None,
+) -> str | None:
+    """컨텍스트 라인과 소스를 결합하여 표시 문자열 생성."""
+    if not context_line:
+        return None
+    clean = context_line.strip("`").strip()
+    if not clean:
+        return None
+    if context_source and context_source != "none":
+        return f"{clean}({context_source})"
+    return clean
 
 
 def shorten(text: str, width: int | None) -> str:
@@ -206,15 +228,47 @@ class MarkdownFormatter:
         label: str = "working",
     ) -> MarkdownParts:
         step = state.action_count or None
+        ctx_display = _format_context_display(state.context_line, state.context_source)
+        header = format_header(
+            elapsed_s,
+            step,
+            label=label,
+            engine=state.engine,
+            context=ctx_display,
+        )
+        body = self._assemble_body(self._format_actions(state))
+        return MarkdownParts(
+            header=header, body=body, footer=self._format_footer(state)
+        )
+
+    def render_summary_parts(
+        self,
+        state: ProgressState,
+        *,
+        elapsed_s: float,
+        label: str = "done",
+        max_actions: int = 3,
+    ) -> MarkdownParts:
+        """Render a compact summary with only the last N completed actions."""
+        step = state.action_count or None
         header = format_header(
             elapsed_s,
             step,
             label=label,
             engine=state.engine,
         )
-        return MarkdownParts(
-            header=header, body=None, footer=self._format_footer(state)
-        )
+        completed = [a for a in state.actions if a.completed]
+        recent = completed[-max_actions:] if len(completed) > max_actions else completed
+        lines = [
+            format_action_line(
+                a.action, a.display_phase, a.ok, command_width=self.command_width
+            )
+            for a in recent
+        ]
+        if len(completed) > max_actions:
+            lines.insert(0, f"…({len(completed) - max_actions} more steps)")
+        body = self._assemble_body(lines) if lines else None
+        return MarkdownParts(header=header, body=body, footer=self._format_footer(state))
 
     def render_final_parts(
         self,

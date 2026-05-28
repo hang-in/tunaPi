@@ -200,6 +200,7 @@ async def _start_roundtable(
             chat_prefs=None,
             running_tasks=running_tasks,
             ambient_context=run_context,
+            parallel_first_round=cfg.runtime.roundtable.parallel_first_round,
         )
     finally:
         roundtables.complete(thread_id)

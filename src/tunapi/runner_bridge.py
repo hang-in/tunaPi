@@ -191,6 +191,7 @@ class ProgressEdits:
         self.resume_formatter = resume_formatter
         self.label = label
         self.context_line = context_line
+        self.context_source: str | None = None
         self.event_seq = 0
         self.rendered_seq = 0
         self.signal_send, self.signal_recv = anyio.create_memory_object_stream(1)
@@ -214,6 +215,7 @@ class ProgressEdits:
             state = self.tracker.snapshot(
                 resume_formatter=self.resume_formatter,
                 context_line=self.context_line,
+                context_source=self.context_source,
             )
             rendered = self.presenter.render_progress(
                 state, elapsed_s=now - self.started_at, label=self.label
@@ -265,6 +267,7 @@ async def send_initial_progress(
     progress_ref: MessageRef | None = None,
     resume_formatter: Callable[[ResumeToken], str] | None = None,
     context_line: str | None = None,
+    context_source: str | None = None,
     thread_id: ThreadId | None = None,
 ) -> ProgressMessageState:
     last_rendered: RenderedMessage | None = None
@@ -272,6 +275,7 @@ async def send_initial_progress(
     state = tracker.snapshot(
         resume_formatter=resume_formatter,
         context_line=context_line,
+        context_source=context_source,
     )
     initial_rendered = cfg.presenter.render_progress(
         state,
@@ -483,6 +487,7 @@ async def handle_message(
     resume_token: ResumeToken | None,
     context: RunContext | None = None,
     context_line: str | None = None,
+    context_source: str | None = None,
     strip_resume_line: Callable[[str], bool] | None = None,
     running_tasks: RunningTasks | None = None,
     on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]]
@@ -565,6 +570,7 @@ async def handle_message(
         progress_ref=progress_ref,
         resume_formatter=runner.format_resume,
         context_line=context_line,
+        context_source=context_source,
         thread_id=incoming.thread_id,
     )
     progress_ref = progress_state.ref
@@ -581,6 +587,7 @@ async def handle_message(
         resume_formatter=runner.format_resume,
         context_line=context_line,
     )
+    edits.context_source = context_source
 
     running_task: RunningTask | None = None
     if running_tasks is not None and progress_ref is not None:
@@ -772,14 +779,23 @@ async def handle_message(
         cfg,
         channel_id=incoming.channel_id,
         reply_to=user_ref,
-        progress_ref=progress_ref,
+        progress_ref=None,
         message=final_rendered,
         notify=cfg.final_notify,
         edit_ref=edit_ref,
-        replace_ref=progress_ref,
+        replace_ref=None,
         delete_tag="final",
         thread_id=incoming.thread_id,
     )
+
+    # Edit progress message to show last 3 action summary
+    if progress_ref is not None:
+        summary = cfg.presenter.render_progress_summary(
+            state,
+            elapsed_s=elapsed,
+            label="done",
+        )
+        await cfg.transport.edit(ref=progress_ref, message=summary)
     await _finalize_run(
         journal,
         run_id,
