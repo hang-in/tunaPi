@@ -9,15 +9,9 @@ MAX_RECOMMENDED_LINES = 800
 # Current baseline for the fat-file decomposition plan. Refactors may remove
 # entries from this set, but new oversized files should not be introduced.
 ALLOWED_OVERSIZED_FILES = {
-    "src/tunapi/discord/handlers.py",
-    "src/tunapi/mattermost/commands.py",
-    "src/tunapi/mattermost/loop.py",
     "src/tunapi/runner_bridge.py",
-    "src/tunapi/slack/commands.py",
-    "src/tunapi/slack/loop.py",
     "src/tunapi/telegram/loop_dispatch.py",
     "src/tunapi/telegram/onboarding.py",
-    "src/tunapi/tunadish/commands.py",
 }
 
 

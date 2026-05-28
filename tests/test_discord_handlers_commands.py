@@ -1365,11 +1365,11 @@ class TestRegisterSlashCommands:
             "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_effective_default_engine",
+            "tunapi.discord.pref_commands.resolve_effective_default_engine",
             AsyncMock(return_value=("claude", "config")),
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_overrides",
+            "tunapi.discord.pref_commands.resolve_overrides",
             AsyncMock(return_value=ResolvedOverrides()),
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
@@ -1418,11 +1418,11 @@ class TestRegisterSlashCommands:
             "tunapi.discord.handlers.is_user_allowed", lambda a, u: True
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_effective_default_engine",
+            "tunapi.discord.pref_commands.resolve_effective_default_engine",
             AsyncMock(return_value=("claude", "channel_override")),
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_overrides",
+            "tunapi.discord.pref_commands.resolve_overrides",
             AsyncMock(
                 return_value=ResolvedOverrides(
                     model="gpt-4",
@@ -1613,10 +1613,10 @@ class TestRegisterSlashCommands:
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
-            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: True
+            "tunapi.discord.pref_commands.is_valid_reasoning_level", lambda level: True
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.supports_reasoning", lambda e: True
+            "tunapi.discord.pref_commands.supports_reasoning", lambda e: True
         )
 
         prefs_store = _make_prefs_store()
@@ -1640,7 +1640,7 @@ class TestRegisterSlashCommands:
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
-            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: False
+            "tunapi.discord.pref_commands.is_valid_reasoning_level", lambda level: False
         )
 
         cmds = self._register_and_capture(monkeypatch)
@@ -1662,10 +1662,10 @@ class TestRegisterSlashCommands:
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
-            "tunapi.discord.handlers.is_valid_reasoning_level", lambda level: True
+            "tunapi.discord.pref_commands.is_valid_reasoning_level", lambda level: True
         )
         monkeypatch.setattr(
-            "tunapi.discord.handlers.supports_reasoning", lambda e: False
+            "tunapi.discord.pref_commands.supports_reasoning", lambda e: False
         )
 
         cmds = self._register_and_capture(monkeypatch)
@@ -1739,7 +1739,7 @@ class TestRegisterSlashCommands:
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_trigger_mode",
+            "tunapi.discord.pref_commands.resolve_trigger_mode",
             AsyncMock(return_value="all"),
         )
 
@@ -1762,7 +1762,7 @@ class TestRegisterSlashCommands:
         )
         monkeypatch.setattr("tunapi.discord.handlers.discord.Thread", DummyThread)
         monkeypatch.setattr(
-            "tunapi.discord.handlers.resolve_trigger_mode",
+            "tunapi.discord.pref_commands.resolve_trigger_mode",
             AsyncMock(return_value="all"),
         )
 
