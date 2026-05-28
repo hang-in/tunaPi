@@ -124,7 +124,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         guild_id = ctx.guild.id
@@ -209,7 +211,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         guild_id = ctx.guild.id
@@ -247,7 +251,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         guild_id = ctx.guild.id
@@ -270,7 +276,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
 
@@ -298,7 +306,9 @@ def register_slash_commands(
             return
 
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         guild_id = ctx.guild.id
@@ -385,7 +395,9 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         thread_id: int | None = None
@@ -515,7 +527,9 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         thread_id: int | None = None
@@ -596,7 +610,9 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         thread_id: int | None = None
@@ -691,7 +707,9 @@ def register_slash_commands(
 
         guild_id = ctx.guild.id
         channel_id = ctx.channel_id
-        if channel_id is None:
+        if (
+            channel_id is None
+        ):  # pragma: no cover - Pycord guild commands have a channel
             await ctx.respond("This command requires a channel.", ephemeral=True)
             return
         thread_id: int | None = None
