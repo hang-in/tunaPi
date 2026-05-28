@@ -732,8 +732,40 @@ class TunadishBackend:
 
         return await run_handlers.build_cross_session_summary(self, conv_id, project)
 
+    _handle_project_context = backend_delegates._handle_project_context
+    _handle_branch_list_json = backend_delegates._handle_branch_list_json
+    _handle_memory_list_json = backend_delegates._handle_memory_list_json
+    _handle_review_list_json = backend_delegates._handle_review_list_json
+    _handle_branch_create = backend_delegates._handle_branch_create
+    _handle_branch_switch = backend_delegates._handle_branch_switch
+    _handle_branch_adopt = backend_delegates._handle_branch_adopt
+    _build_adopt_summary = backend_delegates._build_adopt_summary
+    _build_branch_context = backend_delegates._build_branch_context
+    _handle_branch_archive = backend_delegates._handle_branch_archive
+    _handle_branch_delete = backend_delegates._handle_branch_delete
+    _handle_message_retry = backend_delegates._handle_message_retry
+    _handle_message_save = backend_delegates._handle_message_save
+    _handle_message_delete = backend_delegates._handle_message_delete
+    _handle_message_adopt = backend_delegates._handle_message_adopt
+    _rawq_startup_check = backend_delegates._rawq_startup_check
+    _resolve_project_path = backend_delegates._resolve_project_path
+    _rawq_ensure_index = backend_delegates._rawq_ensure_index
+    _rawq_enrich_message = backend_delegates._rawq_enrich_message
+    _handle_code_search = backend_delegates._handle_code_search
+    _handle_code_map = backend_delegates._handle_code_map
+    _handle_discussion_save = backend_delegates._handle_discussion_save
+    _handle_discussion_link_branch = backend_delegates._handle_discussion_link_branch
+    _handle_synthesis_create = backend_delegates._handle_synthesis_create
+    _handle_review_request = backend_delegates._handle_review_request
+    _handle_handoff_create = backend_delegates._handle_handoff_create
+    _handle_handoff_parse = backend_delegates._handle_handoff_parse
+    _handle_engine_list = backend_delegates._handle_engine_list
+
     async def handle_run_cancel(self, params: dict[str, Any], websocket):
         conv_id = params.get("conversation_id")
+        if not isinstance(conv_id, str):
+            logger.warning("Cancel requested without conversation_id")
+            return
         progress_ref = self.run_map.get(conv_id)
         if progress_ref is None:
             logger.warning("Cancel requested but no active run for %s", conv_id)
@@ -744,8 +776,5 @@ class TunadishBackend:
             task.cancel_requested.set()
             logger.info("Cancelled run for conversation %s", conv_id)
 
-
-for _method_name in backend_delegates.DELEGATE_METHODS:
-    setattr(TunadishBackend, _method_name, getattr(backend_delegates, _method_name))
 
 BACKEND = TunadishBackend()

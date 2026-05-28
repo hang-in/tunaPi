@@ -14,7 +14,7 @@ async def handle_message_retry(
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
-    ws_tg: anyio.abc.TaskGroup,
+    ws_tg: Any,
 ) -> None:
     """message.retry -> 새 브랜치 생성 후 마지막 prompt를 재실행."""
     conv_id = params.get("conversation_id")

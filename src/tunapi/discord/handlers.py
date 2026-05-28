@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
 import discord
@@ -72,8 +73,8 @@ def register_slash_commands(
     *,
     state_store: DiscordStateStore,
     prefs_store: DiscordPrefsStore,
-    get_running_task: callable,
-    cancel_task: callable,
+    get_running_task: Callable[..., object],
+    cancel_task: Callable[..., object],
     allowed_user_ids: frozenset[int] | None = None,
     trigger_mode_default: Literal["all", "mentions"] = "all",
     runtime: TransportRuntime | None = None,

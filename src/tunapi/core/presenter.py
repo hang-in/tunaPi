@@ -12,9 +12,9 @@ rendering, and different split/followup semantics.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
-from ..markdown import MarkdownFormatter
+from ..markdown import MarkdownFormatter, MarkdownParts
 from ..progress import ProgressState
 from ..transport import RenderedMessage
 
@@ -30,8 +30,8 @@ class ChatPresenter:
     def __init__(
         self,
         *,
-        prepare: Callable[[Sequence[str]], str],
-        prepare_multi: Callable[[Sequence[str]], list[str]],
+        prepare: Callable[[MarkdownParts], str],
+        prepare_multi: Callable[[MarkdownParts], list[str]],
         formatter: MarkdownFormatter | None = None,
         message_overflow: str = "trim",
         show_resume_line: bool = True,

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import discord
 
@@ -34,7 +35,11 @@ CANCEL_BUTTON_ID = "tunapi-discord:cancel"
 class CancelView(discord.ui.View):
     """View with cancel button."""
 
-    def __init__(self, *, on_cancel: callable | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        on_cancel: Callable[[discord.Interaction], Awaitable[Any]] | None = None,
+    ) -> None:
         super().__init__(timeout=None)
         self._on_cancel = on_cancel
 
@@ -169,9 +174,7 @@ class DiscordBridgeConfig:
 
 
 # Type alias for message listener callbacks
-MessageListener = (
-    callable  # (channel_id: int, text: str, is_final: bool) -> Awaitable[None]
-)
+MessageListener = Callable[[int, str, bool], Awaitable[None]]
 
 
 class DiscordTransport:
@@ -179,7 +182,9 @@ class DiscordTransport:
 
     def __init__(self, bot: DiscordBotClient) -> None:
         self._bot = bot
-        self._cancel_handlers: dict[int, callable] = {}  # message_id -> handler
+        self._cancel_handlers: dict[
+            int, Callable[[discord.Interaction], Awaitable[Any]]
+        ] = {}
         self._message_listeners: dict[
             int, MessageListener
         ] = {}  # channel_id -> listener
@@ -192,7 +197,9 @@ class DiscordTransport:
         """Remove a message listener for a channel."""
         self._message_listeners.pop(channel_id, None)
 
-    def register_cancel_handler(self, message_id: int, handler: callable) -> None:
+    def register_cancel_handler(
+        self, message_id: int, handler: Callable[[discord.Interaction], Awaitable[Any]]
+    ) -> None:
         """Register a cancel handler for a message."""
         self._cancel_handlers[message_id] = handler
 
