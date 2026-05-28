@@ -214,6 +214,44 @@ async def dispatch_roundtable_command(
     )
 
 
+async def auto_bind_channel_project(
+    channel_id: str,
+    runtime: Any,
+    *,
+    get_channel_name: Callable[[str], Awaitable[str | None]],
+    log_event: str,
+) -> None:
+    """Bind a chat channel to a project whose directory matches the channel name."""
+    if runtime.projects_root is None:
+        return
+    if runtime._projects.project_for_chat(channel_id) is not None:
+        return
+
+    channel_name = await get_channel_name(channel_id)
+    if not channel_name:
+        return
+
+    root = Path(runtime.projects_root).expanduser()
+    if not root.is_dir():
+        return
+
+    channel_lower = channel_name.lower()
+    for candidate in root.iterdir():
+        if candidate.is_dir() and candidate.name.lower() == channel_lower:
+            runtime._projects.register_discovered(
+                alias=candidate.name,
+                path=candidate,
+                chat_id=channel_id,
+            )
+            logger.info(
+                log_event,
+                channel_id=channel_id,
+                channel_name=channel_name,
+                project=candidate.name,
+            )
+            return
+
+
 async def start_roundtable_thread(
     channel_id: str,
     topic: str,

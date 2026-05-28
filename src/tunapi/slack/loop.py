@@ -14,6 +14,7 @@ from ..core import lifecycle
 from ..core.chat_loop_helpers import (
     _PERSONA_PREFIX_RE,  # noqa: F401 - compatibility for existing tests/imports
     archive_roundtable_thread,
+    auto_bind_channel_project,
     dispatch_roundtable_command,
     handle_cancel_reaction_by_message_id,
     render_file_put_results,
@@ -373,36 +374,17 @@ async def _auto_bind_channel_project(
     cfg: SlackBridgeConfig,
 ) -> None:
     """Auto-bind a channel to a discovered project if channel name matches."""
-    runtime = cfg.runtime
-    if runtime.projects_root is None:
-        return
-    if runtime._projects.project_for_chat(channel_id) is not None:
-        return
 
-    channel = await cfg.bot.get_channel(channel_id)
-    if channel is None or not channel.name:
-        return
+    async def _get_channel_name(channel_id: str) -> str | None:
+        channel = await cfg.bot.get_channel(channel_id)
+        return channel.name if channel else None
 
-    root = Path(runtime.projects_root).expanduser()
-    if not root.is_dir():
-        return
-
-    # Case-insensitive match against subdirectories
-    channel_lower = channel.name.lower()
-    for candidate in root.iterdir():
-        if candidate.is_dir() and candidate.name.lower() == channel_lower:
-            runtime._projects.register_discovered(
-                alias=candidate.name,
-                path=candidate,
-                chat_id=channel_id,
-            )
-            logger.info(
-                "slack.auto_bind_project",
-                channel_id=channel_id,
-                channel_name=channel.name,
-                project=candidate.name,
-            )
-            return
+    await auto_bind_channel_project(
+        channel_id,
+        cfg.runtime,
+        get_channel_name=_get_channel_name,
+        log_event="slack.auto_bind_project",
+    )
 
 
 # ---------------------------------------------------------------------------
