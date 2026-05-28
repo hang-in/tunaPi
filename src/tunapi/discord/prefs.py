@@ -209,9 +209,10 @@ class DiscordPrefsStore:
 
             if key not in self._state.channels:
                 self._state.channels[key] = DiscordChannelPrefsData()
-            if self._state.channels[key].model_overrides is None:
-                self._state.channels[key].model_overrides = {}
-            self._state.channels[key].model_overrides[engine_id] = model
+            channel_data = self._state.channels[key]
+            if channel_data.model_overrides is None:
+                channel_data.model_overrides = {}
+            channel_data.model_overrides[engine_id] = model
             self._save()
 
     async def clear_model_overrides(
@@ -264,9 +265,10 @@ class DiscordPrefsStore:
 
             if key not in self._state.channels:
                 self._state.channels[key] = DiscordChannelPrefsData()
-            if self._state.channels[key].reasoning_overrides is None:
-                self._state.channels[key].reasoning_overrides = {}
-            self._state.channels[key].reasoning_overrides[engine_id] = level
+            channel_data = self._state.channels[key]
+            if channel_data.reasoning_overrides is None:
+                channel_data.reasoning_overrides = {}
+            channel_data.reasoning_overrides[engine_id] = level
             self._save()
 
     async def clear_reasoning_overrides(

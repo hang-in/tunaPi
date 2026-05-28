@@ -219,12 +219,13 @@ class DiscordStateStore:
             key = self._session_key(guild_id, channel_id, author_id)
             if key not in self._state.channels:
                 self._state.channels[key] = DiscordChannelStateData()
-            if self._state.channels[key].sessions is None:
-                self._state.channels[key].sessions = {}
+            channel_data = self._state.channels[key]
+            if channel_data.sessions is None:
+                channel_data.sessions = {}
             if resume_token is None:
-                self._state.channels[key].sessions.pop(engine_id, None)
+                channel_data.sessions.pop(engine_id, None)
             else:
-                self._state.channels[key].sessions[engine_id] = resume_token
+                channel_data.sessions[engine_id] = resume_token
             self._save()
 
     async def clear_channel(self, guild_id: int | None, channel_id: int) -> None:
