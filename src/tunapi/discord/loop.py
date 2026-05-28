@@ -34,7 +34,6 @@ from .loop_state import (
     MediaGroupBuffer,
     ResumeDecision,
     _MediaGroupState,
-    _MediaItem,
     _diff_keys,
     _extract_engine_id_from_header,
     _strip_ctx_lines,
@@ -56,6 +55,7 @@ from .overrides import (
 )
 from .prefs import DiscordPrefsStore
 from .render import prepare_discord
+from . import roundtable_loop as _roundtable_loop
 from .state import DiscordStateStore
 from .types import DiscordChannelContext, DiscordThreadContext
 from .voice_messages import WhisperAttachmentTranscriber, is_audio_attachment
@@ -142,11 +142,6 @@ async def _send_plain_reply(
     )
 
 
-# ---------------------------------------------------------------------------
-# Roundtable helpers
-# ---------------------------------------------------------------------------
-
-
 async def _start_roundtable(
     channel_id: int,
     topic: str,
@@ -158,65 +153,24 @@ async def _start_roundtable(
     roundtables: RoundtableStore,
     run_context: RunContext | None,
 ) -> None:
-    """Create a roundtable thread and run all rounds."""
-    engines_display = ", ".join(f"`{e}`" for e in engines)
-    rounds_display = f"{rounds} round{'s' if rounds > 1 else ''}"
-    header = (
-        f"**Roundtable**\n\n"
-        f"**Topic:** {topic}\n"
-        f"**Engines:** {engines_display} | **Rounds:** {rounds_display}\n\n"
-        f"---"
+    await _roundtable_loop._start_roundtable(
+        channel_id,
+        topic,
+        rounds,
+        engines,
+        cfg=cfg,
+        running_tasks=running_tasks,
+        roundtables=roundtables,
+        run_context=run_context,
+        run_roundtable_fn=run_roundtable,
     )
-    ref = await cfg.exec_cfg.transport.send(
-        channel_id=channel_id,
-        message=RenderedMessage(text=header),
-    )
-    if ref is None:
-        logger.error("roundtable.header_send_failed", channel_id=channel_id)
-        return
-
-    thread_id = str(ref.message_id)
-    session = RoundtableSession(
-        thread_id=thread_id,
-        channel_id=channel_id,
-        topic=topic,
-        engines=engines,
-        total_rounds=rounds,
-    )
-    roundtables.put(session)
-
-    logger.info(
-        "roundtable.start",
-        thread_id=thread_id,
-        topic=topic,
-        engines=engines,
-        rounds=rounds,
-    )
-
-    try:
-        await run_roundtable(
-            session,
-            cfg=cfg,
-            chat_prefs=None,
-            running_tasks=running_tasks,
-            ambient_context=run_context,
-            parallel_first_round=cfg.runtime.roundtable.parallel_first_round,
-        )
-    finally:
-        roundtables.complete(thread_id)
 
 
 async def _archive_roundtable(
     session: RoundtableSession,
     cfg: DiscordBridgeConfig,
 ) -> None:
-    """Archive roundtable transcript, then notify."""
-    send_opts = SendOptions(thread_id=session.thread_id)
-    await cfg.exec_cfg.transport.send(
-        channel_id=session.channel_id,
-        message=RenderedMessage(text="Roundtable closed."),
-        options=send_opts,
-    )
+    await _roundtable_loop._archive_roundtable(session, cfg)
 
 
 async def _dispatch_rt_command(
@@ -230,81 +184,18 @@ async def _dispatch_rt_command(
     run_context: RunContext | None,
     send_opts: SendOptions,
 ) -> None:
-    """Handle the !rt command, including follow-up and close."""
-    from tunapi.slack.commands import handle_rt
-
-    continue_rt = None
-    close_rt = None
-
-    rt_thread_id = str(thread_id) if thread_id else None
-
-    if rt_thread_id and roundtables:
-        completed_session = roundtables.get_completed(rt_thread_id)
-        if completed_session:
-
-            async def continue_rt(
-                topic: str,
-                engines_filter: list[str] | None,
-                *,
-                _s: RoundtableSession = completed_session,
-                _ctx: RunContext | None = run_context,
-            ) -> None:
-                await run_followup_round(
-                    _s,
-                    topic,
-                    engines_filter,
-                    cfg=cfg,
-                    running_tasks=running_tasks,
-                    ambient_context=_ctx,
-                )
-
-            async def close_rt(
-                *,
-                _tid: str = rt_thread_id,
-                _rt: RoundtableStore = roundtables,
-                _s: RoundtableSession = completed_session,
-            ) -> None:
-                await _archive_roundtable(_s, cfg)
-                _rt.remove(_tid)
-
-        active_session = roundtables.get(rt_thread_id)
-        if active_session and not active_session.completed and close_rt is None:
-
-            async def close_rt(
-                *,
-                _tid: str = rt_thread_id,
-                _rt: RoundtableStore = roundtables,
-            ) -> None:
-                session = _rt.get(_tid)
-                if session:
-                    session.cancel_event.set()
-                    await _archive_roundtable(session, cfg)
-                _rt.remove(_tid)
-
-    async def send_fn(msg: RenderedMessage) -> None:
-        await cfg.exec_cfg.transport.send(
-            channel_id=channel_id,
-            message=msg,
-            options=send_opts,
-        )
-
-    await handle_rt(
+    await _roundtable_loop._dispatch_rt_command(
         args,
-        runtime=cfg.runtime,
-        send=send_fn,
-        start_roundtable=lambda topic, rounds, engines: _start_roundtable(
-            channel_id,
-            topic,
-            rounds,
-            engines,
-            cfg=cfg,
-            running_tasks=running_tasks,
-            roundtables=roundtables,
-            run_context=run_context,
-        ),
-        continue_roundtable=continue_rt,
-        close_roundtable=close_rt,
-        thread_id=rt_thread_id,
+        channel_id=channel_id,
+        thread_id=thread_id,
+        cfg=cfg,
+        running_tasks=running_tasks,
+        roundtables=roundtables,
+        run_context=run_context,
+        send_opts=send_opts,
+        start_roundtable_fn=_start_roundtable,
+        archive_roundtable_fn=_archive_roundtable,
+        run_followup_round_fn=run_followup_round,
     )
 
 
