@@ -1,5 +1,3 @@
-import uuid
-
 import anyio
 import pytest
 
@@ -142,9 +140,7 @@ def test_codex_extract_resume_accepts_plain_line() -> None:
 
 
 def test_codex_extract_resume_accepts_uuid7() -> None:
-    uuid7 = getattr(uuid, "uuid7", None)
-    assert uuid7 is not None
-    token = str(uuid7())
+    token = "019b66fc-64c2-7a71-81cd-081c504cfeb2"
     runner = CodexRunner(codex_cmd="codex", extra_args=[])
     text = f"`codex resume {token}`"
 
@@ -282,9 +278,9 @@ async def test_progress_edits_are_best_effort() -> None:
         clock=clock,
     )
 
-    assert transport.edit_calls
     assert all(call["wait"] is False for call in transport.edit_calls)
-    assert "working" in transport.edit_calls[-1]["message"].text.lower()
+    assert "done" in transport.edit_calls[-1]["message"].text.lower()
+    assert "working" in transport.edit_calls[-2]["message"].text.lower()
 
 
 @pytest.mark.anyio
@@ -332,7 +328,9 @@ async def test_bridge_flow_sends_progress_edits_and_final_resume() -> None:
     assert len(transport.edit_calls) >= 1
     # format_resume now returns token.value[:5]
     assert session_id[:5] in transport.send_calls[-1]["message"].text
-    assert transport.send_calls[-1]["options"].replace == transport.send_calls[0]["ref"]
+    assert transport.send_calls[-1]["options"].replace is None
+    assert transport.edit_calls[-1]["ref"] == transport.send_calls[0]["ref"]
+    assert "done" in transport.edit_calls[-1]["message"].text.lower()
 
 
 @pytest.mark.anyio

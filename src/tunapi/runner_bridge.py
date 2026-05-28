@@ -522,12 +522,12 @@ async def handle_message(
     _original_on_thread_known = on_thread_known
     if project_sessions is not None and _project_key:
 
-        async def on_thread_known(
-            token: ResumeToken, done: anyio.Event
-        ) -> None:
+        async def on_thread_known(token: ResumeToken, done: anyio.Event) -> None:
             assert project_sessions is not None  # narrowing
             await project_sessions.set(
-                _project_key, token, cwd=_project_cwd  # type: ignore[arg-type]
+                _project_key,
+                token,
+                cwd=_project_cwd,  # type: ignore[arg-type]
             )
             if _original_on_thread_known is not None:
                 await _original_on_thread_known(token, done)
@@ -554,7 +554,9 @@ async def handle_message(
 
     _run_opts = get_run_options()
     _model = _run_opts.model if _run_opts else None
-    _engine_label = f"{runner.engine}/{shorten_model(_model)}" if _model else runner.engine
+    _engine_label = (
+        f"{runner.engine}/{shorten_model(_model)}" if _model else runner.engine
+    )
     progress_tracker = ProgressTracker(engine=_engine_label)
 
     user_ref = MessageRef(
@@ -795,7 +797,7 @@ async def handle_message(
             elapsed_s=elapsed,
             label="done",
         )
-        await cfg.transport.edit(ref=progress_ref, message=summary)
+        await cfg.transport.edit(ref=progress_ref, message=summary, wait=False)
     await _finalize_run(
         journal,
         run_id,

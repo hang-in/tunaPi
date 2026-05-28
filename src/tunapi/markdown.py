@@ -268,7 +268,9 @@ class MarkdownFormatter:
         if len(completed) > max_actions:
             lines.insert(0, f"…({len(completed) - max_actions} more steps)")
         body = self._assemble_body(lines) if lines else None
-        return MarkdownParts(header=header, body=body, footer=self._format_footer(state))
+        return MarkdownParts(
+            header=header, body=body, footer=self._format_footer(state)
+        )
 
     def render_final_parts(
         self,
@@ -348,5 +350,18 @@ class MarkdownPresenter:
     ) -> RenderedMessage:
         parts = self._formatter.render_final_parts(
             state, elapsed_s=elapsed_s, status=status, answer=answer
+        )
+        return RenderedMessage(text=assemble_markdown_parts(parts))
+
+    def render_progress_summary(
+        self,
+        state: ProgressState,
+        *,
+        elapsed_s: float,
+        label: str = "done",
+        max_actions: int = 3,
+    ) -> RenderedMessage:
+        parts = self._formatter.render_summary_parts(
+            state, elapsed_s=elapsed_s, label=label, max_actions=max_actions
         )
         return RenderedMessage(text=assemble_markdown_parts(parts))

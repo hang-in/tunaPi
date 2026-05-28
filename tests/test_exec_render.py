@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from pathlib import Path
 
 from tunapi.markdown import (
-    HARD_BREAK,
     MarkdownFormatter,
     STATUS,
     action_status,
@@ -15,7 +14,6 @@ from tunapi.markdown import (
 )
 from tunapi.model import Action, ActionEvent, ResumeToken, StartedEvent, TunapiEvent
 from tunapi.progress import ProgressTracker
-from tunapi.telegram.render import render_markdown
 from tunapi.utils.paths import reset_run_base_dir, set_run_base_dir
 from tests.factories import (
     action_completed,
@@ -160,7 +158,7 @@ def test_progress_renderer_renders_progress_and_final() -> None:
         tracker.note_event(evt)
 
     state = tracker.snapshot(resume_formatter=_format_resume)
-    formatter = MarkdownFormatter(max_actions=5)
+    formatter = MarkdownFormatter(max_actions=0)
     progress_parts = formatter.render_progress_parts(state, elapsed_s=3.0)
     assert progress_parts.body is None
     progress = assemble_markdown_parts(progress_parts)
@@ -187,7 +185,7 @@ def test_progress_renderer_footer_includes_ctx_before_resume() -> None:
         resume_formatter=_format_resume,
         context_line="`z80 @feat/name`",
     )
-    formatter = MarkdownFormatter(max_actions=5)
+    formatter = MarkdownFormatter(max_actions=0)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
     assert parts.body is None
     assert parts.footer == "`z80 @feat/name 0199a`"
@@ -212,7 +210,7 @@ def test_progress_renderer_clamps_actions_and_ignores_unknown() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=3, command_width=20)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    assert parts.body is None
+    assert parts.body == "✓ `echo 3`  \n✓ `echo 4`  \n✓ `echo 5`"
     mystery = SimpleNamespace(type="mystery")
     assert tracker.note_event(cast(TunapiEvent, mystery)) is False
 
@@ -263,7 +261,7 @@ def test_progress_renderer_handles_duplicate_action_ids() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    assert parts.body is None
+    assert parts.body == "✓ `echo second`"
 
 
 def test_progress_renderer_collapses_action_updates() -> None:
@@ -287,7 +285,7 @@ def test_progress_renderer_collapses_action_updates() -> None:
     state = tracker.snapshot()
     formatter = MarkdownFormatter(max_actions=5)
     parts = formatter.render_progress_parts(state, elapsed_s=0.0)
-    assert parts.body is None
+    assert parts.body == "✓ `echo two`"
 
 
 def test_progress_renderer_deterministic_output() -> None:
