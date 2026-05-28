@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Literal
 
 import discord
@@ -34,6 +33,10 @@ from .engine_commands import (
     register_engine_commands as _register_engine_commands_impl,
 )
 from .file_commands import register_file_command
+from .roundtable_commands import (
+    register_roundtable_command as _register_roundtable_command_impl,
+)
+from .voice_commands import register_voice_commands as _register_voice_commands_impl
 
 if TYPE_CHECKING:
     from tunapi.runner_bridge import RunningTasks
@@ -699,119 +702,14 @@ def _register_voice_commands(
     voice_manager: VoiceManager,
     allowed_user_ids: frozenset[int] | None,
 ) -> None:
-    """Register voice-related slash commands."""
-    from .types import DiscordThreadContext
-
-    pycord_bot = bot.bot
-
-    @pycord_bot.slash_command(
-        name="voice",
-        description="Create a voice channel for this thread/channel and join it",
+    _register_voice_commands_impl(
+        bot,
+        state_store=state_store,
+        voice_manager=voice_manager,
+        allowed_user_ids=allowed_user_ids,
+        is_user_allowed_fn=is_user_allowed,
+        discord_module=discord,
     )
-    async def voice_command(ctx: discord.ApplicationContext) -> None:
-        """Create a voice channel bound to the current thread/channel's project context."""
-        if ctx.guild is None:
-            await ctx.respond(
-                "This command can only be used in a server.", ephemeral=True
-            )
-            return
-        user_id = getattr(getattr(ctx, "author", None), "id", None)
-        if not isinstance(user_id, int):
-            user_id = None
-        if not is_user_allowed(allowed_user_ids, user_id):
-            await ctx.respond("You are not allowed to use this bot.", ephemeral=True)
-            return
-
-        guild_id = ctx.guild.id
-        channel = ctx.channel
-
-        # Determine the text channel ID and get context
-        text_channel_id = ctx.channel_id
-        if text_channel_id is None:
-            await ctx.respond("Could not determine the channel.", ephemeral=True)
-            return
-
-        # Get context - check thread first, then parent channel
-        context = None
-
-        if isinstance(channel, discord.Thread):
-            # Try thread-specific context first
-            context = await state_store.get_context(guild_id, channel.id)
-            if context is None and channel.parent_id:
-                # Fall back to parent channel context
-                context = await state_store.get_context(guild_id, channel.parent_id)
-        else:
-            context = await state_store.get_context(guild_id, text_channel_id)
-
-        if context is None:
-            await ctx.respond(
-                "This channel/thread is not bound to a project.\n"
-                "Use `/bind <project>` first, then `/voice`.",
-                ephemeral=True,
-            )
-            return
-
-        # Defer since creating channel and joining might take a moment
-        await ctx.defer(ephemeral=True)
-
-        # Determine the branch name for the voice channel
-        if isinstance(context, DiscordThreadContext):
-            branch = context.branch
-        else:
-            branch = context.worktree_base
-
-        try:
-            # Create a temporary voice channel
-            if isinstance(channel, discord.Thread):
-                voice_name = f"Voice: {channel.name[:90]}"
-            else:
-                voice_name = f"Voice: {branch}"
-
-            # Get the category of the current channel (if any)
-            category = None
-            if isinstance(channel, discord.Thread) and channel.parent:
-                category = channel.parent.category
-            elif isinstance(channel, discord.TextChannel):
-                category = channel.category
-
-            voice_channel = await ctx.guild.create_voice_channel(
-                name=voice_name,
-                category=category,
-                reason=f"Voice session for {context.project}:{branch}",
-            )
-
-            # Join the voice channel
-            await voice_manager.join_channel(
-                voice_channel,
-                text_channel_id,
-                context.project,
-                branch,
-            )
-
-            await ctx.followup.send(
-                f"Created voice channel **{voice_channel.name}**.\n"
-                f"Project: `{context.project}` Branch: `{branch}`\n"
-                f"Join to start talking. The channel will be deleted when everyone leaves.",
-            )
-        except discord.Forbidden:
-            await ctx.followup.send(
-                "I don't have permission to create voice channels.",
-                ephemeral=True,
-            )
-        except discord.ClientException as e:
-            await ctx.followup.send(
-                f"Failed to create/join voice channel: {e}",
-                ephemeral=True,
-            )
-
-    # Register /vc as an alias for /voice
-    @pycord_bot.slash_command(
-        name="vc",
-        description="Create a voice channel for this thread/channel (alias for /voice)",
-    )
-    async def vc_command(ctx: discord.ApplicationContext) -> None:
-        """Alias for /voice command."""
-        await voice_command(ctx)
 
 
 def register_engine_commands(
@@ -867,106 +765,13 @@ def register_roundtable_command(
     state_store: DiscordStateStore,
     allowed_user_ids: frozenset[int] | None = None,
 ) -> None:
-    """Register the /rt slash command for roundtable discussions."""
-    from tunapi.context import RunContext
-    from tunapi.core.roundtable import RoundtableStore
-
-    from .types import DiscordChannelContext, DiscordThreadContext
-
-    pycord_bot = bot.bot
-    runtime = cfg.runtime
-    roundtables: RoundtableStore = roundtable_store  # type: ignore[assignment]
-
-    @pycord_bot.slash_command(
-        name="rt",
-        description="Start a multi-agent roundtable discussion",
+    _register_roundtable_command_impl(
+        bot,
+        cfg=cfg,
+        running_tasks=running_tasks,
+        roundtable_store=roundtable_store,
+        state_store=state_store,
+        allowed_user_ids=allowed_user_ids,
+        is_user_allowed_fn=is_user_allowed,
+        discord_module=discord,
     )
-    async def rt_command(
-        ctx: discord.ApplicationContext,
-        topic: str = discord.Option(
-            description='Topic for discussion (e.g., "best approach to caching")',
-        ),
-        rounds: int = discord.Option(
-            default=1,
-            description="Number of discussion rounds (default: 1)",
-        ),
-    ) -> None:
-        """Start a roundtable discussion."""
-        if ctx.guild is None:
-            await ctx.respond(
-                "This command can only be used in a server.", ephemeral=True
-            )
-            return
-
-        user_id = getattr(getattr(ctx, "author", None), "id", None)
-        if not isinstance(user_id, int):
-            user_id = None
-        if not is_user_allowed(allowed_user_ids, user_id):
-            await ctx.respond("You are not allowed to use this bot.", ephemeral=True)
-            return
-
-        rt_config = runtime.roundtable
-        rt_engines = list(rt_config.engines) or list(runtime.available_engine_ids())
-
-        if not rt_engines:
-            await ctx.respond("No engines available for roundtable.", ephemeral=True)
-            return
-
-        if rounds < 1:
-            await ctx.respond("Rounds must be at least 1.", ephemeral=True)
-            return
-        if rounds > rt_config.max_rounds:
-            await ctx.respond(
-                f"Maximum {rt_config.max_rounds} rounds allowed.", ephemeral=True
-            )
-            return
-
-        # Resolve channel context
-        guild_id = ctx.guild.id
-        channel_id = ctx.channel_id
-        thread_id = None
-
-        if isinstance(ctx.channel, discord.Thread):
-            thread_id = ctx.channel_id
-            channel_id = ctx.channel.parent_id or ctx.channel_id
-
-        run_context: RunContext | None = None
-        if thread_id:
-            ctx_data = await state_store.get_context(guild_id, thread_id)
-            if isinstance(ctx_data, DiscordThreadContext):
-                run_context = RunContext(
-                    project=ctx_data.project,
-                    branch=ctx_data.branch,
-                )
-        if run_context is None:
-            ctx_data = await state_store.get_context(guild_id, channel_id)
-            if isinstance(ctx_data, DiscordChannelContext):
-                run_context = RunContext(
-                    project=ctx_data.project,
-                    branch=ctx_data.worktree_base,
-                )
-
-        target_channel = thread_id if thread_id else channel_id
-        engines_display = ", ".join(f"`{e}`" for e in rt_engines)
-        await ctx.respond(
-            f"Starting roundtable: **{topic}**\n"
-            f"Engines: {engines_display} | Rounds: {rounds}",
-            ephemeral=True,
-        )
-
-        # Import here to avoid circular dependency
-        from .loop import _start_roundtable
-
-        asyncio.create_task(
-            _start_roundtable(
-                target_channel,
-                topic,
-                rounds,
-                rt_engines,
-                cfg=cfg,
-                running_tasks=running_tasks,
-                roundtables=roundtables,
-                run_context=run_context,
-            ),
-            name=f"tunapi-discord:roundtable:{target_channel}",
-        )
