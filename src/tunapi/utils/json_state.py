@@ -18,4 +18,6 @@ def atomic_write_json(
     with open(tmp_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=indent, sort_keys=sort_keys)
         handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(tmp_path, path)

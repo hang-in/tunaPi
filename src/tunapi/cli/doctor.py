@@ -32,11 +32,52 @@ class DoctorCheck:
     label: str
     status: DoctorStatus
     detail: str | None = None
+    suggestion: str | None = None
 
     def render(self) -> str:
+        parts = [f"- {self.label}: {self.status}"]
         if self.detail:
-            return f"- {self.label}: {self.status} ({self.detail})"
-        return f"- {self.label}: {self.status}"
+            parts[0] += f" ({self.detail})"
+        if self.suggestion:
+            parts.append(f"  → {self.suggestion}")
+        return "\n".join(parts)
+
+
+def _classify_transport_error(
+    exc: Exception,
+    *,
+    transport: str,
+) -> tuple[str, str | None]:
+    """예외를 사용자 친화적 메시지와 수정 가이드로 분류."""
+    import httpx
+
+    error_str = str(exc)
+
+    if isinstance(exc, httpx.TimeoutException):
+        return (
+            f"timeout ({error_str[:80]})",
+            f"{transport} 서버가 응답하지 않습니다. URL과 네트워크 연결을 확인하세요.",
+        )
+
+    if isinstance(exc, httpx.ConnectError):
+        return (
+            f"connection failed ({error_str[:80]})",
+            f"{transport} 서버에 연결할 수 없습니다. URL, DNS, 방화벽을 확인하세요.",
+        )
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status in (401, 403):
+            return (
+                f"auth failed (HTTP {status})",
+                "토큰이 만료되었거나 잘못되었습니다. 토큰을 재발급하세요.",
+            )
+        return (
+            f"HTTP {status} ({error_str[:80]})",
+            None,
+        )
+
+    return (error_str[:120], None)
 
 
 def _doctor_file_checks(settings: TelegramTransportSettings) -> list[DoctorCheck]:
@@ -60,7 +101,14 @@ def _doctor_voice_checks(settings: TelegramTransportSettings) -> list[DoctorChec
         ]
     if os.environ.get("OPENAI_API_KEY"):
         return [DoctorCheck("voice transcription", "ok", "OPENAI_API_KEY set")]
-    return [DoctorCheck("voice transcription", "error", "API key not set")]
+    return [
+        DoctorCheck(
+            "voice transcription",
+            "error",
+            "API key not set",
+            suggestion="OPENAI_API_KEY 환경변수를 설정하거나 voice_transcription_api_key를 tunapi.toml에 추가하세요.",
+        )
+    ]
 
 
 async def _doctor_telegram_checks(
@@ -79,7 +127,12 @@ async def _doctor_telegram_checks(
         me = await bot.get_me()
         if me is None:
             checks.append(
-                DoctorCheck("telegram token", "error", "failed to fetch bot info")
+                DoctorCheck(
+                    "telegram token",
+                    "error",
+                    "failed to fetch bot info",
+                    suggestion="TELEGRAM_TOKEN이 유효한지 BotFather에서 확인하세요.",
+                )
             )
             checks.append(DoctorCheck("chat_id", "error", "skipped (token invalid)"))
             if topics.enabled:
@@ -108,7 +161,8 @@ async def _doctor_telegram_checks(
         else:
             checks.append(DoctorCheck("topics", "ok", "disabled"))
     except Exception as exc:  # noqa: BLE001
-        checks.append(DoctorCheck("telegram", "error", str(exc)))
+        detail, suggestion = _classify_transport_error(exc, transport="telegram")
+        checks.append(DoctorCheck("telegram", "error", detail, suggestion=suggestion))
     finally:
         await bot.close()
     return checks
@@ -129,7 +183,14 @@ def _doctor_mm_voice_checks(settings: MattermostTransportSettings) -> list[Docto
         return [DoctorCheck("voice transcription", "ok", "api_key set")]
     if os.environ.get("OPENAI_API_KEY"):
         return [DoctorCheck("voice transcription", "ok", "OPENAI_API_KEY set")]
-    return [DoctorCheck("voice transcription", "error", "API key not set")]
+    return [
+        DoctorCheck(
+            "voice transcription",
+            "error",
+            "API key not set",
+            suggestion="OPENAI_API_KEY 환경변수를 설정하거나 voice_transcription_api_key를 tunapi.toml에 추가하세요.",
+        )
+    ]
 
 
 async def _doctor_mattermost_checks(
@@ -166,7 +227,8 @@ async def _doctor_mattermost_checks(
                 DoctorCheck("channel_id", "ok", "not set (using allowed_channel_ids)")
             )
     except Exception as exc:  # noqa: BLE001
-        checks.append(DoctorCheck("mattermost", "error", str(exc)))
+        detail, suggestion = _classify_transport_error(exc, transport="mattermost")
+        checks.append(DoctorCheck("mattermost", "error", detail, suggestion=suggestion))
     finally:
         await client.close()
     return checks

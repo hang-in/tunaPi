@@ -63,6 +63,7 @@ class Journal:
         self._base_dir = base_dir
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._lock = anyio.Lock()
+        self._append_failures: int = 0
 
     def _path_for(self, channel_id: str) -> Path:
         return self._base_dir / f"{_sanitize_channel_id(channel_id)}.jsonl"
@@ -77,11 +78,15 @@ class Journal:
                     await f.write(line)
                 # Check limits
                 await self._maybe_rotate(path)
+                self._append_failures = 0
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
+                self._append_failures += 1
+                log_fn = logger.error if self._append_failures >= 3 else logger.warning
+                log_fn(
                     "journal.append_failed",
                     channel_id=entry.channel_id,
                     error=str(exc),
+                    consecutive_failures=self._append_failures,
                 )
 
     async def _maybe_rotate(self, path: Path) -> None:

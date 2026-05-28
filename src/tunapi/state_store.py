@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -63,24 +65,33 @@ class JsonStateStore[T: _VersionedState]:
                 self._path.read_bytes(), type=self._state_type
             )
         except Exception as exc:  # noqa: BLE001
-            self._logger.warning(
-                f"{self._log_prefix}.load_failed",
-                path=str(self._path),
-                error=str(exc),
-                error_type=exc.__class__.__name__,
-            )
+            self._backup_corrupt("load_failed", exc)
             self._state = self._state_factory()
             return
         if payload.version != self._version:
-            self._logger.warning(
-                f"{self._log_prefix}.version_mismatch",
-                path=str(self._path),
-                version=payload.version,
-                expected=self._version,
+            self._backup_corrupt(
+                "version_mismatch",
+                RuntimeError(f"version {payload.version} != {self._version}"),
             )
             self._state = self._state_factory()
             return
         self._state = payload
+
+    def _backup_corrupt(self, reason: str, exc: Exception) -> None:
+        """손상 파일을 .corrupt.<timestamp>로 이동하고 경고 로그 기록."""
+        ts = int(time.time())
+        backup_path = self._path.with_suffix(f"{self._path.suffix}.corrupt.{ts}")
+        try:
+            os.replace(self._path, backup_path)
+        except OSError:
+            backup_path = None  # type: ignore[assignment]
+        self._logger.warning(
+            f"{self._log_prefix}.{reason}",
+            path=str(self._path),
+            backup=str(backup_path) if backup_path else "failed",
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+        )
 
     def _save_locked(self) -> None:
         payload = msgspec.to_builtins(self._state)
