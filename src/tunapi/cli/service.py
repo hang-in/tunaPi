@@ -11,10 +11,14 @@ break when a tool is upgraded; re-run ``tunapi service install`` to refresh.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
+import tomllib
 from pathlib import Path
 
 import typer
@@ -127,6 +131,10 @@ export HOMEBREW_PREFIX="/opt/homebrew"
 {_node_setup_line()}
 
 cd "{repo}" || exit 1
+# Run via `uv run`: under launchd the uv executable holds the macOS local
+# network grant, so exec'ing the venv binary directly fails to reach LAN hosts
+# (EHOSTUNREACH). The orphaned child this can leave is reaped by `service
+# stop`/`restart` (see _terminate_stale).
 exec "{uv_path}" run tunapi
 """
 
@@ -157,6 +165,9 @@ def render_plist(*, launcher: Path, repo: Path, log: Path) -> str:
 
     <key>ThrottleInterval</key>
     <integer>10</integer>
+
+    <key>ExitTimeOut</key>
+    <integer>15</integer>
 
     <key>StandardOutPath</key>
     <string>{log}</string>
@@ -208,6 +219,74 @@ def _bootstrap() -> subprocess.CompletedProcess[str]:
     return _launchctl("bootstrap", _domain(), str(plist_path()))
 
 
+def _tunadish_port() -> int:
+    """The tunadish websocket port from config (default 8765). Matched against
+    listeners so we reap only the actual worker, never the CLI invoking us."""
+    cfg = config_dir() / "tunapi.toml"
+    with contextlib.suppress(Exception):
+        data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+        transports = data.get("transports", {})
+        td = transports.get("tunadish", {}) if isinstance(transports, dict) else {}
+        port = td.get("port") if isinstance(td, dict) else None
+        if isinstance(port, int):
+            return port
+    return 8765
+
+
+def _port_listeners(port: int) -> list[int]:
+    try:
+        out = subprocess.run(
+            ["lsof", "-nP", f"-tiTCP:{port}", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return []
+    return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+
+
+def _terminate_stale() -> None:
+    """Kill a leftover worker still holding the tunadish port. launchctl
+    bootout can orphan the uv-spawned child (reparented to launchd), which then
+    blocks the next start. Matching by listening port — not by command line —
+    avoids killing the CLI process that is running this command."""
+    me = os.getpid()
+    for pid in _port_listeners(_tunadish_port()):
+        if pid != me:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGKILL)
+
+
+def _wait_unloaded(timeout_s: float = 6.0) -> None:
+    """Poll until the agent is fully unloaded (bootout is asynchronous; a
+    bootstrap that races it fails with EIO)."""
+    for _ in range(int(timeout_s * 5)):
+        if not _is_loaded():
+            return
+        time.sleep(0.2)
+
+
+def _bootout_and_reap() -> None:
+    """Unload the agent (if loaded), wait for it to settle, and reap any
+    orphaned worker."""
+    if _is_loaded():
+        _bootout()
+        _wait_unloaded()
+    _terminate_stale()
+
+
+def _bootstrap_retry(attempts: int = 5) -> subprocess.CompletedProcess[str]:
+    """Bootstrap, retrying on the transient EIO launchd returns right after a
+    bootout."""
+    result = _bootstrap()
+    for _ in range(attempts - 1):
+        if result.returncode == 0:
+            return result
+        time.sleep(1.0)
+        result = _bootstrap()
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -239,10 +318,9 @@ def service_install(
     launcher.chmod(0o755)
     plist.write_text(render_plist(launcher=launcher, repo=repo, log=log), encoding="utf-8")
 
-    # Reload cleanly if already bootstrapped.
-    if _is_loaded():
-        _bootout()
-    result = _bootstrap()
+    # Reload cleanly; reap any orphaned worker holding the port.
+    _bootout_and_reap()
+    result = _bootstrap_retry()
     if result.returncode != 0:
         typer.echo(
             f"launchctl bootstrap failed: {result.stderr.strip() or result.returncode}",
@@ -283,7 +361,7 @@ def service_start() -> None:
     if _is_loaded():
         typer.echo("already running.")
         return
-    result = _bootstrap()
+    result = _bootstrap_retry()
     if result.returncode != 0:
         typer.echo(result.stderr.strip() or "failed to start.", err=True)
         raise typer.Exit(code=1)
@@ -296,7 +374,7 @@ def service_stop() -> None:
     if not _is_loaded():
         typer.echo("not running.")
         return
-    _bootout()
+    _bootout_and_reap()
     typer.echo("stopped.")
 
 
@@ -306,10 +384,9 @@ def service_restart() -> None:
     if not plist_path().exists():
         typer.echo("not installed. run `tunapi service install` first.", err=True)
         raise typer.Exit(code=1)
-    result = _launchctl("kickstart", "-k", _service_target())
-    if result.returncode != 0:
-        # Not loaded yet — bootstrap instead.
-        result = _bootstrap()
+    # Full bootout+reap+bootstrap (kickstart would orphan the uv-run child).
+    _bootout_and_reap()
+    result = _bootstrap_retry()
     if result.returncode != 0:
         typer.echo(result.stderr.strip() or "failed to restart.", err=True)
         raise typer.Exit(code=1)

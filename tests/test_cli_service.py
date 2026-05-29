@@ -30,6 +30,7 @@ class TestRenderLauncher:
         script = service.render_launcher(repo=Path("/srv/tunapi"), uv_path="/opt/uv")
         assert script.startswith("#!/bin/bash")
         assert 'cd "/srv/tunapi"' in script
+        # Run via uv (holds the macOS local-network grant under launchd).
         assert 'exec "/opt/uv" run tunapi' in script
 
     def test_cleans_stale_locks_in_config_dir(self):
@@ -55,6 +56,20 @@ class TestRenderPlist:
         assert "<string>/var/log/tunapi.log</string>" in plist
         assert "<key>RunAtLoad</key>" in plist
         assert "<key>KeepAlive</key>" in plist
+
+
+def test_tunadish_port_defaults_to_8765(monkeypatch, tmp_path):
+    # No config file → default port.
+    monkeypatch.setattr(service, "config_dir", lambda: tmp_path)
+    assert service._tunadish_port() == 8765
+
+
+def test_tunadish_port_reads_config(monkeypatch, tmp_path):
+    (tmp_path / "tunapi.toml").write_text(
+        '[transports.tunadish]\nport = 9999\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(service, "config_dir", lambda: tmp_path)
+    assert service._tunadish_port() == 9999
 
 
 def test_paths_live_under_home():
