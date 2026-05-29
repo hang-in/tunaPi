@@ -19,6 +19,7 @@ from ..core.commands import parse_command
 from ..logging import get_logger
 from ..utils.paths import reset_run_base_dir, set_run_base_dir  # noqa: F401
 
+from . import rpc_router
 from .commands import dispatch_command
 from .context_store import ConversationContextStore
 from .transport import TunadishTransport
@@ -225,316 +226,38 @@ class TunadishBackend:
             async with anyio.create_task_group() as ws_tg:
                 try:
                     async for message in websocket:
+                        rpc_id = None
                         try:
                             data = json.loads(message)
                             method = data.get("method")
                             params = data.get("params", {})
-                            logger.debug(
-                                "tunadish ws recv: method=%s id=%s",
-                                method,
-                                data.get("id"),
-                            )
                             rpc_id = data.get("id")
+                            logger.debug(
+                                "tunadish ws recv: method=%s id=%s", method, rpc_id
+                            )
 
-                            # JSON-RPC 2.0: rpc_id가 있고 fire-and-forget이 아닌 메서드는
-                            # 다음 _send_notification 호출을 표준 response로 자동 변환.
-                            # roundtable.start는 chat.send처럼 스트리밍 작업이라
-                            # 첫 message.new(헤더)가 응답으로 가로채이면 안 됨 → 제외.
-                            if rpc_id is not None and method not in (
-                                "ping",
-                                "chat.send",
-                                "run.cancel",
-                                "roundtable.start",
+                            # Arm auto-response: the next notification becomes the
+                            # JSON-RPC response — except for streaming / fire-and-
+                            # forget methods (see rpc_router.NO_AUTO_RPC_ID).
+                            if (
+                                rpc_id is not None
+                                and method not in rpc_router.NO_AUTO_RPC_ID
                             ):
                                 transport.set_rpc_id(rpc_id)
 
-                            if method == "ping":
-                                if rpc_id is not None:
-                                    await transport._send_response(
-                                        rpc_id, {"pong": True}
-                                    )
-                                else:
-                                    await websocket.send(json.dumps({"method": "pong"}))
-                            elif method == "chat.send":
-                                if rpc_id is not None:
-                                    await transport._send_response(
-                                        rpc_id, {"accepted": True}
-                                    )
-                                ws_tg.start_soon(
-                                    self.handle_chat_send, params, runtime, transport
-                                )
-                            elif method == "run.cancel":
-                                await self.handle_run_cancel(params, websocket)
-                                if rpc_id is not None:
-                                    await transport._send_response(
-                                        rpc_id, {"cancelled": True}
-                                    )
-                            elif method == "project.list":
-                                from . import context_handlers
-
-                                await context_handlers.handle_project_list(
-                                    self, params, runtime, transport
-                                )
-                            elif method == "conversation.create":
-                                from . import context_handlers
-
-                                await context_handlers.handle_conversation_create(
-                                    self, params, transport
-                                )
-                            elif method == "conversation.delete":
-                                from . import context_handlers
-
-                                await context_handlers.handle_conversation_delete(
-                                    self, params, transport
-                                )
-                            elif method == "conversation.list":
-                                from . import context_handlers
-
-                                await context_handlers.handle_conversation_list(
-                                    self, params, runtime, transport
-                                )
-                            elif method == "conversation.history":
-                                from . import context_handlers
-
-                                await context_handlers.handle_conversation_history(
-                                    self, params, transport
-                                )
-                            # --- Structured JSON RPC (for context panel) ---
-                            elif method == "project.context":
-                                await self._handle_project_context(
-                                    params, runtime, transport
-                                )
-                            elif method == "branch.list.json":
-                                await self._handle_branch_list_json(
-                                    params, runtime, transport
-                                )
-                            elif method == "memory.list.json":
-                                await self._handle_memory_list_json(params, transport)
-                            elif method == "review.list.json":
-                                await self._handle_review_list_json(params, transport)
-                            # --- rawq code search/map ---
-                            elif method == "code.search":
-                                await self._handle_code_search(
-                                    params, runtime, transport
-                                )
-                            elif method == "code.map":
-                                await self._handle_code_map(params, runtime, transport)
-                            # --- JSON-RPC direct command methods ---
-                            elif method == "help":
-                                await self._dispatch_rpc_command(
-                                    "help", "", params, runtime, transport
-                                )
-                            elif method == "model.set":
-                                engine = params.get("engine", "")
-                                model = params.get("model", "")
-                                # Auto-detect engine from model if not specified
-                                if model and not engine:
-                                    from ..engine_models import find_engine_for_model
-
-                                    detected = find_engine_for_model(model)
-                                    if detected:
-                                        engine = detected
-                                args = f"{engine} {model}".strip() if model else engine
-                                await self._dispatch_rpc_command(
-                                    "model", args, params, runtime, transport
-                                )
-                            elif method == "model.list":
-                                engine = params.get("engine", "")
-                                await self._dispatch_rpc_command(
-                                    "models", engine, params, runtime, transport
-                                )
-                            elif method == "trigger.set":
-                                mode = params.get("mode", "")
-                                await self._dispatch_rpc_command(
-                                    "trigger", mode, params, runtime, transport
-                                )
-                            elif method == "project.set":
-                                name = params.get("name", "")
-                                await self._dispatch_rpc_command(
-                                    "project", f"set {name}", params, runtime, transport
-                                )
-                                # rawq 인덱싱 트리거 (백그라운드, 실패 무시)
-                                if self._task_group is not None:
-                                    self._task_group.start_soon(
-                                        self._rawq_ensure_index,
-                                        name,
-                                        runtime,
-                                        transport,
-                                    )
-                            elif method == "project.info":
-                                await self._dispatch_rpc_command(
-                                    "project", "info", params, runtime, transport
-                                )
-                            elif method == "persona.set":
-                                await self._dispatch_rpc_command(
-                                    "persona",
-                                    params.get("args", ""),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "persona.list":
-                                await self._dispatch_rpc_command(
-                                    "persona", "list", params, runtime, transport
-                                )
-                            elif method == "memory.list":
-                                entry_type = params.get("type", "")
-                                await self._dispatch_rpc_command(
-                                    "memory",
-                                    f"list {entry_type}".strip(),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "memory.add":
-                                t = params.get("type", "")
-                                title = params.get("title", "")
-                                content = params.get("content", "")
-                                await self._dispatch_rpc_command(
-                                    "memory",
-                                    f"add {t} {title} {content}",
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "memory.search":
-                                query = params.get("query", "")
-                                await self._dispatch_rpc_command(
-                                    "memory",
-                                    f"search {query}",
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "memory.delete":
-                                entry_id = params.get("id", "")
-                                await self._dispatch_rpc_command(
-                                    "memory",
-                                    f"delete {entry_id}",
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "branch.list":
-                                status = params.get("status", "")
-                                await self._dispatch_rpc_command(
-                                    "branch",
-                                    f"list {status}".strip(),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "branch.merge":
-                                bid = params.get("id", "")
-                                await self._dispatch_rpc_command(
-                                    "branch", f"merge {bid}", params, runtime, transport
-                                )
-                            elif method == "branch.discard":
-                                bid = params.get("id", "")
-                                await self._dispatch_rpc_command(
-                                    "branch",
-                                    f"discard {bid}",
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "review.list":
-                                status = params.get("status", "")
-                                await self._dispatch_rpc_command(
-                                    "review",
-                                    f"list {status}".strip(),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "review.approve":
-                                rid = params.get("id", "")
-                                comment = params.get("comment", "")
-                                await self._dispatch_rpc_command(
-                                    "review",
-                                    f"approve {rid} {comment}".strip(),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "review.reject":
-                                rid = params.get("id", "")
-                                comment = params.get("comment", "")
-                                await self._dispatch_rpc_command(
-                                    "review",
-                                    f"reject {rid} {comment}".strip(),
-                                    params,
-                                    runtime,
-                                    transport,
-                                )
-                            elif method == "context.get":
-                                await self._dispatch_rpc_command(
-                                    "context", "", params, runtime, transport
-                                )
-                            elif method == "session.new":
-                                await self._dispatch_rpc_command(
-                                    "new", "", params, runtime, transport
-                                )
-                            elif method == "status":
-                                await self._dispatch_rpc_command(
-                                    "status", "", params, runtime, transport
-                                )
-                            elif method == "roundtable.start":
-                                topic = params.get("topic", "")
-                                if rpc_id is not None:
-                                    await transport._send_response(
-                                        rpc_id, {"accepted": True}
-                                    )
-                                await self._dispatch_rpc_command(
-                                    "rt", f'"{topic}"', params, runtime, transport
-                                )
-                            # --- Branch actions ---
-                            elif method == "branch.create":
-                                await self._handle_branch_create(params, transport)
-                            elif method == "branch.switch":
-                                await self._handle_branch_switch(params, transport)
-                            elif method == "branch.adopt":
-                                await self._handle_branch_adopt(params, transport)
-                            elif method == "branch.archive":
-                                await self._handle_branch_archive(params, transport)
-                            elif method == "branch.delete":
-                                await self._handle_branch_delete(params, transport)
-                            # --- Message actions ---
-                            elif method == "message.retry":
-                                await self._handle_message_retry(
-                                    params, runtime, transport, ws_tg
-                                )
-                            elif method == "message.save":
-                                await self._handle_message_save(params, transport)
-                            elif method == "message.delete":
-                                await self._handle_message_delete(params, transport)
-                            elif method == "message.adopt":
-                                await self._handle_message_adopt(params, transport)
-                            # --- Phase 4: Write API + Handoff ---
-                            elif method == "discussion.save_roundtable":
-                                await self._handle_discussion_save(params, transport)
-                            elif method == "discussion.link_branch":
-                                await self._handle_discussion_link_branch(
-                                    params, transport
-                                )
-                            elif method == "synthesis.create_from_discussion":
-                                await self._handle_synthesis_create(params, transport)
-                            elif method == "review.request":
-                                await self._handle_review_request(params, transport)
-                            elif method == "handoff.create":
-                                await self._handle_handoff_create(
-                                    params, runtime, transport
-                                )
-                            elif method == "handoff.parse":
-                                await self._handle_handoff_parse(params, transport)
-                            elif method == "engine.list":
-                                await self._handle_engine_list(runtime, transport)
-                            else:
+                            handled = await self._dispatch_rpc(
+                                method,
+                                params,
+                                rpc_id,
+                                runtime,
+                                transport,
+                                ws_tg,
+                                websocket,
+                            )
+                            if not handled:
                                 logger.warning("Unknown JSON-RPC method: %s", method)
                                 if rpc_id is not None:
-                                    transport._pending_rpc_id = (
-                                        None  # 소비 안 된 rpc_id 정리
-                                    )
+                                    transport._pending_rpc_id = None
                                     await transport._send_error(
                                         rpc_id, -32601, f"Method not found: {method}"
                                     )
@@ -574,6 +297,91 @@ class TunadishBackend:
                     "ws disconnected but %d transports remain, runs continue",
                     len(self._active_transports),
                 )
+
+    async def _dispatch_rpc(
+        self,
+        method: str | None,
+        params: dict[str, Any],
+        rpc_id: str | int | None,
+        runtime: TransportRuntime,
+        transport: TunadishTransport,
+        ws_tg: anyio.abc.TaskGroup,
+        websocket: Any,
+    ) -> bool:
+        """Route one JSON-RPC method. Returns False if the method is unknown.
+
+        Special-cased methods (unique control flow) first; then the declarative
+        ``COMMAND_ROUTES`` / ``DIRECT_ROUTES`` tables in ``rpc_router``.
+        """
+        if method == "ping":
+            if rpc_id is not None:
+                await transport._send_response(rpc_id, {"pong": True})
+            else:
+                await websocket.send(json.dumps({"method": "pong"}))
+            return True
+        if method == "chat.send":
+            if rpc_id is not None:
+                await transport._send_response(rpc_id, {"accepted": True})
+            ws_tg.start_soon(self.handle_chat_send, params, runtime, transport)
+            return True
+        if method == "run.cancel":
+            await self.handle_run_cancel(params, websocket)
+            if rpc_id is not None:
+                await transport._send_response(rpc_id, {"cancelled": True})
+            return True
+        if method == "model.set":
+            engine = params.get("engine", "")
+            model = params.get("model", "")
+            # Auto-detect engine from model if not specified
+            if model and not engine:
+                from ..engine_models import find_engine_for_model
+
+                detected = find_engine_for_model(model)
+                if detected:
+                    engine = detected
+            args = f"{engine} {model}".strip() if model else engine
+            await self._dispatch_rpc_command("model", args, params, runtime, transport)
+            return True
+        if method == "project.set":
+            name = params.get("name", "")
+            await self._dispatch_rpc_command(
+                "project", f"set {name}", params, runtime, transport
+            )
+            # rawq 인덱싱 트리거 (백그라운드, 실패 무시)
+            if self._task_group is not None:
+                self._task_group.start_soon(
+                    self._rawq_ensure_index, name, runtime, transport
+                )
+            return True
+        if method == "roundtable.start":
+            topic = params.get("topic", "")
+            if rpc_id is not None:
+                await transport._send_response(rpc_id, {"accepted": True})
+            await self._dispatch_rpc_command(
+                "rt", f'"{topic}"', params, runtime, transport
+            )
+            return True
+
+        command = rpc_router.COMMAND_ROUTES.get(method or "")
+        if command is not None:
+            cmd, cmd_args = command(params)
+            await self._dispatch_rpc_command(cmd, cmd_args, params, runtime, transport)
+            return True
+
+        direct = rpc_router.DIRECT_ROUTES.get(method or "")
+        if direct is not None:
+            await direct(
+                rpc_router.RpcCall(
+                    backend=self,
+                    params=params,
+                    runtime=runtime,
+                    transport=transport,
+                    ws_tg=ws_tg,
+                )
+            )
+            return True
+
+        return False
 
     async def _dispatch_rpc_command(
         self,

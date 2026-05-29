@@ -202,35 +202,3 @@ async def _handle_engine_list(self: Any, runtime: Any, transport: Any):
     from . import message_handlers
 
     await message_handlers.handle_engine_list(self, runtime, transport)
-
-
-DELEGATE_METHODS = (
-    "_handle_project_context",
-    "_handle_branch_list_json",
-    "_handle_memory_list_json",
-    "_handle_review_list_json",
-    "_handle_branch_create",
-    "_handle_branch_switch",
-    "_handle_branch_adopt",
-    "_build_adopt_summary",
-    "_build_branch_context",
-    "_handle_branch_archive",
-    "_handle_branch_delete",
-    "_handle_message_retry",
-    "_handle_message_save",
-    "_handle_message_delete",
-    "_handle_message_adopt",
-    "_rawq_startup_check",
-    "_resolve_project_path",
-    "_rawq_ensure_index",
-    "_rawq_enrich_message",
-    "_handle_code_search",
-    "_handle_code_map",
-    "_handle_discussion_save",
-    "_handle_discussion_link_branch",
-    "_handle_synthesis_create",
-    "_handle_review_request",
-    "_handle_handoff_create",
-    "_handle_handoff_parse",
-    "_handle_engine_list",
-)
