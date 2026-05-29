@@ -450,5 +450,8 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 BACKEND = EngineBackend(
     id="codex_app",
     build_runner=build_runner,
+    # Availability check resolves cli_cmd (not the id) on PATH; the binary is
+    # `codex`, not `codex_app`.
+    cli_cmd="codex",
     install_cmd="npm install -g @openai/codex",
 )

@@ -80,8 +80,10 @@ def test_build_runner_returns_codex_app_engine():
     assert runner.engine == "codex_app"
 
 
-def test_backend_id():
+def test_backend_id_and_cli_cmd():
     assert cas.BACKEND.id == "codex_app"
+    # Availability check resolves cli_cmd on PATH — must be the real binary.
+    assert cas.BACKEND.cli_cmd == "codex"
 
 
 def test_resume_mixin_does_not_parse_text():
