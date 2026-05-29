@@ -14,12 +14,14 @@ Ported from the working tunaFlow implementation
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
 import itertools
 import json
 import os
 import re
 import shutil
+import signal
 import socket
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,7 @@ class _CodexAppServer:
         self._proc = proc
         self._ws = ws
         self.port = port
+        self.pid = proc.pid
         self._ids = itertools.count(1)
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._subscribers: set[asyncio.Queue[dict[str, Any] | None]] = set()
@@ -140,13 +143,39 @@ class _CodexAppServer:
         self._reader.cancel()
         with contextlib.suppress(Exception):
             await self._ws.close()
-        with contextlib.suppress(ProcessLookupError):
-            self._proc.kill()
-        self._mark_closed()
+        self.terminate()
+
+    def terminate(self) -> None:
+        """Synchronously SIGKILL the spawned process group by pgid. Safe to call
+        at interpreter exit (no event loop needed). Targets ONLY our own group
+        (the launcher + the worker it spawned) — never pattern-match, which
+        would hit the user's Codex desktop app."""
+        self._closed = True
+        # The process was started with start_new_session=True, so pgid == pid.
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.killpg(self.pid, signal.SIGKILL)
 
 
 _server: _CodexAppServer | None = None
 _server_lock = asyncio.Lock()
+_atexit_registered = False
+
+
+def _atexit_kill() -> None:  # pragma: no cover - runs at interpreter exit
+    """Kill the spawned app-server so it does not orphan when tunapi exits.
+
+    Covers graceful/SIGTERM shutdown (atexit runs); a hard SIGKILL of tunapi
+    cannot run this — accepted edge case.
+    """
+    if _server is not None:
+        _server.terminate()
+
+
+def _ensure_atexit() -> None:
+    global _atexit_registered
+    if not _atexit_registered:
+        atexit.register(_atexit_kill)
+        _atexit_registered = True
 
 
 def _find_free_port() -> int:
@@ -183,6 +212,10 @@ async def _start_server(  # pragma: no cover - spawns the real codex binary
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
+        # Own session/group: the `codex` launcher spawns the real binary as a
+        # child, so we must kill the whole group (killpg) — killing just the
+        # launcher pid would orphan the worker.
+        start_new_session=True,
     )
     try:
         ws = await _connect_ws(url)
@@ -200,6 +233,7 @@ async def _start_server(  # pragma: no cover - spawns the real codex binary
             "capabilities": {"experimentalApi": False},
         },
     )
+    _ensure_atexit()
     logger.info("codex_app_server.started", port=port)
     return server
 

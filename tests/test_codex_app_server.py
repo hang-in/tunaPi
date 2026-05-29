@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import signal
 from pathlib import Path
 from typing import Any
 
@@ -244,7 +245,8 @@ class FakeWS:
 
 
 class FakeProc:
-    def __init__(self) -> None:
+    def __init__(self, pid: int = 999999) -> None:
+        self.pid = pid
         self.killed = False
 
     def kill(self) -> None:
@@ -342,14 +344,28 @@ async def test_server_closed_sends_sentinel():
     assert server.closed is True
 
 
-async def test_server_notify_sends_and_aclose_kills():
+async def test_server_terminate_kills_own_group(monkeypatch):
+    calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(cas.os, "killpg", lambda pgid, sig: calls.append((pgid, sig)))
     ws = FakeWS()
-    proc = FakeProc()
-    server = cas._CodexAppServer(proc, ws, 1234)
+    server = cas._CodexAppServer(FakeProc(pid=4242), ws, 1)
+    try:
+        server.terminate()
+        assert (4242, signal.SIGKILL) in calls
+        assert server.closed is True
+    finally:
+        ws.stop()
+
+
+async def test_server_notify_sends_and_aclose_kills(monkeypatch):
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(cas.os, "killpg", lambda pgid, sig: killed.append((pgid, sig)))
+    ws = FakeWS()
+    server = cas._CodexAppServer(FakeProc(pid=4242), ws, 1234)
     await server.notify("turn/interrupt", {"threadId": "t"})
     assert any("turn/interrupt" in s for s in ws.sent)
     await server.aclose()
-    assert proc.killed is True
+    assert (4242, signal.SIGKILL) in killed
     assert server.closed is True
 
 
