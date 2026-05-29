@@ -52,6 +52,7 @@ tunapi = "tunapi.cli:main"
 
 [project.entry-points."tunapi.engine_backends"]
 codex = "tunapi.runners.codex:BACKEND"
+codex-app = "tunapi.runners.codex_app_server:BACKEND"
 claude = "tunapi.runners.claude:BACKEND"
 opencode = "tunapi.runners.opencode:BACKEND"
 pi = "tunapi.runners.pi:BACKEND"
