@@ -357,7 +357,7 @@ class TestRunRoundtable:
         session = _make_session(engines=["claude", "gemini"])
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             side_effect=["claude answer", "gemini answer"],
         ):
@@ -389,7 +389,7 @@ class TestRunRoundtable:
         )
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             side_effect=["r1 answer", "r2 answer"],
         ):
@@ -414,7 +414,7 @@ class TestRunRoundtable:
         session.cancel_event.set()  # pre-cancelled
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
         ) as mock_hm:
             await run_roundtable(
@@ -436,7 +436,7 @@ class TestRunRoundtable:
         session = _make_session(engines=["claude", "gemini"])
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             return_value="claude answer",
         ):
@@ -462,7 +462,7 @@ class TestRunRoundtable:
         session = _make_session(engines=["claude", "gemini"])
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             side_effect=[RuntimeError("boom"), "gemini ok"],
         ):
@@ -492,7 +492,7 @@ class TestRunFollowupRound:
         session.current_round = 1
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             side_effect=["follow claude", "follow gemini"],
         ):
@@ -521,7 +521,7 @@ class TestRunFollowupRound:
         session.current_round = 1
 
         with patch(
-            "tunapi.core.roundtable.handle_message",
+            "tunapi.core.roundtable.orchestrator.handle_message",
             new_callable=AsyncMock,
             return_value="claude only",
         ):
