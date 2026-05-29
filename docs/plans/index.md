@@ -4,7 +4,7 @@ Plan document index. Register new plans here.
 
 ## Active
 
-_(none)_
+- [roundtable-production-enhancement](roundtable-production-enhancement.md) — `!rt`를 role 기반 구조화 토론으로 고도화(tunaFlow 패턴 순수함수 포팅). dormant 구조화층 실행 연결 + roundtable.py 분해. (P1, 2026-05-29)
 
 ## Completed / Reference
 
