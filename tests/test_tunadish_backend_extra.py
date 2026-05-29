@@ -1883,3 +1883,81 @@ class TestWsHandlerRPCs:
         await backend._ws_handler(runtime, False, ws)
 
         assert task.cancel_requested.is_set()
+
+
+class TestRoundtableIntegration:
+    """End-to-end !rt wiring through the backend (engine itself is patched)."""
+
+    def _wire(self, backend, runtime):
+        from tunapi.core.roundtable import RoundtableStore
+        from tunapi.transport_runtime import RoundtableConfig
+
+        runtime.roundtable = RoundtableConfig(
+            engines=("claude",), rounds=1, max_rounds=3, parallel_first_round=False
+        )
+        backend._roundtables = RoundtableStore(persist_path=None)
+        backend._task_group = None  # inline execution
+
+    async def test_chat_send_rt_start(self, backend, ws, transport, runtime):
+        """`!rt "topic"` via chat.send streams a header (message.new) + completes."""
+        self._wire(backend, runtime)
+
+        with patch(
+            "tunapi.tunadish.roundtable.run_roundtable", new_callable=AsyncMock
+        ) as mock_run:
+            await backend.handle_chat_send(
+                {"conversation_id": "c1", "text": '!rt "design the API"'},
+                runtime,
+                transport,
+            )
+
+        mock_run.assert_awaited_once()
+        header = next(
+            (
+                m
+                for m in ws.sent
+                if m.get("method") == "message.new"
+                and "**Roundtable**" in m["params"]["message"]["text"]
+            ),
+            None,
+        )
+        assert header is not None
+        assert "design the API" in header["params"]["message"]["text"]
+        assert backend._roundtables.get_completed("c1") is not None
+
+    async def test_rpc_roundtable_start_not_hijacked(self, backend, runtime):
+        """roundtable.start RPC: ack response is sent AND header renders as message.new."""
+        self._wire(backend, runtime)
+
+        reqs = [
+            json.dumps(
+                {
+                    "method": "roundtable.start",
+                    "id": 99,
+                    "params": {"conversation_id": "c2", "topic": "perf"},
+                }
+            )
+        ]
+        ws = FakeWebsocketWithMessages(reqs)
+
+        with patch(
+            "tunapi.tunadish.roundtable.run_roundtable", new_callable=AsyncMock
+        ) as mock_run:
+            await backend._ws_handler(runtime, False, ws)
+
+        # explicit ack response (not the header) for rpc id 99
+        ack = next((m for m in ws.sent if m.get("id") == 99), None)
+        assert ack is not None and ack["result"] == {"accepted": True}
+        # header was delivered as a real message.new, not swallowed into the response
+        header = next(
+            (
+                m
+                for m in ws.sent
+                if m.get("method") == "message.new"
+                and "**Roundtable**"
+                in m.get("params", {}).get("message", {}).get("text", "")
+            ),
+            None,
+        )
+        assert header is not None
+        mock_run.assert_awaited_once()

@@ -14,6 +14,7 @@ from ..journal import Journal
 from ..core.chat_prefs import ChatPrefsStore
 from ..core.project_sessions import ProjectSessionStore
 from ..core.memory_facade import ProjectMemoryFacade
+from ..core.roundtable import RoundtableStore
 from ..core.commands import parse_command
 from ..logging import get_logger
 from ..utils.paths import reset_run_base_dir, set_run_base_dir  # noqa: F401
@@ -43,6 +44,7 @@ class TunadishBackend:
         self.run_map: dict[str, MessageRef] = {}
         self.running_tasks: dict[MessageRef, RunningTask] = {}
         self.presenter = TunadishPresenter()
+        self._roundtables: RoundtableStore | None = None
         self._task_group: anyio.abc.TaskGroup | None = None
         self._prepare_only: bool = False
         self._active_transports: set[TunadishTransport] = set()
@@ -139,6 +141,9 @@ class TunadishBackend:
             Path.home() / ".tunapi" / "sessions.json"
         )
         self._facade = ProjectMemoryFacade()
+        self._roundtables = RoundtableStore(
+            Path.home() / ".tunapi" / "tunadish_roundtables.json"
+        )
 
         from .session_store import ConversationSessionStore
 
@@ -232,11 +237,14 @@ class TunadishBackend:
                             rpc_id = data.get("id")
 
                             # JSON-RPC 2.0: rpc_id가 있고 fire-and-forget이 아닌 메서드는
-                            # 다음 _send_notification 호출을 표준 response로 자동 변환
+                            # 다음 _send_notification 호출을 표준 response로 자동 변환.
+                            # roundtable.start는 chat.send처럼 스트리밍 작업이라
+                            # 첫 message.new(헤더)가 응답으로 가로채이면 안 됨 → 제외.
                             if rpc_id is not None and method not in (
                                 "ping",
                                 "chat.send",
                                 "run.cancel",
+                                "roundtable.start",
                             ):
                                 transport.set_rpc_id(rpc_id)
 
@@ -473,6 +481,10 @@ class TunadishBackend:
                                 )
                             elif method == "roundtable.start":
                                 topic = params.get("topic", "")
+                                if rpc_id is not None:
+                                    await transport._send_response(
+                                        rpc_id, {"accepted": True}
+                                    )
                                 await self._dispatch_rpc_command(
                                     "rt", f'"{topic}"', params, runtime, transport
                                 )
@@ -624,6 +636,10 @@ class TunadishBackend:
             running_tasks=self.running_tasks,
             projects_root=self._get_projects_root(),
             config_path=Path(self._config_path) if self._config_path else None,
+            transport=transport,
+            presenter=self.presenter,
+            roundtables=self._roundtables,
+            task_group=self._task_group,
             send=send,
         )
 
@@ -684,6 +700,10 @@ class TunadishBackend:
                     running_tasks=self.running_tasks,
                     projects_root=self._get_projects_root(),
                     config_path=Path(self._config_path) if self._config_path else None,
+                    transport=transport,
+                    presenter=self.presenter,
+                    roundtables=self._roundtables,
+                    task_group=self._task_group,
                     send=send,
                 )
                 if handled:

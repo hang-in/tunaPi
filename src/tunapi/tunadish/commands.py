@@ -315,7 +315,7 @@ async def handle_context(
 
 
 # ---------------------------------------------------------------------------
-# !rt (roundtable) — placeholder, full implementation is a separate sprint
+# !rt (roundtable)
 # ---------------------------------------------------------------------------
 
 
@@ -324,23 +324,54 @@ async def handle_rt(
     *,
     runtime: TransportRuntime,
     send: Any,
+    conv_id: str | None = None,
+    transport: Any | None = None,
+    presenter: Any | None = None,
+    roundtables: Any | None = None,
+    running_tasks: Any | None = None,
+    context_store: Any | None = None,
+    facade: ProjectMemoryFacade | None = None,
+    journal: Journal | None = None,
+    task_group: Any | None = None,
 ) -> None:
-    rt_config = runtime.roundtable
-    rt_engines = list(rt_config.engines) or list(runtime.available_engine_ids())
-    engines_display = ", ".join(f"`{e}`" for e in rt_engines)
+    """Run a multi-agent roundtable in the current conversation.
 
-    await send(
-        RenderedMessage(
-            text=(
-                "**Roundtable** — 멀티에이전트 토론\n\n"
-                "tunaDish RT 모드는 별도 스프린트에서 구현 예정입니다.\n"
-                "현재 사용 가능한 엔진: " + engines_display + "\n\n"
-                "Usage:\n"
-                '- `!rt "topic"` — 새 라운드테이블\n'
-                '- `!rt follow [engines] "question"` — 후속 질문\n'
-                "- `!rt close` — 라운드테이블 종료"
+    Delegates to the shared engine via ``tunadish.roundtable.dispatch_rt``.
+    Falls back to usage text if roundtable wiring is unavailable (transport or
+    store missing), so the command is never a hard error.
+    """
+    if transport is None or roundtables is None:
+        rt_config = runtime.roundtable
+        rt_engines = list(rt_config.engines) or list(runtime.available_engine_ids())
+        engines_display = ", ".join(f"`{e}`" for e in rt_engines)
+        await send(
+            RenderedMessage(
+                text=(
+                    "**Roundtable** — multi-agent discussion\n\n"
+                    f"Engines: {engines_display}\n\n"
+                    "Usage:\n"
+                    '- `!rt "topic"` — new roundtable\n'
+                    '- `!rt follow [engines] "question"` — follow-up\n'
+                    "- `!rt close` — close roundtable"
+                )
             )
         )
+        return
+
+    from .roundtable import dispatch_rt
+
+    await dispatch_rt(
+        args,
+        conv_id=conv_id or "",
+        runtime=runtime,
+        transport=transport,
+        presenter=presenter,
+        roundtables=roundtables,
+        running_tasks=running_tasks if running_tasks is not None else {},
+        context_store=context_store,
+        facade=facade,
+        journal=journal,
+        task_group=task_group,
     )
 
 
@@ -363,6 +394,10 @@ async def dispatch_command(
     running_tasks: dict,
     projects_root: str | None = None,
     config_path: Path | None = None,
+    transport: Any | None = None,
+    presenter: Any | None = None,
+    roundtables: Any | None = None,
+    task_group: Any | None = None,
     send: Any,
 ) -> bool:
     """Dispatch a parsed ! command. Returns True if handled, False if unknown."""
@@ -445,7 +480,20 @@ async def dispatch_command(
             project = await _get_project()
             await handle_context(project=project, facade=facade, send=send)
         case "rt":
-            await handle_rt(args, runtime=runtime, send=send)
+            await handle_rt(
+                args,
+                runtime=runtime,
+                send=send,
+                conv_id=channel_id,
+                transport=transport,
+                presenter=presenter,
+                roundtables=roundtables,
+                running_tasks=running_tasks,
+                context_store=context_store,
+                facade=facade,
+                journal=journal,
+                task_group=task_group,
+            )
         case "status":
             await handle_status(
                 channel_id=channel_id,

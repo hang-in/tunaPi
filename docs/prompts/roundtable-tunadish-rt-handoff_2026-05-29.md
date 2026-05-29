@@ -3,10 +3,13 @@ title: tunaDish !rt 구현 — Developer Handoff
 paired_plan: ../plans/roundtable-production-enhancement.md
 target_agent: claude-main
 priority: P1
-status: ready
+status: done
 created: 2026-05-29
+completed: 2026-05-29
 expected_output: tunaDish에서 !rt가 동작 (start/follow/close) + 공유 코어(P1~P3 role/synthesis/consensus) 적용 + just check 통과 + 커버리지 ≥83
 ---
+
+> **완료 (2026-05-29)**: `tunadish/roundtable.py`(배선) + `commands.py:handle_rt`/`dispatch_command` + `backend.py`(RoundtableStore 생성, dispatch 인자 전달, `roundtable.start` RPC 헤더-가로채기 버그 수정). thread_id=conv_id 매핑으로 follow/close 라우팅. 긴 라운드는 `backend._task_group`에 spawn. 신규 테스트 16개(`test_tunadish_roundtable.py` 12 + `test_tunadish_backend_extra.py::TestRoundtableIntegration` 2 + 기존 갱신). 전체 3760 passed, 커버리지 83.24%. **잔여**: `just check`의 `ruff format`/`ty` 실패 8+102건은 이번 작업과 무관한 main 기존 드리프트(내 파일은 모두 통과).
 
 # tunaDish `!rt` 구현 — Developer Handoff
 
