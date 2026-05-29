@@ -15,12 +15,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import discord
-from pywhispercpp.model import Model as WhisperModel
 
 from .allowlist import is_user_allowed
 
 if TYPE_CHECKING:
     from openai import AsyncOpenAI
+    from pywhispercpp.model import (  # ty: ignore[unresolved-import]
+        Model as WhisperModel,
+    )
 
     from .client import DiscordBotClient
 
@@ -194,6 +196,13 @@ class VoiceManager:
     def _get_whisper_model(self) -> WhisperModel:
         """Lazy-load Whisper model."""
         if self._whisper_model is None:
+            # Imported lazily so the module is usable without the optional
+            # pywhispercpp native dependency installed (voice features only
+            # require it at transcription time).
+            from pywhispercpp.model import (  # ty: ignore[unresolved-import]
+                Model as WhisperModel,
+            )
+
             logger.info("Loading Whisper model: %s", self._whisper_model_name)
             self._whisper_model = WhisperModel(self._whisper_model_name)
             logger.info("Whisper model loaded")
