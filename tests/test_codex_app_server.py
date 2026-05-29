@@ -1,4 +1,4 @@
-"""Tests for the codex-app (app-server) runner.
+"""Tests for the codex_app (app-server) runner.
 
 The WebSocket/process layer is replaced with a fake server so the JSON-RPC
 flow and event translation are exercised without spawning codex.
@@ -77,18 +77,18 @@ async def _collect(runner: cas.CodexAppServerRunner, prompt: str, resume=None) -
 def test_build_runner_returns_codex_app_engine():
     runner = cas.build_runner({}, Path("."))
     assert isinstance(runner, cas.CodexAppServerRunner)
-    assert runner.engine == "codex-app"
+    assert runner.engine == "codex_app"
 
 
 def test_backend_id():
-    assert cas.BACKEND.id == "codex-app"
+    assert cas.BACKEND.id == "codex_app"
 
 
 def test_resume_mixin_does_not_parse_text():
     runner = _runner()
     assert runner.is_resume_line("codex resume abc") is False
     assert runner.extract_resume("codex resume abc") is None
-    assert runner.format_resume(ResumeToken(engine="codex-app", value="abcdef")) == "abcde"
+    assert runner.format_resume(ResumeToken(engine="codex_app", value="abcdef")) == "abcde"
 
 
 # ───────────────────────────── run_impl flows ────────────────────────────────
@@ -126,7 +126,7 @@ async def test_happy_path_streams_actions_and_answer(monkeypatch):
     events = await _collect(_runner(), "hi")
 
     assert isinstance(events[0], StartedEvent)
-    assert events[0].resume == ResumeToken(engine="codex-app", value="t1")
+    assert events[0].resume == ResumeToken(engine="codex_app", value="t1")
     actions = [e for e in events if isinstance(e, ActionEvent)]
     assert [a.phase for a in actions] == ["started", "completed"]
     assert all(a.action.kind == "command" for a in actions)
@@ -154,7 +154,7 @@ async def test_resume_reuses_thread(monkeypatch):
     )
     _install(monkeypatch, fake)
     events = await _collect(
-        _runner(), "hi", ResumeToken(engine="codex-app", value="old")
+        _runner(), "hi", ResumeToken(engine="codex_app", value="old")
     )
     assert events[0].resume.value == "old"
     assert ("thread/resume", {"threadId": "old", "cwd": str(Path.cwd()),
@@ -176,7 +176,7 @@ async def test_resume_falls_back_to_new_thread(monkeypatch):
     )
     _install(monkeypatch, fake)
     events = await _collect(
-        _runner(), "hi", ResumeToken(engine="codex-app", value="stale")
+        _runner(), "hi", ResumeToken(engine="codex_app", value="stale")
     )
     assert events[0].resume.value == "new"
     assert any(m == "thread/start" for m, _ in fake.calls)
@@ -268,7 +268,7 @@ def test_thread_params_includes_guards_and_optional_model():
 
 def test_item_event_maps_kinds_and_skips_unknown():
     runner = _runner()
-    factory = EventFactory("codex-app")
+    factory = EventFactory("codex_app")
     started = runner._item_event(
         factory,
         "item/started",

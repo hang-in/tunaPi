@@ -7,8 +7,8 @@ channel's conversation thread) warm, so follow-up turns skip the cold start.
 
 Ported from the working tunaFlow implementation
 (`src-tauri/src/agents/codex_app_server.rs`); protocol source of truth:
-`codex-rs/app-server-protocol`. Engine id: ``codex-app`` — coexists with the
-``codex`` exec engine so it can be opted into per channel (`!model codex-app`).
+`codex-rs/app-server-protocol`. Engine id: ``codex_app`` — coexists with the
+``codex`` exec engine so it can be opted into per channel (`!model codex_app`).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from .run_options import get_run_options
 
 logger = get_logger(__name__)
 
-ENGINE: EngineId = "codex-app"
+ENGINE: EngineId = "codex_app"
 
 # app-server never prints a resume line into agent output (the thread id is an
 # internal handle), so this pattern is intentionally unmatchable.
@@ -442,13 +442,13 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         isinstance(extra, list) and all(isinstance(item, str) for item in extra)
     ):
         raise ConfigError(
-            f"Invalid `codex-app.extra_args` in {config_path}; expected a list of strings."
+            f"Invalid `codex_app.extra_args` in {config_path}; expected a list of strings."
         )
     return CodexAppServerRunner(codex_cmd=codex_cmd, codex_script=codex_script)
 
 
 BACKEND = EngineBackend(
-    id="codex-app",
+    id="codex_app",
     build_runner=build_runner,
     install_cmd="npm install -g @openai/codex",
 )
