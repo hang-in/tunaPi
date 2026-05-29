@@ -121,7 +121,9 @@ class _CodexAppServer:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[dict[str, Any]] = loop.create_future()
         self._pending[rpc_id] = fut
-        await self._ws.send(json.dumps({"id": rpc_id, "method": method, "params": params}))
+        await self._ws.send(
+            json.dumps({"id": rpc_id, "method": method, "params": params})
+        )
         try:
             msg = await asyncio.wait_for(fut, _RPC_TIMEOUT_S)
         finally:
@@ -136,7 +138,9 @@ class _CodexAppServer:
             return
         with contextlib.suppress(Exception):
             await self._ws.send(
-                json.dumps({"id": str(next(self._ids)), "method": method, "params": params})
+                json.dumps(
+                    {"id": str(next(self._ids)), "method": method, "params": params}
+                )
             )
 
     async def aclose(self) -> None:
@@ -302,9 +306,7 @@ class CodexAppServerRunner(ResumeTokenMixin, BaseRunner):
             raise RuntimeError("codex app-server: thread/start returned no thread id")
         return thread["id"]
 
-    async def run_impl(
-        self, prompt: str, resume: ResumeToken | None
-    ) -> Any:
+    async def run_impl(self, prompt: str, resume: ResumeToken | None) -> Any:
         factory = EventFactory(ENGINE)
         run_options = get_run_options()
         model = run_options.model if run_options else None
@@ -406,10 +408,7 @@ class CodexAppServerRunner(ResumeTokenMixin, BaseRunner):
             return None
         action_id = str(item.get("id") or f"{item_type}:{id(item)}")
         title = (
-            item.get("command")
-            or item.get("file")
-            or item.get("query")
-            or item_type
+            item.get("command") or item.get("file") or item.get("query") or item_type
         )
         title = str(title)[:120]
         if method == "item/started":

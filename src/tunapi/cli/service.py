@@ -316,7 +316,9 @@ def service_install(
 
     launcher.write_text(render_launcher(repo=repo, uv_path=uv_path), encoding="utf-8")
     launcher.chmod(0o755)
-    plist.write_text(render_plist(launcher=launcher, repo=repo, log=log), encoding="utf-8")
+    plist.write_text(
+        render_plist(launcher=launcher, repo=repo, log=log), encoding="utf-8"
+    )
 
     # Reload cleanly; reap any orphaned worker holding the port.
     _bootout_and_reap()

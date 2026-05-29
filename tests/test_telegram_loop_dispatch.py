@@ -361,7 +361,9 @@ def _mock(obj: object) -> Any:
 
 def _scheduled_fns(ctx: Any) -> list[object]:
     """First positional arg of each tg.start_soon call (the spawned fn)."""
-    return [call.args[0] for call in _mock(ctx.tg).start_soon.call_args_list if call.args]
+    return [
+        call.args[0] for call in _mock(ctx.tg).start_soon.call_args_list if call.args
+    ]
 
 
 class TestRouteMessage:
@@ -445,9 +447,7 @@ class TestRouteMessage:
     async def test_voice_transcription_failure_returns(self, monkeypatch):
         import tunapi.telegram.loop as loop_mod
 
-        monkeypatch.setattr(
-            loop_mod, "transcribe_voice", AsyncMock(return_value=None)
-        )
+        monkeypatch.setattr(loop_mod, "transcribe_voice", AsyncMock(return_value=None))
         ctx = _make_ctx()
         msg = _make_msg(text="", voice={"file_id": "v1"})
         await route_message(ctx, msg)

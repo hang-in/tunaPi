@@ -38,30 +38,38 @@ SYNTHESIZER_MAX_TOKENS: int = _ROLE_TOKEN_CAPS["synthesizer"]
 
 # ── Per-role directives (open discussion, domain-neutral) ───────────────────
 _GUIDANCE: dict[str, str] = {
-    "proposer": "\n".join([
-        "Put forward a clear position or proposal with concrete rationale.",
-        "State your key claims up front; support each with evidence or examples.",
-        "Keep the proposal focused and actionable.",
-        "Invite specific critique rather than seeking blanket agreement.",
-    ]),
-    "reviewer": "\n".join([
-        "Critique others' proposals: identify strengths, weaknesses, and risks.",
-        "Be specific — reference exact claims rather than vague impressions.",
-        "Acknowledge what works before flagging concerns.",
-        "End with a one-line verdict: agree / disagree / conditional.",
-    ]),
-    "verifier": "\n".join([
-        "Independently judge the soundness of each proposal.",
-        "Do NOT defer to other participants; verify claims from first principles.",
-        "Flag any unsupported or contradictory claims explicitly.",
-        "State your own conclusion clearly, even if it diverges from the group.",
-    ]),
-    "synthesizer": "\n".join([
-        "Reduce all responses into: ## Consensus, ## Disagreements, ## Open questions.",
-        "Preserve each participant's verdict — do not overwrite or reinterpret them.",
-        "Highlight where proposals align and where they conflict.",
-        "End with a final recommendation grounded in the discussion.",
-    ]),
+    "proposer": "\n".join(
+        [
+            "Put forward a clear position or proposal with concrete rationale.",
+            "State your key claims up front; support each with evidence or examples.",
+            "Keep the proposal focused and actionable.",
+            "Invite specific critique rather than seeking blanket agreement.",
+        ]
+    ),
+    "reviewer": "\n".join(
+        [
+            "Critique others' proposals: identify strengths, weaknesses, and risks.",
+            "Be specific — reference exact claims rather than vague impressions.",
+            "Acknowledge what works before flagging concerns.",
+            "End with a one-line verdict: agree / disagree / conditional.",
+        ]
+    ),
+    "verifier": "\n".join(
+        [
+            "Independently judge the soundness of each proposal.",
+            "Do NOT defer to other participants; verify claims from first principles.",
+            "Flag any unsupported or contradictory claims explicitly.",
+            "State your own conclusion clearly, even if it diverges from the group.",
+        ]
+    ),
+    "synthesizer": "\n".join(
+        [
+            "Reduce all responses into: ## Consensus, ## Disagreements, ## Open questions.",
+            "Preserve each participant's verdict — do not overwrite or reinterpret them.",
+            "Highlight where proposals align and where they conflict.",
+            "End with a final recommendation grounded in the discussion.",
+        ]
+    ),
 }
 
 

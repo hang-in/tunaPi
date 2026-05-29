@@ -90,7 +90,9 @@ def test_resume_mixin_does_not_parse_text():
     runner = _runner()
     assert runner.is_resume_line("codex resume abc") is False
     assert runner.extract_resume("codex resume abc") is None
-    assert runner.format_resume(ResumeToken(engine="codex_app", value="abcdef")) == "abcde"
+    assert (
+        runner.format_resume(ResumeToken(engine="codex_app", value="abcdef")) == "abcde"
+    )
 
 
 # ───────────────────────────── run_impl flows ────────────────────────────────
@@ -98,7 +100,10 @@ def test_resume_mixin_does_not_parse_text():
 
 async def test_happy_path_streams_actions_and_answer(monkeypatch):
     fake = FakeServer(
-        rpc={"thread/start": {"thread": {"id": "t1"}}, "turn/start": {"turn": {"id": "u1"}}},
+        rpc={
+            "thread/start": {"thread": {"id": "t1"}},
+            "turn/start": {"turn": {"id": "u1"}},
+        },
         notifications=[
             {
                 "method": "item/started",
@@ -107,8 +112,14 @@ async def test_happy_path_streams_actions_and_answer(monkeypatch):
                     "item": {"id": "c1", "type": "command_execution", "command": "ls"},
                 },
             },
-            {"method": "item/agentMessage/delta", "params": {"threadId": "t1", "delta": "hel"}},
-            {"method": "item/agentMessage/delta", "params": {"threadId": "t1", "delta": "lo"}},
+            {
+                "method": "item/agentMessage/delta",
+                "params": {"threadId": "t1", "delta": "hel"},
+            },
+            {
+                "method": "item/agentMessage/delta",
+                "params": {"threadId": "t1", "delta": "lo"},
+            },
             {
                 "method": "item/completed",
                 "params": {
@@ -121,7 +132,10 @@ async def test_happy_path_streams_actions_and_answer(monkeypatch):
                     },
                 },
             },
-            {"method": "turn/completed", "params": {"threadId": "t1", "turn": {"id": "u1"}}},
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "t1", "turn": {"id": "u1"}},
+            },
         ],
     )
     _install(monkeypatch, fake)
@@ -149,9 +163,15 @@ async def test_happy_path_streams_actions_and_answer(monkeypatch):
 
 async def test_resume_reuses_thread(monkeypatch):
     fake = FakeServer(
-        rpc={"thread/resume": {"thread": {"id": "old"}}, "turn/start": {"turn": {"id": "u1"}}},
+        rpc={
+            "thread/resume": {"thread": {"id": "old"}},
+            "turn/start": {"turn": {"id": "u1"}},
+        },
         notifications=[
-            {"method": "turn/completed", "params": {"threadId": "old", "turn": {"id": "u1"}}}
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "old", "turn": {"id": "u1"}},
+            }
         ],
     )
     _install(monkeypatch, fake)
@@ -159,10 +179,15 @@ async def test_resume_reuses_thread(monkeypatch):
         _runner(), "hi", ResumeToken(engine="codex_app", value="old")
     )
     assert events[0].resume.value == "old"
-    assert ("thread/resume", {"threadId": "old", "cwd": str(Path.cwd()),
-            "approvalPolicy": "never", "sandbox": "danger-full-access"}) in [
-        (m, p) for m, p in fake.calls
-    ]
+    assert (
+        "thread/resume",
+        {
+            "threadId": "old",
+            "cwd": str(Path.cwd()),
+            "approvalPolicy": "never",
+            "sandbox": "danger-full-access",
+        },
+    ) in [(m, p) for m, p in fake.calls]
 
 
 async def test_resume_falls_back_to_new_thread(monkeypatch):
@@ -173,7 +198,10 @@ async def test_resume_falls_back_to_new_thread(monkeypatch):
             "turn/start": {"turn": {"id": "u1"}},
         },
         notifications=[
-            {"method": "turn/completed", "params": {"threadId": "new", "turn": {"id": "u1"}}}
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "new", "turn": {"id": "u1"}},
+            }
         ],
     )
     _install(monkeypatch, fake)
@@ -186,11 +214,18 @@ async def test_resume_falls_back_to_new_thread(monkeypatch):
 
 async def test_error_without_retry_completes_error(monkeypatch):
     fake = FakeServer(
-        rpc={"thread/start": {"thread": {"id": "t1"}}, "turn/start": {"turn": {"id": "u1"}}},
+        rpc={
+            "thread/start": {"thread": {"id": "t1"}},
+            "turn/start": {"turn": {"id": "u1"}},
+        },
         notifications=[
             {
                 "method": "error",
-                "params": {"threadId": "t1", "error": {"message": "boom"}, "willRetry": False},
+                "params": {
+                    "threadId": "t1",
+                    "error": {"message": "boom"},
+                    "willRetry": False,
+                },
             }
         ],
     )
@@ -203,7 +238,10 @@ async def test_error_without_retry_completes_error(monkeypatch):
 
 async def test_connection_closed_completes_error(monkeypatch):
     fake = FakeServer(
-        rpc={"thread/start": {"thread": {"id": "t1"}}, "turn/start": {"turn": {"id": "u1"}}},
+        rpc={
+            "thread/start": {"thread": {"id": "t1"}},
+            "turn/start": {"turn": {"id": "u1"}},
+        },
         notifications=[None],  # sentinel = server closed
     )
     _install(monkeypatch, fake)
@@ -281,10 +319,20 @@ def test_item_event_maps_kinds_and_skips_unknown():
     failed = runner._item_event(
         factory,
         "item/completed",
-        {"item": {"id": "c1", "type": "command_execution", "command": "x", "status": "failed"}},
+        {
+            "item": {
+                "id": "c1",
+                "type": "command_execution",
+                "command": "x",
+                "status": "failed",
+            }
+        },
     )
     assert failed is not None and failed.ok is False
-    assert runner._item_event(factory, "item/started", {"item": {"type": "mystery"}}) is None
+    assert (
+        runner._item_event(factory, "item/started", {"item": {"type": "mystery"}})
+        is None
+    )
     assert runner._item_event(factory, "item/started", {"item": "notdict"}) is None
 
 
@@ -373,11 +421,23 @@ async def test_server_notify_sends_and_aclose_kills(monkeypatch):
 
 async def test_other_thread_notifications_ignored(monkeypatch):
     fake = FakeServer(
-        rpc={"thread/start": {"thread": {"id": "t1"}}, "turn/start": {"turn": {"id": "u1"}}},
+        rpc={
+            "thread/start": {"thread": {"id": "t1"}},
+            "turn/start": {"turn": {"id": "u1"}},
+        },
         notifications=[
-            {"method": "item/agentMessage/delta", "params": {"threadId": "OTHER", "delta": "x"}},
-            {"method": "item/agentMessage/delta", "params": {"threadId": "t1", "delta": "ok"}},
-            {"method": "turn/completed", "params": {"threadId": "t1", "turn": {"id": "u1"}}},
+            {
+                "method": "item/agentMessage/delta",
+                "params": {"threadId": "OTHER", "delta": "x"},
+            },
+            {
+                "method": "item/agentMessage/delta",
+                "params": {"threadId": "t1", "delta": "ok"},
+            },
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "t1", "turn": {"id": "u1"}},
+            },
         ],
     )
     _install(monkeypatch, fake)

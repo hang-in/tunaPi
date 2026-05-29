@@ -66,7 +66,7 @@ def test_tunadish_port_defaults_to_8765(monkeypatch, tmp_path):
 
 def test_tunadish_port_reads_config(monkeypatch, tmp_path):
     (tmp_path / "tunapi.toml").write_text(
-        '[transports.tunadish]\nport = 9999\n', encoding="utf-8"
+        "[transports.tunadish]\nport = 9999\n", encoding="utf-8"
     )
     monkeypatch.setattr(service, "config_dir", lambda: tmp_path)
     assert service._tunadish_port() == 9999

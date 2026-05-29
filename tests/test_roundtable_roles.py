@@ -28,7 +28,9 @@ class TestCanonicalRole:
 
 
 class TestRoleGuidance:
-    @pytest.mark.parametrize("role", ["proposer", "reviewer", "verifier", "synthesizer"])
+    @pytest.mark.parametrize(
+        "role", ["proposer", "reviewer", "verifier", "synthesizer"]
+    )
     def test_known_roles_have_nonempty_guidance(self, role):
         assert roles.role_guidance(role).strip()
 
