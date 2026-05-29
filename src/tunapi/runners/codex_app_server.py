@@ -190,8 +190,18 @@ async def _start_server(  # pragma: no cover - spawns the real codex binary
         with contextlib.suppress(ProcessLookupError):
             proc.kill()
         raise
+    server = _CodexAppServer(proc, ws, port)
+    # app-server requires an initialize handshake before any thread ops
+    # (otherwise thread/start fails with -32600 "Not initialized").
+    await server.rpc(
+        "initialize",
+        {
+            "clientInfo": {"name": "tunapi", "version": "1"},
+            "capabilities": {"experimentalApi": False},
+        },
+    )
     logger.info("codex_app_server.started", port=port)
-    return _CodexAppServer(proc, ws, port)
+    return server
 
 
 async def _get_server(  # pragma: no cover - process/ws lifecycle glue
