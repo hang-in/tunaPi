@@ -11,12 +11,27 @@ from ...logging import bind_run_context, get_logger
 from ...runner_bridge import IncomingMessage, handle_message
 from ...transport import RenderedMessage, SendOptions
 from .prompt import _build_round_prompt
+from .roles import assign_roles
 from .session import RoundtableBridgeCfg, RoundtableSession
 
 if TYPE_CHECKING:
     from ...runner_bridge import RunningTasks
 
 logger = get_logger(__name__)
+
+
+def _build_role_map(
+    session: RoundtableSession, cfg: RoundtableBridgeCfg
+) -> dict[str, str | None]:
+    """Map each session engine to its configured role (positional, canonicalized).
+
+    Defensive: roles are optional, so a runtime without a roundtable config
+    (or without roles) yields an all-``None`` map = no role injection.
+    """
+    rt = getattr(cfg.runtime, "roundtable", None)
+    configured = getattr(rt, "roles", ()) or ()
+    roles = assign_roles(list(session.engines), configured)
+    return dict(zip(session.engines, roles, strict=False))
 
 
 async def _run_round_parallel(
@@ -27,6 +42,7 @@ async def _run_round_parallel(
     cfg: RoundtableBridgeCfg,
     running_tasks: RunningTasks,
     ambient_context: RunContext | None,
+    role_map: dict[str, str | None] | None = None,
 ) -> list[tuple[str, str]]:
     """첫 라운드 엔진들을 병렬 실행하고 결과를 수집."""
     runtime = cfg.runtime
@@ -43,6 +59,7 @@ async def _run_round_parallel(
             session.transcript,
             session.current_round,
             current_round_responses=[],
+            role=role_map.get(engine_id) if role_map else None,
         )
 
         resolved = runtime.resolve_runner(
@@ -126,6 +143,7 @@ async def _run_single_round(
     running_tasks: RunningTasks,
     ambient_context: RunContext | None,
     parallel: bool = False,
+    role_map: dict[str, str | None] | None = None,
 ) -> list[tuple[str, str]]:
     """Run one round of agents and return the round transcript."""
     if parallel and len(engines) > 1:
@@ -136,6 +154,7 @@ async def _run_single_round(
             cfg=cfg,
             running_tasks=running_tasks,
             ambient_context=ambient_context,
+            role_map=role_map,
         )
 
     runtime = cfg.runtime
@@ -152,6 +171,7 @@ async def _run_single_round(
             session.transcript,
             session.current_round,
             current_round_responses=round_transcript,
+            role=role_map.get(engine_id) if role_map else None,
         )
 
         # Resolve runner
@@ -240,6 +260,7 @@ async def run_roundtable(
     """Run all rounds of a roundtable session."""
     transport = cfg.exec_cfg.transport
     send_opts = SendOptions(thread_id=session.thread_id)
+    role_map = _build_role_map(session, cfg)
 
     for round_num in range(1, session.total_rounds + 1):
         if session.cancel_event.is_set():
@@ -270,6 +291,7 @@ async def run_roundtable(
             running_tasks=running_tasks,
             ambient_context=ambient_context,
             parallel=parallel,
+            role_map=role_map,
         )
         session.transcript.extend(round_transcript)
 
@@ -318,6 +340,7 @@ async def run_followup_round(
         cfg=cfg,
         running_tasks=running_tasks,
         ambient_context=ambient_context,
+        role_map=_build_role_map(session, cfg),
     )
     session.transcript.extend(round_transcript)
 

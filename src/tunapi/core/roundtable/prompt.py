@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .roles import role_guidance
+
 # Maximum length of an agent answer included in context prompts.
 _MAX_ANSWER_LENGTH = 4000
 
@@ -11,11 +13,13 @@ def _build_round_prompt(
     transcript: list[tuple[str, str]],
     round_num: int,
     current_round_responses: list[tuple[str, str]] | None = None,
+    role: str | None = None,
 ) -> str:
     """Build the prompt for a given round.
 
     Includes previous rounds' transcript and any same-round responses
-    that have been collected so far.
+    that have been collected so far. When *role* is set, the role directive is
+    prepended (role=None/unknown reproduces the original prompt exactly).
     """
     sections: list[str] = []
 
@@ -45,8 +49,14 @@ def _build_round_prompt(
             "이번 라운드 다른 에이전트 답변:\n\n" + "\n\n".join(current_lines)
         )
 
-    if not sections:
-        return topic
+    directive = role_guidance(role) if role else ""
 
-    context_block = "\n\n---\n\n".join(sections)
-    return f"{context_block}\n\n---\n\n위 의견들을 참고하여 답변해주세요: {topic}"
+    if not sections:
+        body = topic
+    else:
+        context_block = "\n\n---\n\n".join(sections)
+        body = f"{context_block}\n\n---\n\n위 의견들을 참고하여 답변해주세요: {topic}"
+
+    if directive:
+        return f"## Your role\n{directive}\n\n---\n\n{body}"
+    return body

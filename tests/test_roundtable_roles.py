@@ -70,3 +70,44 @@ class TestEffectiveMaxTokens:
     def test_constants_match_dict(self):
         assert roles.PROPOSER_MAX_TOKENS == 1200
         assert roles.SYNTHESIZER_MAX_TOKENS == 2000
+
+
+class TestAssignRoles:
+    def test_positional_canonicalized(self):
+        assert roles.assign_roles(
+            ["claude", "codex", "gemini"], ("proposer", "critic", "lead")
+        ) == ["proposer", "reviewer", "synthesizer"]
+
+    def test_empty_config_all_none(self):
+        assert roles.assign_roles(["a", "b"], ()) == [None, None]
+
+    def test_shorter_config_pads_none(self):
+        assert roles.assign_roles(["a", "b", "c"], ("proposer",)) == [
+            "proposer",
+            None,
+            None,
+        ]
+
+    def test_unknown_role_becomes_none(self):
+        assert roles.assign_roles(["a"], ("moderator",)) == [None]
+
+
+class TestPromptRoleInjection:
+    def test_role_none_matches_legacy_output(self):
+        from tunapi.core.roundtable.prompt import _build_round_prompt
+
+        assert _build_round_prompt("topic", [], 1) == "topic"
+        assert _build_round_prompt("topic", [], 1, role=None) == "topic"
+
+    def test_role_prepends_directive(self):
+        from tunapi.core.roundtable.prompt import _build_round_prompt
+
+        out = _build_round_prompt("topic", [], 1, role="proposer")
+        assert out.startswith("## Your role")
+        assert "topic" in out
+        assert roles.role_guidance("proposer") in out
+
+    def test_unknown_role_no_injection(self):
+        from tunapi.core.roundtable.prompt import _build_round_prompt
+
+        assert _build_round_prompt("topic", [], 1, role="moderator") == "topic"

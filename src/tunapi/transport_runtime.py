@@ -25,6 +25,7 @@ class RoundtableConfig:
     """Roundtable settings resolved from tunapi.toml."""
 
     engines: tuple[str, ...]  # empty = all available
+    roles: tuple[str, ...] = ()  # positional, aligned to engines; empty = no roles
     rounds: int = 1
     max_rounds: int = 3
     parallel_first_round: bool = False

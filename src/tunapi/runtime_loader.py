@@ -205,6 +205,7 @@ def build_runtime_spec(
     rt = settings.roundtable
     roundtable_cfg = RoundtableConfig(
         engines=tuple(rt.engines),
+        roles=tuple(rt.roles),
         rounds=rt.rounds,
         max_rounds=rt.max_rounds,
         parallel_first_round=rt.parallel_first_round,

@@ -88,3 +88,18 @@ def effective_max_tokens(role: str | None, override: int | None = None) -> int |
     if canonical is None:
         return None
     return _ROLE_TOKEN_CAPS.get(canonical)
+
+
+def assign_roles(
+    engines: list[str], configured: list[str] | tuple[str, ...]
+) -> list[str | None]:
+    """Map configured roles positionally onto *engines* (canonicalized).
+
+    Shorter ``configured`` → trailing engines get ``None``; unknown role names
+    become ``None``. Empty ``configured`` → all ``None`` (current behaviour).
+    """
+    result: list[str | None] = []
+    for idx, _engine in enumerate(engines):
+        raw = configured[idx] if idx < len(configured) else None
+        result.append(canonical_role(raw))
+    return result

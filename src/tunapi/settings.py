@@ -145,6 +145,7 @@ class RoundtableSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     engines: list[NonEmptyStr] = Field(default_factory=list)
+    roles: list[NonEmptyStr] = Field(default_factory=list)  # positional, aligned to engines
     rounds: int = Field(default=1, ge=1)
     max_rounds: int = Field(default=3, ge=1)
     parallel_first_round: bool = False
