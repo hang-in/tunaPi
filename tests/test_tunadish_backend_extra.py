@@ -155,6 +155,33 @@ class TestExecuteRun:
             for m in update_msgs
         )
 
+    async def test_execute_run_streams_to_all_windows(
+        self, backend, ws, transport, runtime
+    ):
+        """Run output is broadcast to every connected window (multi-window sync)."""
+        from tunapi.tunadish.transport import TunadishTransport
+
+        ws2 = FakeWs()
+        t2 = TunadishTransport(ws2)
+        backend._active_transports = {transport, t2}
+        await backend.context_store.set_context("conv1", RunContext(project="proj"))
+
+        with (
+            patch("tunapi.tunadish.rawq_bridge.is_available", return_value=False),
+            patch("tunapi.tunadish.backend.handle_message", new_callable=AsyncMock),
+            patch("tunapi.tunadish.backend.set_run_base_dir", return_value="tok"),
+            patch("tunapi.tunadish.backend.reset_run_base_dir"),
+        ):
+            await backend._execute_run("conv1", "hello", runtime, transport)
+
+        # the second (non-originating) window also saw the run status stream
+        statuses2 = [
+            m["params"]["status"] for m in ws2.sent if m.get("method") == "run.status"
+        ]
+        assert "running" in statuses2 and "idle" in statuses2
+        # and the progress message
+        assert any(m.get("method") == "message.new" for m in ws2.sent)
+
     async def test_execute_run_cleans_up_run_map(self, backend, ws, transport, runtime):
         """After execution, conv is removed from run_map."""
         await backend.context_store.set_context("conv1", RunContext(project="proj"))

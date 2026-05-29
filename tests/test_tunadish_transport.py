@@ -11,7 +11,11 @@ import pytest
 from tunapi.transport import MessageRef, RenderedMessage, SendOptions
 from tunapi.progress import ActionState, ProgressState
 from tunapi.model import Action
-from tunapi.tunadish.transport import TunadishTransport, _dc_to_dict
+from tunapi.tunadish.transport import (
+    BroadcastTransport,
+    TunadishTransport,
+    _dc_to_dict,
+)
 from tunapi.tunadish.presenter import TunadishPresenter
 
 pytestmark = pytest.mark.anyio
@@ -433,3 +437,80 @@ class TestRenderFinal:
         state = _make_progress()
         result = p.render_final(state, elapsed_s=1.0, status="ok", answer="hi")
         assert isinstance(result, RenderedMessage)
+
+
+# ---------------------------------------------------------------------------
+# BroadcastTransport
+# ---------------------------------------------------------------------------
+
+
+class _FakeBackend:
+    def __init__(self, transports) -> None:
+        self._active_transports = set(transports)
+
+
+class TestBroadcastTransport:
+    async def test_send_fans_out_to_all_windows_with_one_ref(self):
+        ws1, ws2 = FakeWs(), FakeWs()
+        t1, t2 = TunadishTransport(ws1), TunadishTransport(ws2)
+        bt = BroadcastTransport(_FakeBackend([t1, t2]), primary=t1)
+
+        ref = await bt.send(channel_id="c1", message=RenderedMessage(text="hi"))
+
+        # both windows received the same message.new with the same ref
+        assert ws1.last()["method"] == "message.new"
+        assert ws2.last()["method"] == "message.new"
+        assert ws1.last()["params"]["ref"] == ws2.last()["params"]["ref"]
+        assert ref is not None
+        assert ws1.last()["params"]["ref"]["message_id"] == ref.message_id
+
+    async def test_primary_included_even_if_not_active(self):
+        ws_primary = FakeWs()
+        primary = TunadishTransport(ws_primary)
+        # primary NOT in the active set (reconnect race / unit test)
+        bt = BroadcastTransport(_FakeBackend([]), primary=primary)
+
+        await bt.send(channel_id="c1", message=RenderedMessage(text="hi"))
+        assert len(ws_primary.sent) == 1
+
+    async def test_no_duplicate_when_primary_also_active(self):
+        ws = FakeWs()
+        primary = TunadishTransport(ws)
+        bt = BroadcastTransport(_FakeBackend([primary]), primary=primary)
+
+        await bt.send(channel_id="c1", message=RenderedMessage(text="hi"))
+        assert len(ws.sent) == 1  # deduped, not 2
+
+    async def test_meta_included_in_broadcast(self):
+        ws = FakeWs()
+        bt = BroadcastTransport(_FakeBackend([]), primary=TunadishTransport(ws))
+        bt.set_run_meta("claude", "claude-opus-4-8")
+
+        await bt.send(channel_id="c1", message=RenderedMessage(text="hi"))
+        params = ws.last()["params"]
+        assert params["engine"] == "claude"
+        assert params["model"] == "claude-opus-4-8"
+
+    async def test_edit_targets_same_ref_on_all(self):
+        ws1, ws2 = FakeWs(), FakeWs()
+        t1, t2 = TunadishTransport(ws1), TunadishTransport(ws2)
+        bt = BroadcastTransport(_FakeBackend([t1, t2]), primary=t1)
+
+        ref = MessageRef(channel_id="c1", message_id="m1")
+        await bt.edit(ref=ref, message=RenderedMessage(text="edited"))
+
+        assert ws1.last()["method"] == "message.update"
+        assert ws2.last()["method"] == "message.update"
+        assert ws2.last()["params"]["ref"]["message_id"] == "m1"
+
+    async def test_broadcast_not_hijacked_by_pending_rpc_id(self):
+        # A window mid-RPC has a pending rpc_id; a run broadcast must NOT be
+        # converted into that window's RPC response (notify bypasses set_rpc_id).
+        ws = FakeWs()
+        other = TunadishTransport(ws)
+        other.set_rpc_id(42)
+        bt = BroadcastTransport(_FakeBackend([other]), primary=other)
+
+        await bt.send(channel_id="c1", message=RenderedMessage(text="hi"))
+        assert ws.last()["method"] == "message.new"  # not a {"id": 42} response
+        assert "id" not in ws.last()

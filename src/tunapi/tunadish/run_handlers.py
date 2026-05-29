@@ -26,8 +26,14 @@ async def execute_run(
     *,
     timeout: int | None = None,
 ) -> None:
+    # Stream run output to every connected window (multi-window sync; survives
+    # the originating window closing while another stays open).
+    from .transport import BroadcastTransport
+
+    stream = BroadcastTransport(backend, transport)
+
     # 실행 시작 알림
-    await transport._send_notification(
+    await stream._send_notification(
         "run.status",
         {
             "conversation_id": conv_id,
@@ -35,7 +41,7 @@ async def execute_run(
         },
     )
 
-    progress_ref = await transport.send(
+    progress_ref = await stream.send(
         channel_id=conv_id,
         message=RenderedMessage(text="⏳ starting..."),
         options=SendOptions(notify=False),
@@ -160,13 +166,13 @@ async def execute_run(
         cwd = runtime.resolve_run_cwd(resolved.context)
         run_base_token = set_run_base_dir(cwd)
 
-        # Set engine/model meta on transport for message notifications
+        # Set engine/model meta for message notifications
         run_engine = rr.runner.engine if hasattr(rr.runner, "engine") else None
         run_model = model_override or getattr(rr.runner, "model", None)
-        transport.set_run_meta(run_engine, run_model)
+        stream.set_run_meta(run_engine, run_model)
 
         cfg = ExecBridgeConfig(
-            transport=transport,
+            transport=stream,
             presenter=backend.presenter,
             final_notify=False,
         )
@@ -181,11 +187,11 @@ async def execute_run(
         run_options = EngineRunOptions(model=model_override) if model_override else None
 
         def _on_started(evt: Any) -> None:
-            """CLI started event에서 실제 모델을 캡처하여 transport meta 업데이트."""
+            """CLI started event에서 실제 모델을 캡처하여 stream meta 업데이트."""
             meta = evt.meta or {}
             model = meta.get("model") or run_model
             engine = evt.engine if hasattr(evt, "engine") else run_engine
-            transport.set_run_meta(engine, model)
+            stream.set_run_meta(engine, model)
 
         with apply_run_options(run_options), anyio.fail_after(run_timeout):
             import tunapi.tunadish.backend as backend_mod
@@ -208,7 +214,7 @@ async def execute_run(
             "Run timed out after %ds for %s", timeout or backend._RUN_TIMEOUT, conv_id
         )
         if progress_ref:
-            await transport.edit(
+            await stream.edit(
                 ref=progress_ref,
                 message=RenderedMessage(
                     text=f"**⏱️ 타임아웃:** {timeout or backend._RUN_TIMEOUT}초 초과로 실행이 중단되었습니다."
@@ -217,16 +223,16 @@ async def execute_run(
     except Exception as e:
         logger.exception("Error during _execute_run")
         if progress_ref:
-            await transport.edit(
+            await stream.edit(
                 ref=progress_ref, message=RenderedMessage(text=f"**❌ 오류 발생:** {e}")
             )
     finally:
-        transport.set_run_meta(None, None)
+        stream.set_run_meta(None, None)
         if run_base_token is not None:
             reset_run_base_dir(run_base_token)
         backend.run_map.pop(conv_id, None)
         # 실행 완료 알림
-        await transport._send_notification(
+        await stream._send_notification(
             "run.status",
             {
                 "conversation_id": conv_id,
