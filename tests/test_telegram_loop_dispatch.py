@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import anyio
@@ -45,7 +46,7 @@ pytestmark = pytest.mark.anyio
 
 
 def _make_state(**overrides) -> TelegramLoopState:
-    defaults = {
+    defaults: dict[str, Any] = {
         "running_tasks": {},
         "pending_prompts": {},
         "media_groups": {},
@@ -157,7 +158,7 @@ def _make_ctx(**overrides) -> TelegramLoopContext:
 
 
 def _make_msg(**overrides) -> TelegramIncomingMessage:
-    defaults = {
+    defaults: dict[str, Any] = {
         "transport": "telegram",
         "chat_id": 100,
         "message_id": 1,
@@ -353,9 +354,14 @@ class TestEnsureTopicContext:
 # ---------------------------------------------------------------------------
 
 
-def _scheduled_fns(ctx) -> list[object]:
+def _mock(obj: object) -> Any:
+    """View a fake injected into a typed ctx field as Any for mock asserts."""
+    return obj
+
+
+def _scheduled_fns(ctx: Any) -> list[object]:
     """First positional arg of each tg.start_soon call (the spawned fn)."""
-    return [call.args[0] for call in ctx.tg.start_soon.call_args_list if call.args]
+    return [call.args[0] for call in _mock(ctx.tg).start_soon.call_args_list if call.args]
 
 
 class TestRouteMessage:
@@ -364,14 +370,14 @@ class TestRouteMessage:
         ctx.cfg.files.enabled = True
         msg = _make_msg(text="", document={"file_id": "d1"}, media_group_id="mg1")
         await route_message(ctx, msg)
-        ctx.media_group_buffer.add.assert_called_once_with(msg)
-        ctx.tg.start_soon.assert_not_called()
+        _mock(ctx.media_group_buffer).add.assert_called_once_with(msg)
+        _mock(ctx.tg).start_soon.assert_not_called()
 
     async def test_cancel_command_spawns_handle_cancel(self):
         ctx = _make_ctx()
         msg = _make_msg(text="/cancel")
         await route_message(ctx, msg)
-        ctx.forward_coalescer.schedule.assert_not_called()
+        _mock(ctx.forward_coalescer).schedule.assert_not_called()
         assert handle_cancel in _scheduled_fns(ctx)
 
     async def test_new_command_uses_chat_session_store(self):
@@ -386,7 +392,7 @@ class TestRouteMessage:
         ctx = _make_ctx(state=_make_state(roundtable_store=None))
         msg = _make_msg(text="/rt hello")
         await route_message(ctx, msg)
-        scheduled = ctx.tg.start_soon.call_args_list
+        scheduled = _mock(ctx.tg).start_soon.call_args_list
         assert len(scheduled) == 1
         spawned = scheduled[0].args[0]
         # partial(reply, text="Roundtable store not initialised.")
@@ -406,8 +412,8 @@ class TestRouteMessage:
         msg = _make_msg(text="/help")
         await route_message(ctx, msg)
         # Handled by builtin dispatcher → nothing else scheduled/queued.
-        ctx.tg.start_soon.assert_not_called()
-        ctx.forward_coalescer.schedule.assert_not_called()
+        _mock(ctx.tg).start_soon.assert_not_called()
+        _mock(ctx.forward_coalescer).schedule.assert_not_called()
 
     async def test_trigger_mentions_skips_when_not_triggered(self, monkeypatch):
         import tunapi.telegram.loop_dispatch as ld
@@ -419,8 +425,8 @@ class TestRouteMessage:
         ctx = _make_ctx()
         msg = _make_msg(text="just chatting")
         await route_message(ctx, msg)
-        ctx.forward_coalescer.schedule.assert_not_called()
-        ctx.tg.start_soon.assert_not_called()
+        _mock(ctx.forward_coalescer).schedule.assert_not_called()
+        _mock(ctx.tg).start_soon.assert_not_called()
 
     async def test_voice_transcription_flows_into_prompt(self, monkeypatch):
         import tunapi.telegram.loop as loop_mod
@@ -431,8 +437,8 @@ class TestRouteMessage:
         ctx = _make_ctx()
         msg = _make_msg(text="", voice={"file_id": "v1"})
         await route_message(ctx, msg)
-        ctx.forward_coalescer.schedule.assert_called_once()
-        pending = ctx.forward_coalescer.schedule.call_args.args[0]
+        _mock(ctx.forward_coalescer).schedule.assert_called_once()
+        pending = _mock(ctx.forward_coalescer).schedule.call_args.args[0]
         assert pending.text == "hello from voice"
         assert pending.is_voice_transcribed is True
 
@@ -445,7 +451,7 @@ class TestRouteMessage:
         ctx = _make_ctx()
         msg = _make_msg(text="", voice={"file_id": "v1"})
         await route_message(ctx, msg)
-        ctx.forward_coalescer.schedule.assert_not_called()
+        _mock(ctx.forward_coalescer).schedule.assert_not_called()
 
     async def test_document_prompt_upload(self):
         ctx = _make_ctx()
@@ -472,8 +478,8 @@ class TestRouteMessage:
         ctx = _make_ctx()
         msg = _make_msg(text="just a normal prompt")
         await route_message(ctx, msg)
-        ctx.forward_coalescer.schedule.assert_called_once()
-        pending = ctx.forward_coalescer.schedule.call_args.args[0]
+        _mock(ctx.forward_coalescer).schedule.assert_called_once()
+        pending = _mock(ctx.forward_coalescer).schedule.call_args.args[0]
         assert pending.text == "just a normal prompt"
         assert pending.is_voice_transcribed is False
 
@@ -485,5 +491,5 @@ class TestRouteMessage:
         msg = _make_msg(text="continue", reply_to_message_id=55)
         await route_message(ctx, msg)
         # reply targets a running task → bypass coalescer, dispatch directly.
-        ctx.forward_coalescer.schedule.assert_not_called()
-        ctx.tg.start_soon.assert_called_once()
+        _mock(ctx.forward_coalescer).schedule.assert_not_called()
+        _mock(ctx.tg).start_soon.assert_called_once()

@@ -663,7 +663,7 @@ class TestHandleStatus:
 class TestHandleProject:
     async def _call(self, args: str, **kwargs: Any) -> str:
         send = _make_send()
-        defaults = {
+        defaults: dict[str, Any] = {
             "channel_id": "ch1",
             "runtime": _make_runtime(),
             "chat_prefs": None,

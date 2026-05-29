@@ -236,7 +236,7 @@ class TestTranslateGeminiEvent:
 
 class TestGeminiRunner:
     def _runner(self, **kwargs: Any) -> GeminiRunner:
-        defaults = {
+        defaults: dict[str, Any] = {
             "gemini_cmd": "gemini",
             "gemini_script": None,
             "model": "auto",
