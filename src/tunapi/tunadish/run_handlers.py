@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import anyio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from tunapi.model import ResumeToken
 from tunapi.runners.run_options import EngineRunOptions, apply_run_options
@@ -10,11 +10,15 @@ from tunapi.runner_bridge import ExecBridgeConfig, IncomingMessage, RunningTask
 from tunapi.utils.paths import reset_run_base_dir, set_run_base_dir
 from ..logging import get_logger
 
+if TYPE_CHECKING:
+    from .backend import TunadishBackend
+
+
 logger = get_logger(__name__)
 
 
 async def execute_run(
-    backend: Any,
+    backend: TunadishBackend,
     conv_id: str,
     text: str,
     runtime: Any,
@@ -231,7 +235,7 @@ async def execute_run(
         )
 
 
-def make_conv_token_saver(backend: Any, conv_id: str) -> Any:
+def make_conv_token_saver(backend: TunadishBackend, conv_id: str) -> Any:
     """handle_message()의 on_thread_known 콜백 생성."""
 
     async def _on_thread_known(token, done):
@@ -245,7 +249,7 @@ def make_conv_token_saver(backend: Any, conv_id: str) -> Any:
 
 
 async def build_cross_session_summary(
-    backend: Any, conv_id: str, project: str
+    backend: TunadishBackend, conv_id: str, project: str
 ) -> str | None:
     """같은 프로젝트의 다른 세션 최근 활동 요약 생성."""
     all_convs = backend.context_store.list_conversations(project=project)
@@ -260,7 +264,7 @@ async def build_cross_session_summary(
         if not entries:
             continue
 
-        meta = backend.context_store._cache.get(sib_id)
+        meta = backend.context_store.get_meta(sib_id)
         label = meta.label if meta and meta.label else sib_id[:8]
 
         lines = []

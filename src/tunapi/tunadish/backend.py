@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import json
 import re
 import anyio
 import anyio.abc
 import websockets
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from functools import partial
 
 from ..transport import MessageRef, RenderedMessage
@@ -26,6 +28,9 @@ from .transport import TunadishTransport
 from .presenter import TunadishPresenter
 from . import backend_delegates
 
+if TYPE_CHECKING:
+    from .session_store import ConversationSessionStore
+
 logger = get_logger(__name__)
 
 # rawq 컨텍스트 블록을 히스토리에서 제거하는 패턴
@@ -39,6 +44,20 @@ _SIBLING_CONTEXT_RE = re.compile(
 class TunadishBackend:
     id = "tunadish"
     description = "Tunadish WebSocket Transport"
+
+    # Initialized in build_and_run() (declared here so handlers can depend on a
+    # typed backend rather than ``Any``).
+    context_store: ConversationContextStore
+    _journal: Journal
+    _cross_journals: list[tuple[str, Journal]]
+    _config_path: Any
+    _chat_prefs: ChatPrefsStore
+    _project_sessions: ProjectSessionStore
+    _facade: ProjectMemoryFacade
+    _conv_sessions: ConversationSessionStore
+    _transport_config: dict[str, Any]
+    _runtime: TransportRuntime
+    _final_notify: bool
 
     def __init__(self):
         self._conv_locks: dict[str, anyio.Lock] = {}
@@ -457,7 +476,7 @@ class TunadishBackend:
             return conv_id
         branch_id = conv_id.split(":", 1)[1]
         # 모든 프로젝트에서 해당 branch의 session_id(부모 conv_id) 조회
-        for cid, meta in self.context_store._cache.items():
+        for cid, meta in self.context_store.items():
             if cid.startswith("branch:"):
                 continue
             project = meta.project

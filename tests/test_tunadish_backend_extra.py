@@ -963,6 +963,28 @@ class TestStructuredJsonRpcHandlers:
         assert "conv_branches" in msg["params"]
         assert len(msg["params"]["conv_branches"]) == 1
 
+    async def test_branch_list_json_git_branch_link_counts(
+        self, backend, ws, transport, runtime
+    ):
+        """git_branches rows expose link counts (regression: BranchRecord has
+        related_entry_ids, not memory_entry_ids — formerly an AttributeError)."""
+        await backend.context_store.set_context("conv-glj", RunContext(project="proj"))
+        await backend._facade.branches.create_branch(
+            "proj", "feature-x", description="d"
+        )
+
+        await backend._handle_branch_list_json(
+            {"conversation_id": "conv-glj"}, runtime, transport
+        )
+
+        msg = ws.find_method("branch.list.json.result")
+        assert msg is not None
+        git_branches = msg["params"]["git_branches"]
+        assert len(git_branches) == 1
+        assert git_branches[0]["name"] == "feature-x"
+        assert git_branches[0]["linked_entry_count"] == 0
+        assert git_branches[0]["linked_discussion_count"] == 0
+
     async def test_memory_list_json_no_project(self, backend, ws, transport):
         """memory.list.json without project sends error."""
         await backend._handle_memory_list_json({}, transport)

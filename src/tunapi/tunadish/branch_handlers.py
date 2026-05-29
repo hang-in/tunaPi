@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import uuid
 import time as _time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import anyio
 
 from ..logging import get_logger
 from .transport import TunadishTransport
 
+if TYPE_CHECKING:
+    from .backend import TunadishBackend
+
+
 logger = get_logger(__name__)
 
 
 async def handle_branch_create(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -36,7 +40,7 @@ async def handle_branch_create(
     if "parent_branch_id" in params:
         parent_id = params["parent_branch_id"]  # null 명시 -> 루트 브랜치
     else:
-        meta = backend.context_store._cache.get(conv_id)
+        meta = backend.context_store.get_meta(conv_id)
         parent_id = getattr(meta, "active_branch_id", None) if meta else None
 
     # 라벨 자동 생성: 기존 브랜치(모든 상태 포함) 수 기반 카운터 — 이름 충돌 방지
@@ -111,7 +115,7 @@ async def handle_branch_create(
 
 
 async def handle_branch_switch(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -133,7 +137,7 @@ async def handle_branch_switch(
 
 
 async def handle_branch_adopt(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -213,7 +217,9 @@ async def handle_branch_adopt(
         )
 
 
-async def build_adopt_summary(backend: Any, branch: Any, conv_id: str) -> str:
+async def build_adopt_summary(
+    backend: TunadishBackend, branch: Any, conv_id: str
+) -> str:
     """브랜치 대화에서 요약 텍스트를 생성 (마지막 assistant 응답 발췌)."""
     label = branch.label or branch.branch_id[:8]
     try:
@@ -245,7 +251,7 @@ async def build_adopt_summary(backend: Any, branch: Any, conv_id: str) -> str:
 
 
 async def build_branch_context(
-    backend: Any, conv_id: str, checkpoint_id: str | None
+    backend: TunadishBackend, conv_id: str, checkpoint_id: str | None
 ) -> str:
     """분기점까지의 대화 요약을 브랜치 컨텍스트로 생성."""
     try:
@@ -281,7 +287,7 @@ async def build_branch_context(
 
 
 async def handle_branch_archive(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -299,7 +305,7 @@ async def handle_branch_archive(
     await backend._facade.conv_branches.archive(project, branch_id)
 
     # 현재 보고 있던 브랜치가 archived되면 메인으로 복귀
-    meta = backend.context_store._cache.get(conv_id)
+    meta = backend.context_store.get_meta(conv_id)
     if meta and getattr(meta, "active_branch_id", None) == branch_id:
         await backend.context_store.set_active_branch(conv_id, None)
 
@@ -313,7 +319,7 @@ async def handle_branch_archive(
 
 
 async def handle_branch_delete(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -336,15 +342,13 @@ async def handle_branch_delete(
     # 브랜치 기록 영구 삭제
     await backend._facade.conv_branches.remove(project, branch_id)
 
-    # 브랜치 전용 채널의 journal 엔트리 정리
-    branch_channel = f"branch:{branch_id}"
-    import contextlib
-
-    with contextlib.suppress(AttributeError, Exception):
-        await backend._journal.clear_channel(branch_channel)
+    # NOTE: the journal is append-only and has no clear_channel; the orphaned
+    # `branch:{branch_id}` channel is never read after deletion, so there is
+    # nothing to purge here. (Previously a clear_channel() call was silently
+    # swallowed by contextlib.suppress and never did anything.)
 
     # 현재 보고 있던 브랜치가 삭제되면 메인으로 복귀
-    meta = backend.context_store._cache.get(conv_id)
+    meta = backend.context_store.get_meta(conv_id)
     if meta and getattr(meta, "active_branch_id", None) == branch_id:
         await backend.context_store.set_active_branch(conv_id, None)
 

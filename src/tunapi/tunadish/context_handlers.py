@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..logging import get_logger
 from .transport import TunadishTransport
+
+if TYPE_CHECKING:
+    from ..core.branch_sessions import BranchRecord
+
+    from .backend import TunadishBackend
+
 
 logger = get_logger(__name__)
 
@@ -15,7 +21,7 @@ _SIBLING_CONTEXT_RE = re.compile(
 
 
 async def handle_project_context(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -209,7 +215,7 @@ async def handle_project_context(
 
 
 async def handle_branch_list_json(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -224,7 +230,12 @@ async def handle_branch_list_json(
         )
         return
 
-    git_branches = await backend._facade.branches.list_branches(project)
+    # cast: the facade exposes branches loosely (ty infers Unknown); the call
+    # is typed list[BranchRecord] at the source (branch_sessions.list_branches).
+    git_branches = cast(
+        "list[BranchRecord]",
+        await backend._facade.branches.list_branches(project),
+    )
     conv_branches = await backend._facade.conv_branches.list(project)
 
     result = {
@@ -235,7 +246,7 @@ async def handle_branch_list_json(
                 "status": b.status,
                 "description": b.description or "",
                 "parent_branch": b.parent_branch,
-                "linked_entry_count": len(b.memory_entry_ids),
+                "linked_entry_count": len(b.related_entry_ids),
                 "linked_discussion_count": len(b.discussion_ids),
             }
             for b in git_branches
@@ -257,7 +268,7 @@ async def handle_branch_list_json(
 
 
 async def handle_memory_list_json(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -296,7 +307,7 @@ async def handle_memory_list_json(
 
 
 async def handle_review_list_json(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -331,7 +342,7 @@ async def handle_review_list_json(
 
 
 async def handle_project_list(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -375,7 +386,7 @@ async def handle_project_list(
 
 
 async def handle_conversation_create(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -401,7 +412,7 @@ async def handle_conversation_create(
 
 
 async def handle_conversation_delete(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -420,7 +431,7 @@ async def handle_conversation_delete(
 
 
 async def handle_conversation_list(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -469,7 +480,7 @@ async def handle_conversation_list(
 
 
 async def handle_conversation_history(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:

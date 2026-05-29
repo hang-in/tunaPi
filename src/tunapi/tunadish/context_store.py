@@ -1,6 +1,7 @@
 import json
 import anyio
 import time
+from collections.abc import ItemsView
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,6 +115,14 @@ class ConversationContextStore:
         if m is None:
             return None
         return RunContext(project=m.project, branch=m.branch)
+
+    def get_meta(self, conv_id: str) -> ConversationMeta | None:
+        """Public accessor for a conversation's metadata (project/branch/label)."""
+        return self._cache.get(conv_id)
+
+    def items(self) -> ItemsView[str, ConversationMeta]:
+        """Iterate (conv_id, meta) pairs without exposing the backing dict."""
+        return self._cache.items()
 
     async def set_context(
         self,

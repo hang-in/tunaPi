@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import anyio
 
 from ..logging import get_logger
 from .transport import TunadishTransport
 
+if TYPE_CHECKING:
+    from .backend import TunadishBackend
+
 logger = get_logger(__name__)
 
 
 async def handle_message_retry(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -36,7 +39,7 @@ async def handle_message_retry(
     ctx = await backend.context_store.get_context(conv_id)
     project = ctx.project if ctx else None
     if project:
-        meta = backend.context_store._cache.get(conv_id)
+        meta = backend.context_store.get_meta(conv_id)
         parent_id = meta.active_branch_id if meta else None
         branch = await backend._facade.conv_branches.create(
             project,
@@ -65,7 +68,7 @@ async def handle_message_retry(
 
 
 async def handle_message_save(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -121,7 +124,7 @@ async def handle_message_save(
 
 
 async def handle_message_delete(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -141,7 +144,7 @@ async def handle_message_delete(
 
 
 async def handle_message_adopt(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -153,7 +156,7 @@ async def handle_message_adopt(
 
     ctx = await backend.context_store.get_context(conv_id)
     project = ctx.project if ctx else None
-    meta = backend.context_store._cache.get(conv_id)
+    meta = backend.context_store.get_meta(conv_id)
     branch_id = meta.active_branch_id if meta else None
 
     if project and branch_id:
@@ -180,7 +183,7 @@ async def handle_message_adopt(
 
 
 async def handle_discussion_save(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -233,7 +236,7 @@ async def handle_discussion_save(
 
 
 async def handle_discussion_link_branch(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -264,7 +267,7 @@ async def handle_discussion_link_branch(
 
 
 async def handle_synthesis_create(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -299,7 +302,7 @@ async def handle_synthesis_create(
 
 
 async def handle_review_request(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -333,7 +336,7 @@ async def handle_review_request(
 
 
 async def handle_handoff_create(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: Any,
     transport: TunadishTransport,
@@ -364,7 +367,7 @@ async def handle_handoff_create(
 
 
 async def handle_handoff_parse(
-    backend: Any,
+    backend: TunadishBackend,
     params: dict[str, Any],
     transport: TunadishTransport,
 ) -> None:
@@ -400,7 +403,7 @@ async def handle_handoff_parse(
 
 
 async def handle_engine_list(
-    backend: Any,
+    backend: TunadishBackend,
     runtime: Any,
     transport: TunadishTransport,
 ) -> None:

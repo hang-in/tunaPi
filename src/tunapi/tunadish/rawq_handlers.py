@@ -7,12 +7,14 @@ from ..logging import get_logger
 if TYPE_CHECKING:
     from ..transport_runtime import TransportRuntime
 
+    from .backend import TunadishBackend
+
     from .transport import TunadishTransport
 
 logger = get_logger(__name__)
 
 
-async def rawq_startup_check(backend) -> None:
+async def rawq_startup_check(backend: TunadishBackend) -> None:
     """Check rawq availability and notify connected clients about updates."""
     from . import rawq_bridge
 
@@ -42,7 +44,7 @@ async def rawq_startup_check(backend) -> None:
 
 
 async def rawq_ensure_index(
-    backend,
+    backend: TunadishBackend,
     project_name: str,
     runtime: TransportRuntime,
     transport: TunadishTransport,
@@ -90,7 +92,7 @@ async def rawq_ensure_index(
 
 
 async def rawq_enrich_message(
-    backend,
+    backend: TunadishBackend,
     text: str,
     project_name: str,
     runtime: TransportRuntime,
@@ -144,7 +146,7 @@ async def rawq_enrich_message(
 
 
 async def handle_code_search(
-    backend,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: TransportRuntime,
     transport: TunadishTransport,
@@ -199,7 +201,7 @@ async def handle_code_search(
 
 
 async def handle_code_map(
-    backend,
+    backend: TunadishBackend,
     params: dict[str, Any],
     runtime: TransportRuntime,
     transport: TunadishTransport,
