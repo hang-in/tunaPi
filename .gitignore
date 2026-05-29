@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+debug.log
 .mutmut-cache/
 mutants/
 .worktrees/
