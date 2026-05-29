@@ -33,6 +33,7 @@ If you need exact options and defaults, use **[Reference](../reference/index.md)
 
 ## Debugging and operations
 
+- [Run as a background service](run-as-service.md) (macOS launchd: start at login, auto-restart)
 - [Troubleshooting](troubleshooting.md) (`--debug`, common gotchas, “why didn’t it route?”)
 
 ## Not sure where to go?

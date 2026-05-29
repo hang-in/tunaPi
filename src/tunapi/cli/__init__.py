@@ -59,6 +59,7 @@ from .init import (
 )
 from .onboarding_cmd import chat_id, onboarding_paths
 from .plugins import plugins_cmd
+from .service import build_service_app
 from .run import (
     _default_engine_for_setup,
     _print_version_and_exit,
@@ -173,6 +174,7 @@ def create_app() -> typer.Typer:
     app.command(name="onboarding-paths")(onboarding_paths)
     app.command(name="plugins")(plugins_cmd)
     app.add_typer(config_app, name="config")
+    app.add_typer(build_service_app(), name="service")
     app.callback()(app_main)
     for engine_id in _engine_ids_for_cli():
         help_text = f"Run with the {engine_id} engine."

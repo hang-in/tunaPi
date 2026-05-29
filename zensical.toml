@@ -30,6 +30,7 @@ nav = [
     { "Voice notes" = "how-to/voice-notes.md" },
     { "File transfer" = "how-to/file-transfer.md" },
     { "Schedule tasks" = "how-to/schedule-tasks.md" },
+    { "Run as a service" = "how-to/run-as-service.md" },
     { "Troubleshooting" = "how-to/troubleshooting.md" },
     { "Write a plugin" = "how-to/write-a-plugin.md" },
     { "Add a runner" = "how-to/add-a-runner.md" },
