@@ -14,14 +14,24 @@ def _build_round_prompt(
     round_num: int,
     current_round_responses: list[tuple[str, str]] | None = None,
     role: str | None = None,
+    consensus: list[str] | None = None,
 ) -> str:
     """Build the prompt for a given round.
 
     Includes previous rounds' transcript and any same-round responses
     that have been collected so far. When *role* is set, the role directive is
-    prepended (role=None/unknown reproduces the original prompt exactly).
+    prepended; when *consensus* is set, accumulated agreements are injected as
+    "do not re-litigate". role=None/consensus=None reproduces the original
+    prompt exactly.
     """
     sections: list[str] = []
+
+    # Consensus reached so far (don't re-litigate)
+    if consensus:
+        agreed = "\n".join(f"- {item}" for item in consensus)
+        sections.append(
+            "이미 합의된 사항 (다시 논쟁하지 말고 전제로 삼으세요):\n\n" + agreed
+        )
 
     # Previous rounds context
     if transcript:

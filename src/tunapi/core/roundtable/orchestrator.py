@@ -10,6 +10,7 @@ from ...context import RunContext
 from ...logging import bind_run_context, get_logger
 from ...runner_bridge import IncomingMessage, handle_message
 from ...transport import RenderedMessage, SendOptions
+from .consensus import extract_synthesis
 from .prompt import _build_round_prompt
 from .roles import assign_roles
 from .session import RoundtableBridgeCfg, RoundtableSession
@@ -34,6 +35,20 @@ def _build_role_map(
     return dict(zip(session.engines, roles, strict=False))
 
 
+def _round_consensus(
+    round_transcript: list[tuple[str, str]], role_map: dict[str, str | None]
+) -> list[str]:
+    """Agreements emitted by synthesizer participants in this round."""
+    items: list[str] = []
+    for engine, answer in round_transcript:
+        if role_map.get(engine) != "synthesizer":
+            continue
+        extracted = extract_synthesis(answer)
+        if extracted is not None:
+            items.extend(extracted.agreements)
+    return items
+
+
 async def _run_round_parallel(
     session: RoundtableSession,
     topic: str,
@@ -43,6 +58,7 @@ async def _run_round_parallel(
     running_tasks: RunningTasks,
     ambient_context: RunContext | None,
     role_map: dict[str, str | None] | None = None,
+    consensus: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """첫 라운드 엔진들을 병렬 실행하고 결과를 수집."""
     runtime = cfg.runtime
@@ -60,6 +76,7 @@ async def _run_round_parallel(
             session.current_round,
             current_round_responses=[],
             role=role_map.get(engine_id) if role_map else None,
+            consensus=consensus,
         )
 
         resolved = runtime.resolve_runner(
@@ -144,6 +161,7 @@ async def _run_single_round(
     ambient_context: RunContext | None,
     parallel: bool = False,
     role_map: dict[str, str | None] | None = None,
+    consensus: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """Run one round of agents and return the round transcript."""
     if parallel and len(engines) > 1:
@@ -155,6 +173,7 @@ async def _run_single_round(
             running_tasks=running_tasks,
             ambient_context=ambient_context,
             role_map=role_map,
+            consensus=consensus,
         )
 
     runtime = cfg.runtime
@@ -172,6 +191,7 @@ async def _run_single_round(
             session.current_round,
             current_round_responses=round_transcript,
             role=role_map.get(engine_id) if role_map else None,
+            consensus=consensus,
         )
 
         # Resolve runner
@@ -261,6 +281,7 @@ async def run_roundtable(
     transport = cfg.exec_cfg.transport
     send_opts = SendOptions(thread_id=session.thread_id)
     role_map = _build_role_map(session, cfg)
+    accumulated_consensus: list[str] = []
 
     for round_num in range(1, session.total_rounds + 1):
         if session.cancel_event.is_set():
@@ -292,8 +313,13 @@ async def run_roundtable(
             ambient_context=ambient_context,
             parallel=parallel,
             role_map=role_map,
+            consensus=accumulated_consensus or None,
         )
         session.transcript.extend(round_transcript)
+        # Carry synthesizer-confirmed agreements into later rounds.
+        for item in _round_consensus(round_transcript, role_map):
+            if item not in accumulated_consensus:
+                accumulated_consensus.append(item)
 
     # Completion marker
     if not session.cancel_event.is_set():

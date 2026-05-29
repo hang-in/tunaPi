@@ -84,3 +84,38 @@ class TestExtractFromTranscript:
         from tunapi.core.memory_facade import _extract_from_transcript
 
         assert _extract_from_transcript([["a", "x"], ["b", "y"]]) is None
+
+
+class TestConsensusInjection:
+    def test_prompt_consensus_none_matches_legacy(self):
+        from tunapi.core.roundtable.prompt import _build_round_prompt
+
+        assert _build_round_prompt("topic", [], 1) == "topic"
+        assert _build_round_prompt("topic", [], 1, consensus=None) == "topic"
+        assert _build_round_prompt("topic", [], 1, consensus=[]) == "topic"
+
+    def test_prompt_injects_consensus_section(self):
+        from tunapi.core.roundtable.prompt import _build_round_prompt
+
+        out = _build_round_prompt("topic", [], 2, consensus=["A is best", "use X"])
+        assert "이미 합의된 사항" in out
+        assert "- A is best" in out and "- use X" in out
+        assert "topic" in out
+
+    def test_round_consensus_collects_only_synthesizer_agreements(self):
+        from tunapi.core.roundtable.orchestrator import _round_consensus
+
+        round_transcript = [
+            ("claude", "## Consensus\n- proposer noise"),  # not synthesizer
+            ("codex", "## Consensus\n- agreed thing\n- another"),  # synthesizer
+        ]
+        role_map = {"claude": "proposer", "codex": "synthesizer"}
+        assert _round_consensus(round_transcript, role_map) == [
+            "agreed thing",
+            "another",
+        ]
+
+    def test_round_consensus_empty_when_no_synthesizer(self):
+        from tunapi.core.roundtable.orchestrator import _round_consensus
+
+        assert _round_consensus([("a", "## Consensus\n- x")], {"a": "proposer"}) == []
