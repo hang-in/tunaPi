@@ -21,6 +21,7 @@ from .discussion_records import DiscussionRecord, DiscussionRecordStore
 from .handoff import HandoffURI, build_handoff_uri
 from .project_memory import MemoryEntry, ProjectMemoryStore
 from .review import ReviewRequest, ReviewStore
+from .roundtable.consensus import ExtractedSynthesis, extract_synthesis
 from .rt_structured import StructuredRoundtableSession, StructuredRoundtableStore
 from .synthesis import SynthesisArtifact, SynthesisStore
 
@@ -31,6 +32,22 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _DEFAULT_BASE = Path.home() / ".tunapi" / "project_memory"
+
+
+def _extract_from_transcript(
+    transcript: list[list[str]],
+) -> ExtractedSynthesis | None:
+    """Find a synthesizer-style answer in *transcript* and parse it.
+
+    Scans from the end (the synthesizer typically runs last) for the first
+    answer that parses into structured synthesis; ``None`` if none qualifies.
+    """
+    for entry in reversed(transcript):
+        answer = entry[1] if len(entry) > 1 else ""
+        extracted = extract_synthesis(answer)
+        if extracted is not None:
+            return extracted
+    return None
 
 
 # -- DTO for structured context reads (used by tunadish) -------------------
@@ -200,11 +217,18 @@ class ProjectMemoryFacade:
         if record is None:
             return None
         proto = SynthesisStore.from_discussion_record(record)
+        # Populate agreements/disagreements/open_questions from the
+        # synthesizer's structured output when present (else summary->thesis).
+        extracted = _extract_from_transcript(record.transcript)
+        thesis = extracted.thesis if (extracted and extracted.thesis) else proto.thesis
         return await self.synthesis.create(
             project,
             source_type=proto.source_type,
             source_id=proto.source_id,
-            thesis=proto.thesis,
+            thesis=thesis,
+            agreements=list(extracted.agreements) if extracted else None,
+            disagreements=list(extracted.disagreements) if extracted else None,
+            open_questions=list(extracted.open_questions) if extracted else None,
             action_items=list(proto.action_items),
         )
 
