@@ -8,7 +8,6 @@ for tunadish and future ``!memory`` / ``!branch`` commands.
 
 from __future__ import annotations
 
-import contextlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -136,7 +135,7 @@ class ProjectMemoryFacade:
         :class:`SynthesisArtifact` is also created.  If
         *auto_structured* is ``True``, a
         :class:`StructuredRoundtableSession` is also stored.
-        Both are best-effort — failures are suppressed.
+        Both are best-effort — failures are logged (not fatal), never silent.
         """
         record = await self.discussions.create_record(
             project,
@@ -148,16 +147,22 @@ class ProjectMemoryFacade:
             summary=summary,
             branch_name=branch_name,
         )
+        # These are best-effort enrichments — a failure must not lose the
+        # discussion record, but it should be visible (not silently swallowed).
         if branch_name:
-            with contextlib.suppress(Exception):
+            try:
                 await self.link_discussion_to_branch(
                     project, record.discussion_id, branch_name
                 )
+            except Exception:  # noqa: BLE001 — best-effort; logged, not fatal
+                logger.warning("roundtable.link_branch_failed", exc_info=True)
         if auto_synthesis:
-            with contextlib.suppress(Exception):
+            try:
                 await self.save_synthesis_from_discussion(project, record.discussion_id)
+            except Exception:  # noqa: BLE001
+                logger.warning("roundtable.save_synthesis_failed", exc_info=True)
         if auto_structured:
-            with contextlib.suppress(Exception):
+            try:
                 structured = StructuredRoundtableStore.from_roundtable_session(
                     session, project
                 )
@@ -170,6 +175,8 @@ class ProjectMemoryFacade:
                     utterances=structured.utterances,
                 )
                 await self.rt_structured.complete(project, structured.session_id)
+            except Exception:  # noqa: BLE001
+                logger.warning("roundtable.save_structured_failed", exc_info=True)
         return record
 
     async def link_discussion_to_branch(
