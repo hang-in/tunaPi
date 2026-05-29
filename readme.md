@@ -196,6 +196,21 @@ tunapi
 tunapi doctor
 ```
 
+### 백그라운드 실행 (macOS)
+
+PC를 켜둔 채 항상 떠 있게 해두면, 밖에서 휴대폰 메신저로 언제든 바로 일을 시킬 수 있어요. macOS는 한 줄로 백그라운드 서비스(launchd)를 설치합니다.
+
+```sh
+tunapi service install     # 로그인 시 자동 시작 + 크래시 시 자동 재시작
+tunapi service status      # 동작 여부 + 최근 로그
+tunapi service logs -f     # 로그 보기 (~/.tunapi/service.log)
+tunapi service restart     # 코드·설정 변경 반영
+tunapi service stop        # 중지
+tunapi service uninstall   # 제거
+```
+
+`uv`·Node·Homebrew 경로를 자동 탐지하므로 plist를 직접 만들 필요가 없습니다. 자세한 내용은 [백그라운드 서비스 가이드](docs/how-to/run-as-service.md)를 참고하세요.
+
 ### 에이전트로 설치하기
 
 아래 프롬프트를 Claude Code, Codex, Gemini CLI 등에 붙여넣으면 에이전트가 직접 설치·설정해 줍니다.

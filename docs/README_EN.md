@@ -196,6 +196,21 @@ Check your setup:
 tunapi doctor
 ```
 
+### Run in the background (macOS)
+
+Keep it always-on while your PC is up, and you can reach your agents from your phone anytime. On macOS a single command installs a background service (launchd).
+
+```sh
+tunapi service install     # start at login + auto-restart on crash
+tunapi service status      # running? + recent logs
+tunapi service logs -f     # view logs (~/.tunapi/service.log)
+tunapi service restart     # pick up code/config changes
+tunapi service stop        # stop
+tunapi service uninstall   # remove
+```
+
+It auto-detects `uv`, Node and Homebrew, so there's no plist to hand-edit. See the [background service guide](how-to/run-as-service.md) for details.
+
 ### Install via agent
 
 Paste the prompt below into Claude Code, Codex, Gemini CLI, etc. and the agent will install and configure everything for you.
