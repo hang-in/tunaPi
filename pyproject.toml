@@ -98,3 +98,11 @@ extend-select = ["B", "BLE001", "C4", "PERF", "RUF043", "S110", "SIM", "UP"]
 [tool.ty.src]
 include = ["src", "tests"]
 exclude = ["scripts"]
+
+# Tests use MagicMock/AsyncMock heavily — mocks assigned to typed attributes
+# and asserted on (.assert_*, .call_args) are intentional, not latent bugs.
+# Relax only those mock-friction rules for tests; src stays strict, and
+# meaning-bearing rules (e.g. possibly-missing-attribute) remain enabled.
+[[tool.ty.overrides]]
+include = ["tests/**"]
+rules = { "unresolved-attribute" = "ignore", "invalid-assignment" = "ignore", "invalid-argument-type" = "ignore" }
